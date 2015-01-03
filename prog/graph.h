@@ -6,9 +6,10 @@
 typedef struct {
   int n;
   char *mat;
-  int *cid;
-  int *queue;
-  int *chist; /* histogram by the cluster size */
+  int nc; /* number of connected compoments */
+  int *csize; /* csize[i] is the number of particles in component i */
+  int *cid; /* cid[i] is the component id of particle i */
+  int *queue; /* queue used in finding the connected components */
 } graph_t;
 
 
@@ -20,9 +21,9 @@ static graph_t *graph_open(int n)
   xnew(g, 1);
   g->n = n;
   xnew(g->mat, n * n);
+  xnew(g->csize, n);
   xnew(g->cid, n);
   xnew(g->queue, n);
-  xnew(g->chist, n + 1);
   return g;
 }
 
@@ -31,9 +32,9 @@ static graph_t *graph_open(int n)
 static void graph_close(graph_t *g)
 {
   free(g->mat);
+  free(g->csize);
   free(g->cid);
   free(g->queue);
-  free(g->chist);
   free(g);
 }
 
@@ -59,6 +60,26 @@ static int graph_linked(const graph_t *g, int i, int j)
   return g->mat[i*g->n + j];
 }
 
+
+__inline static int graph_copy(graph_t *g, const graph_t *g2)
+{
+  int i, n = g2->n;
+
+  if ( g->n != n ) {
+    fprintf(stderr, "cannot copy graphs of different sizes %d vs %d\n", g->n, n);
+    return -1;
+  }
+  for ( i = 0; i < n * n; i++ )
+    g->mat[i] = g2->mat[i];
+
+  /* copy the cluster information */
+  g->nc = g2->nc;
+  for ( i = 0; i < n; i++ ) {
+    g->csize[i] = g2->csize[i];
+    g->cid[i] = g2->cid[i];
+  }
+  return 0;
+}
 
 
 /* do clustering */
@@ -90,30 +111,21 @@ __inline static void graph_clus(graph_t *g)
         }
       }
     }
-    g->chist[end] += 1;
+    /* now `end` is the number of particles in cluster `ic` */
+    g->csize[ic] = end;
   }
+  g->nc = ic;
 }
 
 
 
-/* clear the cluster histogram */
-__inline static void graph_chist_clear(graph_t *g)
+__inline static void graph_clus_print(const graph_t *g)
 {
   int i;
-
-  for ( i = 0; i < g->n; i++ ) g->chist[i] = 0;
-}
-
-
-
-/* print the cluster histogram */
-__inline static void graph_chist_print(const graph_t *g)
-{
-  int i;
-
-  for ( i = 1; i < g->n; i++ )
-    if ( g->chist[i] )
-      printf("%4d: %d\n", i, g->chist[i]);
+  printf("%d clusters: ", g->nc);
+  for ( i = 0; i < g->nc; i++ )
+    printf("%d ", g->csize[i]);
+  printf("\n");
 }
 
 

@@ -34,7 +34,13 @@ typedef struct {
   double epot_shift;
   double epot_tail;
   double p_tail;
-  graph_t *g;
+
+  graph_t *g, *g2;
+  double rcls; /* cluster cutoff */
+  double ecls; /* cluster energy */
+  double *vcls; /* cluster potential */
+  double *chist; /* cluster histogram */
+  double chist_cnt;
 } lj_t;
 
 
@@ -81,7 +87,7 @@ static void lj_rmcom(double (*x)[D], int n)
 
 
 /* open an LJ system */
-static lj_t *lj_open(int n, double rho, double rcdef)
+static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
 {
   lj_t *lj;
   int i, d;
@@ -96,7 +102,6 @@ static lj_t *lj_open(int n, double rho, double rcdef)
   xnew(lj->f, n);
   xnew(lj->r2ij, n * n);
   xnew(lj->r2i, n);
-  lj->g = graph_open(n);
 
   lj_setrho(lj, rho);
 
@@ -109,6 +114,18 @@ static lj_t *lj_open(int n, double rho, double rcdef)
 
   lj_rmcom(lj->v, lj->n);
   lj_shiftang(lj->x, lj->v, lj->n);
+
+  lj->g = graph_open(n);
+  lj->g2 = graph_open(n);
+  lj->rcls = rcls;
+  lj->ecls = 0;
+  xnew(lj->vcls, n + 1);
+  /* for simplicity, we use a quadratic term */
+  for ( i = 0; i <= n; i++ )
+    lj->vcls[i] = .5 * 5.0 * (i - n/2) * (i - n/2) / n;
+
+  xnew(lj->chist, n + 1);
+  lj->chist_cnt = 0;
   return lj;
 }
 
@@ -123,6 +140,9 @@ static void lj_close(lj_t *lj)
   free(lj->r2ij);
   free(lj->r2i);
   graph_close(lj->g);
+  graph_close(lj->g2);
+  free(lj->vcls);
+  free(lj->chist);
   free(lj);
 }
 
@@ -188,12 +208,55 @@ static void lj_mkgraph(lj_t *lj, graph_t *g, double rm)
     for ( j = i + 1; j < n; j++ )
       if ( lj->r2ij[i*n + j] < rm2 )
         graph_link(g, i, j);
+  graph_clus(g);
+}
+
+
+
+/* build a graph with distances from k computed r2i */
+static void lj_mkgraph2(lj_t *lj, graph_t *g, int k, double rm)
+{
+  int i, j, n = lj->n;
+  double r2, rm2 = rm * rm;
+
+  graph_empty(g);
+  for ( i = 0; i < n; i++ ) {
+    for ( j = i + 1; j < n; j++ ) {
+      if ( i == k ) {
+        r2 = lj->r2i[j];
+      } else if ( j == k ) {
+        r2 = lj->r2i[i];
+      } else {
+        r2 = lj->r2ij[i*n + j];
+      }
+      if ( r2 < rm2 )
+        graph_link(g, i, j);
+    }
+  }
+  graph_clus(g);
+}
+
+
+
+/* compute the cluster energy
+ * call lj_mkgraph() first */
+__inline static double lj_eclus(lj_t *lj, const graph_t *g)
+{
+  int i, sz;
+  double ep = 0;
+
+  for ( i = 0; i < g->nc; i++ ) {
+    sz = g->csize[i];
+    ep += lj->vcls[sz];
+  }
+  return ep / g->nc;
 }
 
 
 
 #define lj_energy(lj) \
-  lj->epot = lj_energy_low(lj, lj->x, lj->r2ij, &lj->vir, &lj->ep0, &lj->eps)
+  lj->epot = lj_energy_low(lj, lj->x, lj->r2ij, \
+      &lj->vir, &lj->ep0, &lj->eps)
 
 /* compute force and virial, return energy */
 __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
@@ -404,8 +467,8 @@ __inline static double lj_depot(lj_t *lj, int i, double *xi, double *vir)
 
 
 /* commit a particle displacement */
-__inline static void lj_commit(lj_t *lj, int i,
-    const double *xi, double du, double dvir)
+__inline static void lj_commit(lj_t *lj, int i, const double *xi,
+    double du, double dvir, double ucls)
 {
   int j, n = lj->n;
 
@@ -415,6 +478,18 @@ __inline static void lj_commit(lj_t *lj, int i,
   lj->vir += dvir;
   for ( j = 0; j < i; j++ ) lj->r2ij[j*n + i] = lj->r2i[j];
   for ( j = i + 1; j < n; j++ ) lj->r2ij[i*n + j] = lj->r2i[j];
+  lj->ecls = ucls;
+  graph_copy(lj->g, lj->g2);
+
+#if 0 /* debug code */
+  printf("<<< ep %g, ecls %g, ", lj->epot, lj->ecls);
+  graph_clus_print(lj->g);
+  lj_mkgraph(lj, lj->g, lj->rcls);
+  lj->ecls = lj_eclus(lj, lj->g);
+  printf(">>> ep %g, ecls %g, ", lj->epot, lj->ecls);
+  graph_clus_print(lj->g);
+  getchar();
+#endif
 }
 
 
@@ -423,20 +498,87 @@ __inline static void lj_commit(lj_t *lj, int i,
 __inline static int lj_metro(lj_t *lj, double amp, double bet)
 {
   int i, acc = 0;
-  double xi[D], r, du = 0., dvir = 0.;
+  double xi[D], r, du = 0, dvir = 0;
+  double ucls, ducls;
 
   i = lj_randmv(lj, xi, amp);
   du = lj_depot(lj, i, xi, &dvir);
-  if ( du < 0 ) {
+
+  lj_mkgraph2(lj, lj->g2, i, lj->rcls);
+  ucls = lj_eclus(lj, lj->g2);
+  ducls = ucls - lj->ecls;
+
+  if ( du + ducls < 0 ) {
     acc = 1;
   } else {
     r = rand01();
-    acc = ( r < exp( -bet * du ) );
+    acc = ( r < exp( -bet * (du + ducls) ) );
   }
   if ( acc ) {
-    lj_commit(lj, i, xi, du, dvir);
+    lj_commit(lj, i, xi, du, dvir, ucls);
     return 1;
   }
+  return 0;
+}
+
+
+
+__inline static void lj_chist_clear(lj_t *lj)
+{
+  int i;
+
+  lj->chist_cnt = 0;
+  for ( i = 0; i < lj->n; i++ )
+    lj->chist[i] = 0;
+}
+
+
+
+__inline static void lj_chist_add(lj_t *lj, const graph_t *g)
+{
+  int i;
+
+  lj->chist_cnt += 1;
+  for ( i = 0; i < g->nc; i++ )
+    lj->chist[ g->csize[i] ] += 1;
+}
+
+
+
+__inline static void lj_chist_print(const lj_t *lj)
+{
+  int i;
+  double cnt = lj->chist_cnt;
+
+  if ( cnt <= 0 ) {
+    printf("\n");
+    return;
+  }
+  for ( i = 0; i <= lj->n; i++ )
+    if ( lj->chist[i] )
+      printf("%4d %g\n", i, lj->chist[i]/cnt);
+}
+
+
+
+/* save cluster histogram into file */
+__inline static int lj_chist_save(const lj_t *lj, const char *fn)
+{
+  FILE *fp;
+  int i, n = lj->n;
+  double cnt = lj->chist_cnt;
+
+  if ( cnt <= 0 ) return -1;
+
+  if ( (fp = fopen(fn, "w")) == NULL ) {
+    fprintf(stderr, "cannot write %s\n", fn);
+    return -1;
+  }
+  fprintf(fp, "# %d\n", n);
+  for ( i = 1; i <= n; i++ ) {
+    fprintf(fp, "%d %g %.0f\n", i, lj->chist[i]/cnt, lj->chist[i]);
+  }
+  fclose(fp);
   return 0;
 }
 
@@ -446,7 +588,7 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
 __inline static void lj_clus(lj_t *lj, graph_t *g, double rm)
 {
   lj_mkgraph(lj, g, rm);
-  graph_clus(g);
+  lj_chist_add(lj, g);
 }
 
 
