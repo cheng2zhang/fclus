@@ -10,6 +10,7 @@ typedef struct {
   int *csize; /* csize[i] is the number of particles in component i */
   int *cid; /* cid[i] is the component id of particle i */
   int *queue; /* queue used in finding the connected components */
+  int icmax; /* cluster id of the maximal cluster */
 } graph_t;
 
 
@@ -86,10 +87,11 @@ __inline static int graph_copy(graph_t *g, const graph_t *g2)
 __inline static void graph_clus(graph_t *g)
 {
   int i, j, n = g->n, ic;
-  int head, end;
+  int head, end, max;
 
   for ( i = 0; i < n; i++ ) g->cid[i] = -1;
 
+  max = 0;
   for ( ic = 0; ; ic++ ) {
     /* find the first free atom */
     for ( i = 0; i < n; i++ )
@@ -103,7 +105,7 @@ __inline static void graph_clus(graph_t *g)
     end = 1;
     for ( ; head < end; head++ ) {
       i = g->queue[head];
-      /* add neighbors of i in to the queue */
+      /* add neighbors of i into the queue */
       for ( j = 0; j < n; j++ ) {
         if ( graph_linked(g, i, j) && g->cid[j] < 0 ) {
           g->cid[j] = ic;
@@ -113,6 +115,10 @@ __inline static void graph_clus(graph_t *g)
     }
     /* now `end` is the number of particles in cluster `ic` */
     g->csize[ic] = end;
+    if ( end > max ) {
+      max = end;
+      g->icmax = ic;
+    }
   }
   g->nc = ic;
 }

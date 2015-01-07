@@ -26,6 +26,7 @@ typedef struct {
   double (*x)[D]; /* position */
   double (*v)[D]; /* velocity */
   double (*f)[D]; /* force */
+  double (*x2)[D];
   double *r2ij; /* pair distances */
   double *r2i; /* pair distances from i for MC */
   double epot, ep0, eps;
@@ -41,6 +42,7 @@ typedef struct {
   double *vcls; /* cluster potential */
   double *chist; /* cluster histogram */
   double chist_cnt;
+  double hflatness;
 } lj_t;
 
 
@@ -100,6 +102,7 @@ static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
   xnew(lj->x, n);
   xnew(lj->v, n);
   xnew(lj->f, n);
+  xnew(lj->x2, n);
   xnew(lj->r2ij, n * n);
   xnew(lj->r2i, n);
 
@@ -122,7 +125,7 @@ static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
   xnew(lj->vcls, n + 1);
   /* for simplicity, we use a quadratic term */
   for ( i = 0; i <= n; i++ )
-    lj->vcls[i] = .5 * 5.0 * (i - n/2) * (i - n/2) / n;
+    lj->vcls[i] = 0.0; // .5 * 5.0 * (i - n/2) * (i - n/2) / n;
 
   xnew(lj->chist, n + 1);
   lj->chist_cnt = 0;
@@ -137,6 +140,7 @@ static void lj_close(lj_t *lj)
   free(lj->x);
   free(lj->v);
   free(lj->f);
+  free(lj->x2);
   free(lj->r2ij);
   free(lj->r2i);
   graph_close(lj->g);
@@ -144,33 +148,6 @@ static void lj_close(lj_t *lj)
   free(lj->vcls);
   free(lj->chist);
   free(lj);
-}
-
-
-
-/* write positions (and possibly velocities) */
-__inline static int lj_writepos(lj_t *lj,
-    double (*x)[D], double (*v)[D], const char *fn)
-{
-  FILE *fp;
-  int i, d, n = lj->n;
-
-  if ( (fp = fopen(fn, "w")) == NULL ) {
-    fprintf(stderr, "cannot open %s\n", fn);
-    return -1;
-  }
-
-  fprintf(fp, "# %d %d %d %.14e\n", D, n, (v != NULL), lj->l);
-  for ( i = 0; i < n; i++ ) {
-    for ( d = 0; d < D; d++ )
-      fprintf(fp, "%.14e ", x[i][d]);
-    if ( v != NULL )
-      for ( d = 0; d < D; d++ )
-        fprintf(fp, "%.14e ", v[i][d]);
-    fprintf(fp, "\n");
-  }
-  fclose(fp);
-  return 0;
 }
 
 
@@ -242,14 +219,7 @@ static void lj_mkgraph2(lj_t *lj, graph_t *g, int k, double rm)
  * call lj_mkgraph() first */
 __inline static double lj_eclus(lj_t *lj, const graph_t *g)
 {
-  int i, sz;
-  double ep = 0;
-
-  for ( i = 0; i < g->nc; i++ ) {
-    sz = g->csize[i];
-    ep += lj->vcls[sz];
-  }
-  return ep / g->nc;
+  return lj->vcls[ g->csize[ g->cid[0] ] ];
 }
 
 
@@ -336,11 +306,11 @@ static double lj_calcp(lj_t *lj, double tp)
 __inline static void lj_vv(lj_t *lj, double dt)
 {
   int i, n = lj->n;
-  double dth = dt * .5;
+  double dth = dt * .5, l = lj->l;
 
   for (i = 0; i < n; i++) { /* VV part 1 */
     vsinc(lj->v[i], lj->f[i], dth);
-    vsinc(lj->x[i], lj->v[i], dt);
+    vwrap( vsinc(lj->x[i], lj->v[i], dt), l );
   }
   lj_force(lj);
   for (i = 0; i < n; i++) /* VV part 2 */
@@ -472,7 +442,7 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
 {
   int j, n = lj->n;
 
-  vcopy(lj->x[i], xi);
+  vwrap( vcopy(lj->x[i], xi), lj->l );
   lj->ep0 += du;
   lj->epot += du;
   lj->vir += dvir;
@@ -536,11 +506,8 @@ __inline static void lj_chist_clear(lj_t *lj)
 
 __inline static void lj_chist_add(lj_t *lj, const graph_t *g)
 {
-  int i;
-
   lj->chist_cnt += 1;
-  for ( i = 0; i < g->nc; i++ )
-    lj->chist[ g->csize[i] ] += 1;
+  lj->chist[ g->csize[ g->cid[0] ] ] += 1;
 }
 
 
@@ -576,7 +543,8 @@ __inline static int lj_chist_save(const lj_t *lj, const char *fn)
   }
   fprintf(fp, "# %d\n", n);
   for ( i = 1; i <= n; i++ ) {
-    fprintf(fp, "%d %g %.0f\n", i, lj->chist[i]/cnt, lj->chist[i]);
+    fprintf(fp, "%d %g %.0f %g\n",
+        i, lj->chist[i]/cnt, lj->chist[i], lj->vcls[i]);
   }
   fclose(fp);
   return 0;
@@ -589,6 +557,135 @@ __inline static void lj_clus(lj_t *lj, graph_t *g, double rm)
 {
   lj_mkgraph(lj, g, rm);
   lj_chist_add(lj, g);
+}
+
+
+
+/* update the cluster potential */
+__inline static void lj_update_vcls(lj_t *lj, const graph_t *g, double lnf)
+{
+  int i;
+  double min = DBL_MAX;
+
+  lj->vcls[ g->csize[ g->cid[0] ] ] += lnf;
+
+  /* find the minimal of the potential */
+  for ( i = 1; i <= lj->n; i++ )
+    if ( lj->vcls[i] < min )
+      min = lj->vcls[i];
+  /* subtract the minimal */
+  for ( i = 1; i <= lj->n; i++ )
+    lj->vcls[i] -= min;
+}
+
+
+
+/* change the updating magnitude */
+__inline static int lj_update_lnf(lj_t *lj, double flatness,
+    double *lnf, double frac)
+{
+  int i, n = lj->n;
+  double sh = 0, shh = 0, h;
+
+  /* compute the flatness of the histogram */
+  for ( i = 1; i <= n; i++ ) {
+    h = lj->chist[i];
+    sh += h;
+    shh += h * h;
+  }
+  if ( sh <= 0 ) return 0;
+  sh /= n;
+  shh = shh / n - sh * sh;
+  if (shh < 0) shh = 0;
+
+  /* compute the flatness */
+  lj->hflatness = sqrt(shh) / sh;
+  if ( lj->hflatness < flatness ) {
+    lj_chist_clear(lj);
+    printf("changing lnf %g to %g\n", *lnf, *lnf * frac);
+    *lnf *= frac;
+    return 1;
+  }
+  return 0;
+}
+
+
+
+/* wrap cluster coordinates such that particles
+ * in the same cluster stay close */
+__inline static int lj_wrapclus(lj_t *lj,
+    double (*xin)[D], double (*xout)[D], graph_t *g, double rm)
+{
+  int ic, i, j, n = lj->n, head, end;
+  double l = lj->l, invl = 1 / l, dx[D];
+
+  lj_mkgraph(lj, g, rm);
+  for ( i = 0; i < n; i++ ) {
+    vwrap( vcopy(xout[i], xin[i]), l );
+  }
+
+  for ( ic = 0; ic < g->nc; ic++ ) {
+    /* find the seed of this cluster */
+    for ( i = 0; i < n; i++ )
+      if ( g->cid[i] == ic )
+        break;
+    if ( i >= n ) {
+      fprintf(stderr, "no particle belongs to cluster %d\n", ic);
+      return -1;
+    }
+
+    /* make the seed sitting in the box */
+    g->queue[ head = 0 ] = i;
+    g->cid[ i ] = -1;
+    end = 1;
+    for ( ; head < end; head++ ) {
+      i = g->queue[head];
+      /* add neighbors of i into the queue */
+      for ( j = 0; j < n; j++ ) {
+        if ( graph_linked(g, i, j) && g->cid[j] >= 0 ) {
+          g->cid[j] = -1;
+          g->queue[ end++ ] = j;
+          /* align j with i */
+          lj_vpbc(vdiff(dx, xout[j], xout[i]), l, invl);
+          vinc( vcopy(xout[j], xout[i]), dx );
+        }
+      }
+    }
+    if ( end != g->csize[ic] ) {
+      fprintf(stderr, "cluster %d: size %d vs %d\n", ic, end, g->csize[ic]);
+    }
+  }
+  return 0;
+}
+
+
+
+/* write positions (and possibly velocities) */
+__inline static int lj_writepos(lj_t *lj,
+    double (*x)[D], double (*v)[D], const char *fn)
+{
+  FILE *fp;
+  int i, d, n = lj->n;
+
+  if ( (fp = fopen(fn, "w")) == NULL ) {
+    fprintf(stderr, "cannot open %s\n", fn);
+    return -1;
+  }
+
+  /* wrap coordinates according to clusters */
+  lj_wrapclus(lj, x, lj->x2, lj->g2, lj->rcls);
+
+  fprintf(fp, "# %d %d %d %.14e\n", D, n, (v != NULL), lj->l);
+  for ( i = 0; i < n; i++ ) {
+    for ( d = 0; d < D; d++ )
+      fprintf(fp, "%.14e ", lj->x2[i][d]);
+    if ( v != NULL )
+      for ( d = 0; d < D; d++ )
+        fprintf(fp, "%.14e ", v[i][d]);
+    fprintf(fp, "\n");
+  }
+  fclose(fp);
+  return 0;
 }
 
 

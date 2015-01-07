@@ -137,5 +137,16 @@ __inline static void rm3_inv(double b[3][3], double a[3][3])
 
 
 
+__inline static double *vwrap(double *x, double l)
+{
+  int d;
+
+  for ( d = 0; d < D; d++ )
+    x[d] = fmod(x[d] + 1000.*l, l);
+  return x;
+}
+
+
+
 #endif
 
