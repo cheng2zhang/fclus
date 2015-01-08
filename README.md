@@ -1,4 +1,4 @@
-# Sampling clusters #
+# Sampling a flat histogram of the cluster size #
 
 ## Download ##
 
@@ -6,4 +6,8 @@
 
  * [github](http://github.com/cheng2zhang/fclus)
 
+
+## Demonstration ##
+
+ [App Engine](http://cheng2zhang.appspot.com/prog/fclus/web/lj.html)
 

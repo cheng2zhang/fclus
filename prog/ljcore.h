@@ -175,6 +175,7 @@ static double lj_pbcdist2(double *dx, const double *a, const double *b,
 
 
 
+/* build a graph */
 static void lj_mkgraph(lj_t *lj, graph_t *g, double rm)
 {
   int i, j, n = lj->n;
@@ -190,7 +191,7 @@ static void lj_mkgraph(lj_t *lj, graph_t *g, double rm)
 
 
 
-/* build a graph with distances from k computed r2i */
+/* build a graph with the distances from k computed r2i */
 static void lj_mkgraph2(lj_t *lj, graph_t *g, int k, double rm)
 {
   int i, j, n = lj->n;
@@ -415,7 +416,7 @@ __inline static double lj_depot(lj_t *lj, int i, double *xi, double *vir)
   double l = lj->l, invl = 1/l, rc2 = lj->rc2, u, du, dvir;
   double dx[D], r2;
 
-  u = 0;
+  u = 0.0;
   *vir = 0.0;
   for ( j = 0; j < n; j++ ) { /* pair */
     if ( j == i ) continue;
@@ -476,7 +477,7 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
 
   lj_mkgraph2(lj, lj->g2, i, lj->rcls);
   ucls = lj_eclus(lj, lj->g2);
-  ducls = ucls - lj->ecls;
+  ducls = ucls - lj_eclus(lj, lj->g); // change of the cluster energy
 
   if ( du + ducls < 0 ) {
     acc = 1;
@@ -581,8 +582,8 @@ __inline static void lj_update_vcls(lj_t *lj, const graph_t *g, double lnf)
 
 
 /* change the updating magnitude */
-__inline static int lj_update_lnf(lj_t *lj, double flatness,
-    double *lnf, double frac)
+__inline static double lj_update_lnf(lj_t *lj, double lnf,
+    double flatness, double frac)
 {
   int i, n = lj->n;
   double sh = 0, shh = 0, h;
@@ -593,20 +594,19 @@ __inline static int lj_update_lnf(lj_t *lj, double flatness,
     sh += h;
     shh += h * h;
   }
-  if ( sh <= 0 ) return 0;
+  if ( sh <= 0 ) return lnf;
   sh /= n;
   shh = shh / n - sh * sh;
-  if (shh < 0) shh = 0;
+  if ( shh < 0 ) shh = 0;
 
   /* compute the flatness */
   lj->hflatness = sqrt(shh) / sh;
   if ( lj->hflatness < flatness ) {
     lj_chist_clear(lj);
-    printf("changing lnf %g to %g\n", *lnf, *lnf * frac);
-    *lnf *= frac;
-    return 1;
+    printf("changing lnf from %g to %g\n", lnf, lnf * frac);
+    lnf *= frac;
   }
-  return 0;
+  return lnf;
 }
 
 
@@ -634,7 +634,6 @@ __inline static int lj_wrapclus(lj_t *lj,
       return -1;
     }
 
-    /* make the seed sitting in the box */
     g->queue[ head = 0 ] = i;
     g->cid[ i ] = -1;
     end = 1;

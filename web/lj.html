@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+  <title> Lennard-Jones fluid </title>
+  <link rel="stylesheet" type="text/css" href="./css/default.css" />
+  <script type="text/javascript" src="./js/dygraph-combined.js"></script>
+  <script type="text/javascript" src="./js/dygraph-utils.js"></script>
+  <script type="text/javascript" src="./js/util.js"></script>
+  <script type="text/javascript" src="./js/mtrand.js"></script>
+  <script type="text/javascript" src="./js/graph.js"></script>
+  <script type="text/javascript" src="./js/draw.js"></script>
+  <script type="text/javascript" src="./js/ljcore.js"></script>
+  <script type="text/javascript" src="./js/vct.js"></script>
+  <script type="text/javascript" src="./js/lj2d.js"></script>
+  <script type="text/javascript" src="./js/lj3d.js"></script>
+  <script type="text/javascript" src="./js/ljmain.js"></script>
+</head>
+<body>
+
+<h2 class="center">
+  Molecular dynamics of Lennard-Jones fluid
+</h2>
+
+
+
+<form>
+  <div class="panel">
+  <div class="panel-title">System</div>
+
+  Dimension,
+  <span class="math"><i>D</i></span>:
+  <select id="dimension" onchange="changeparams()">
+    <option value="2">2</option>
+    <option value="3">3</option>
+  </select>.
+  &nbsp;
+  <br>
+
+  Number of particles,
+  <span class="math"><i>N</i></span>:
+  <input type="text" size="6" value="55" id="n"
+    onchange="changeparams()">.
+
+  Density,
+  <span class="math"><i>&rho;</i></span>:
+  <input type="text" size="6" value="0.3" id="density"
+    onchange="changeparams()">.
+
+  Temperature,
+  <span class="math"><i>T</i></span>:
+  <input type="text" size="6" value="1.5" id="temp"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Cutoff,
+  <span class="math"><i>r<sub>c</sub></i></span>:
+  <input type="text" size="6" value="2.5" id="rcutoff"
+    onchange="changeparams()">.
+  &nbsp;
+
+  Clustering distance,
+  <span class="math"><i>r<sub>m</sub></i></span>:
+  <input type="text" size="6" value="1.6" id="rcluster"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Simulation method
+  <select id="simulmethod" onchange="changeparams()">
+    <option value="MD">molecular dynamics (MD)</option>
+    <option value="MC" selected>Monte Carlo (MC)</option>
+  </select>
+  </div>
+
+
+
+  <div class="panel">
+  <div class="panel-title">Molecular dynamics (MD)</div>
+
+  Number of MD steps per second:
+  <input type="text" size="10" value="100"
+    id="nstepspersecmd" onchange="changeparams()">.
+  <br>
+
+  MD time step:
+  <input type="text" size="6" value="0.002" id="mddt"
+    onchange="changeparams()">.
+  <br>
+
+  Thermostat time step:
+  <input type="text" size="6" value="0.02" id="thermostatdt"
+    onchange="changeparams()">.
+  <br>
+
+  </div>
+
+
+
+  <div class="panel">
+  <div class="panel-title">Monte Carlo (MC)</div>
+
+  Number of MC steps per second:
+  <input type="text" size="10" value="10000"
+    id="nstepspersecmc" onchange="changeparams()">.
+  <br>
+
+  MC move amplitude:
+  <input type="text" size="6" value="0.1" id="mcamp"
+    onchange="changeparams()">.
+  <br>
+
+  </div>
+
+
+
+  <div class="panel">
+  <div class="panel-title">Wang-Landau updating</div>
+
+  Initial <span class="math">ln <i>f</i> </span>:
+  <input type="text" size="6" value="0.001"
+    id="wl_lnfinit" onchange="changeparams()">.
+  &nbsp;
+
+  Multiplicative factor to
+  <span class="math">ln <i>f</i> </span>:
+  <input type="text" size="6" value="0.5"
+    id="wl_frac" onchange="changeparams()">.
+  <br>
+
+  Histogram flatness to switch stages:
+  <input type="text" size="10" value="0.3"
+    id="wl_flatness" onchange="changeparams()">.
+  <br>
+
+  </div>
+
+
+
+  <div class="center">
+    <input type="button" value="Start simulation"
+      id="start" class="largebtn" onclick="startsimul()">
+
+    <input type="button" value="Pause"
+      id="pause" class="largebtn" onclick="pausesimul()">
+
+    <input type="button" value="Stop"
+      id="stop" class="largebtn" onclick="stopsimul()">
+
+    <input type="reset" value="Reset"
+      id="reset" class="largebtn">
+  </div>
+
+  <hr>
+
+
+
+  <!-- Visualization -->
+  <table>
+    <tr>
+      <td>
+        <div class="center">
+          <canvas id="ljbox" width="560" height="560"></canvas>
+          <br>
+          <input type="checkbox" id="groupcluster">
+          Group particles in the same cluster.
+          <br>
+          <span id="sinfo" style="width: 560px"></span>
+        </div>
+      </td>
+
+      <td>
+        <!-- plots -->
+        <table>
+          <tr>
+            <td>
+              <div id="histplot" class="plot"></div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div id="vclsplot" class="plot"></div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+
+
+</form>
+
+</body>
+</html>

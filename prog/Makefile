@@ -33,4 +33,5 @@ clean:
 	rstrip.py -Rlv
 
 Dropbox: clean
-	rsync -avzL --exclude="*~" * ~/Dropbox/code/lj/
+	$(MAKE) -C .. $@
+

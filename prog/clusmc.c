@@ -50,7 +50,7 @@ int main(void)
     lj_chist_add(lj, lj->g);
     lj_update_vcls(lj, lj->g, lnf);
     //lj_chist_save(lj, fnchist); getchar();
-    lj_update_lnf(lj, flatness, &lnf, frac);
+    lnf = lj_update_lnf(lj, lnf, flatness, frac);
 
     if ( fmod(t, nstrep) < 0.1 ) {
       lj_writepos(lj, lj->x, lj->v, fnpos);
