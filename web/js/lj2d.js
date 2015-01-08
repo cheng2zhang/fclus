@@ -71,7 +71,7 @@ function lj_shiftang2d(x, v, n)
 
 
 // draw all atoms in the box
-function ljdraw2d(lj, target, xin, userscale)
+function ljdraw2d(lj, target, xin, userscale, edges, colors)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
@@ -80,8 +80,7 @@ function ljdraw2d(lj, target, xin, userscale)
 
   // the system dimension is L + two radii
   var scale = userscale * Math.min(width, height) / (lj.l + 1);
-  var radius = 0.5 * scale;
-  var margin = 0.5 * scale;
+  var radius = Math.floor(0.5 * scale);
 
   // draw the background
   ctx.fillStyle = "#ffffff";
@@ -97,20 +96,39 @@ function ljdraw2d(lj, target, xin, userscale)
                 -lj.l * 0.5 * scale + height * 0.5,
                 scale * lj.l, scale * lj.l);
 
-  // draw each particle
-  for (var i = 0; i < lj.n; i++) {
-    var x = (xin[i][0] - lj.l * 0.5) * scale + width * 0.5;
-    var y = (xin[i][1] - lj.l * 0.5) * scale + height * 0.5;
-    var color = "#2040a0";
-    var spotcolor = "#a0a0e0";
-    if ( i === 0 ) {
-      color = "#208020";
-      spotcolor = "#a0e0a0";
-    } else if ( lj.g.cid[i] === 0 ) {
-      color = "#208060";
-      spotcolor = "#a0e0e0";
+  var i, j, ic;
+
+  // draw lines that were used to group clusters
+  if ( edges ) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#808080';
+    for ( ic = 0; ic < edges.length; ic++ ) {
+      i = edges[ic][0];
+      j = edges[ic][1];
+      var xi = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+      var yi = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+      var xj = Math.floor(  (xin[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
+      var yj = Math.floor( -(xin[j][1] - lj.l * 0.5) * scale + height * 0.5 );
+      drawLine(ctx, xi, yi, xj, yj);
     }
-    drawBall(ctx, x, y, radius, color, spotcolor);
+  }
+
+  // draw each particle
+  var ccnt = newarr(lj.g.nc);
+  for ( i = 0; i < lj.n; i++ ) {
+    var x = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+    var y = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+    ic = lj.g.cid[i];
+    if ( ccnt[ic] < 1 ) {
+      // circle around the first particle of the cluster
+      drawBall(ctx, x, y, radius, "#000000", 5); // outer outline
+      drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
+      //console.log("cluster", ic, "/", lj.g.nc, " i ", i, " size ", lj.g.csize[ic], x, y);
+    }
+    var color = colors[ic];
+    var spotcolor = "#e0e0e0";
+    paintBall(ctx, x, y, radius, color, spotcolor);
+    ccnt[ic] += 1;
   }
 }
 

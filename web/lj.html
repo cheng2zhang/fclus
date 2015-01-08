@@ -69,7 +69,7 @@
 
   Simulation method
   <select id="simulmethod" onchange="changeparams()">
-    <option value="MD">molecular dynamics (MD)</option>
+    <option value="MD" disabled>molecular dynamics (MD)</option>
     <option value="MC" selected>Monte Carlo (MC)</option>
   </select>
   </div>
@@ -163,10 +163,6 @@
         <div class="center">
           <canvas id="ljbox" width="560" height="560"></canvas>
           <br>
-          <input type="checkbox" id="groupcluster">
-          Group particles in the same cluster.
-          <br>
-          <span id="sinfo" style="width: 560px"></span>
         </div>
       </td>
 
@@ -186,9 +182,17 @@
         </table>
       </td>
     </tr>
+    <tr>
+      <td>
+        <input type="checkbox" id="groupcluster">
+        Group particles in the same cluster.
+      </td>
+      <td>
+      </td>
+    </tr>
   </table>
 
-
+  <div id="sinfo" class="center"></div>
 
 </form>
 

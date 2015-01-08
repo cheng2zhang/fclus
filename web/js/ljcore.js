@@ -173,7 +173,7 @@ function lj_mkgraph2(lj, g, k, rm)
       if ( i === k ) {
         r2 = lj.r2i[j];
       } else if ( j === k ) {
-        r2 = lj.r2i[j];
+        r2 = lj.r2i[i];
       } else {
         r2 = lj.r2ij[i][j];
       }
@@ -459,6 +459,7 @@ LJ.prototype.commit = function(i, xi, du, dvir, ucls)
   }
   this.ecls = ucls;
   this.g.copy( this.g2 );
+  //lj_mkr2ij(this, this.x, this.r2ij, true);
 };
 
 
@@ -581,15 +582,25 @@ LJ.prototype.update_lnf = function(lnf, flatness, frac)
 /* update r2ij */
 function lj_mkr2ij(lj, x, r2ij, check)
 {
-  var dx = newarr(lj.dim), dr2, rc2 = lj.rc2;
+  var dx = newarr(lj.dim), dr2, rc2 = lj.rc2, rm2 = lj.rcls * lj.rcls;
   var l = lj.l, invl = 1 / l;
   var i, j, n = lj.n;
 
   for ( i = 0; i < n - 1; i++) {
     for (j = i + 1; j < n; j++) {
       dr2 = lj_pbcdist2(dx, x[i], x[j], l, invl);
-      if ( Math.abs( r2ij[i][j] - dr2 ) > 1e-5 ) {
-        console.log("r2ij correupted for i", i, " j ", j, ": ", dr2, " ", r2ij[i][j]);
+      if ( check ) {
+        if ( Math.abs( r2ij[i][j] - dr2 ) > 1e-5 ) {
+          console.log("r2ij corrupted for i", i, " j ", j, ": ", dr2, " ", r2ij[i][j]);
+          throw new Error("r2ij corruption");
+          stop();
+        }
+        var cij = (dr2 < rm2);
+        if ( lj.g.linked(i, j) != cij ) {
+          console.log("graph corrupted for i", i, " j ", j, ": ", dr2, " ", r2ij[i][j], " rm2 " , rm2, " cij ", cij, " gij ", lj.g.linked(i, j));
+          throw new Error("cij corruption");
+          stop();
+        }
       }
       r2ij[i][j] = dr2;
       r2ij[j][i] = dr2;
@@ -604,12 +615,21 @@ function lj_wrapclus(lj, xin, xout, g, rm)
 {
   var ic, i, j, n = lj.n, head, end;
   var l = lj.l, invl = 1 / l, dx = newarr(lj.dim);
+  var edges = [];
 
-  //lj_mkr2ij(lj, xin, lj.r2ij, true);
-  lj.mkgraph(g);
   for ( i = 0; i < n; i++ ) {
-    vwrap( vcopy(xout[i], xin[i]), l );
+    vcopy(xout[i], xin[i]);
   }
+
+  // shift xout[0] to the center of the box
+  vdiff(dx, [l * 0.5, l * 0.5, l * 0.5], xout[0]);
+  for ( i = 0; i < n; i++ ) {
+    vinc( xout[i], dx );
+    vwrap( xout[i], l );
+  }
+
+  //lj_mkr2ij(lj, xout, lj.r2ij, true);
+  lj.mkgraph(g);
 
   for ( ic = 0; ic < g.nc; ic++ ) {
     // find the seed of this cluster
@@ -620,7 +640,7 @@ function lj_wrapclus(lj, xin, xout, g, rm)
     }
     if ( i >= n ) {
       throw new Error("no particle in cluster " + ic);
-      return -1;
+      return null;
     }
 
     g.queue[ head = 0 ] = i;
@@ -638,6 +658,7 @@ function lj_wrapclus(lj, xin, xout, g, rm)
           g.queue[ end++ ] = j;
           vpbc( vdiff(dx, xout[j], xout[i]), l, invl );
           vinc( vcopy(xout[j], xout[i]), dx );
+          edges.push( [i, j] );
         }
       }
     }
@@ -646,11 +667,28 @@ function lj_wrapclus(lj, xin, xout, g, rm)
     }
   }
 
-  // shift xout[0] to the center of the box
-  vdiff(dx, [l * 0.5, l * 0.5, l * 0.5], xout[0]);
+  return edges;
+}
+
+
+
+
+/* list edges */
+function lj_listedges(lj, x)
+{
+  var i, j, n = lj.n;
+  var edges = [], dx = newarr(lj.dim), dr2, rm2 = lj.rcls * lj.rcls;
+
   for ( i = 0; i < n; i++ ) {
-    vinc( xout[i], dx );
+    for ( j = i + 1; j < n; j++ ) {
+      dr2 = vsqr( vdiff(dx, x[i], x[j]) );
+      // if i and j are properly wrapped
+      // we add a bond between them
+      if ( dr2 < rm2 ) {
+        edges.push( [i, j] );
+      }
+    }
   }
-  return 0;
+  return edges;
 }
 

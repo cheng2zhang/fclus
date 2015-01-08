@@ -99,9 +99,10 @@ function lj_shiftang3d(x, v, n)
 
 
 
+var mousedown = false;
 var mousex = -1;
 var mousey = -1;
-var viewmat = [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]];
+var viewmat = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
 
 
@@ -110,6 +111,7 @@ function ljmousedown(e)
   e = e || window.event;
   mousex = e.clientX;
   mousey = e.clientY;
+  mousedown = true;
   //console.log("mousedown", e.clientX, e.clientY, m2str(viewmat));
 }
 
@@ -118,20 +120,23 @@ function ljmousedown(e)
 function ljmouseup(e)
 {
   e = e || window.event;
-  //console.log("mouseup", e.clientX, e.clientY, m2str(viewmat));
   mousex = -1;
   mousey = -1;
+  mousedown = false;
+  //console.log("mouseup", e.clientX, e.clientY, m2str(viewmat));
 }
 
 
 
 function ljmousemove(e)
 {
+  if ( !mousedown ) return;
   e = e || window.event;
   if ( mousex >= 0 && mousey >= 0 ) {
     var target = e.target ? e.target : e.srcElement;
-    viewmat = mxrot3d(viewmat, 180.0 * (mousey - e.clientY) / target.height);
+    viewmat = mxrot3d(viewmat, 180.0 * (e.clientY - mousey) / target.height);
     viewmat = myrot3d(viewmat, 180.0 * (e.clientX - mousex) / target.width);
+    paint(); // defined in ljmain.js
   }
   mousex = e.clientX;
   mousey = e.clientY;
@@ -147,6 +152,7 @@ function transform(x, l)
   var xyz = newarr(n), xc = [l * 0.5, l * 0.5, l * 0.5], xi = [0, 0, 0];
 
   for ( var i = 0; i < n; i++ ) {
+    //xyz[i] = [0,0,0]; vcopy(xyz[i], x[i]);
     vdiff(xi, x[i], xc);
     xyz[i] = mmulv(viewmat, xi);
     //console.log(x[i], xi, xc, xyz[i]);
@@ -162,42 +168,58 @@ function sortbyz(x)
   var i, j, k, l, n = x.length;
   var xyz = newarr2d(n, 3), rt = newarr(D);
   var idmap = newarr(n);
+  var invmap = newarr(n);
 
   for ( i = 0; i < n; i++ ) {
     idmap[i] = i;
+    // i:         index of the output array `xyz`
+    // idmap[i]:  index of the input array `x`
+    // so xyz[i] --> x[ idmap[i] ];
+    invmap[i] = i;
   }
 
   // use bubble sort
   for ( i = 0; i < n; i++ ) {
     vcopy(xyz[i], x[i]);
   }
+
   for ( i = 0; i < n; i++ ) {
     // find the ith smallest z
     k = i;
+    var zmin = x[ idmap[i] ][2];
     for ( j = i + 1; j < n; j++ ) {
-      if ( xyz[j][2] < xyz[k][2] ) {
-        l = k;
+      if ( x[ idmap[j] ][2] < zmin ) {
         k = j;
-        j = l;
+        zmin = x[ idmap[j] ][2];
       }
     }
     if ( k != i ) {
-      // swap xyz[i] and xyz[k]
-      vcopy(rt, xyz[k]);
-      vcopy(xyz[k], xyz[i]);
-      vcopy(xyz[i], rt);
+      // before
+      //  xyz[i] --> x[ idmap[i] ]
+      //  xyz[k] --> x[ idmap[k] ]
+      // after
+      //  xyz[i] --> x[ idmap[k] ]
+      //  xyz[k] --> x[ idmap[i] ]
       l = idmap[i];
       idmap[i] = idmap[k];
       idmap[k] = l;
     }
   }
-  return [xyz, idmap];
+
+  for ( i = 0; i < n; i++ ) {
+    vcopy(xyz[i], x[ idmap[i] ]);
+  }
+  // compute the inverse map
+  for ( i = 0; i < n; i++ ) {
+    invmap[ idmap[i] ] = i;
+  }
+  return [xyz, idmap, invmap];
 }
 
 
 
 // draw all atoms in the box
-function ljdraw3d(lj, target, xin, userscale)
+function ljdraw3d(lj, target, xin, userscale, edges, colors)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
@@ -212,31 +234,59 @@ function ljdraw3d(lj, target, xin, userscale)
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
-  var xyz = transform(xin, lj.l); // apply the rotation matrix
-  var ret = sortbyz(xyz); // sort particles by the z order
-  xyz = ret[0];
-  var idmap = ret[1];
+  var xt = transform(xin, lj.l); // apply the rotation matrix
+  var ret = sortbyz(xt); // sort particles by the z order
+  var xyz = ret[0];
+  var idmap = ret[1], invmap = ret[2];
+  // xyz[i]           --> xt[ idmap[i] ]
+  // xyz[ invmap[i] ] --> xt[ i ]
+  var i, j, ic;
+
+  // draw lines that were used to group clusters
+  if ( edges ) {
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#808080';
+    for ( ic = 0; ic < edges.length; ic++ ) {
+      i = invmap[ edges[ic][0] ];
+      j = invmap[ edges[ic][1] ];
+      var xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+      var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+      var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
+      var yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * scale + height * 0.5 );
+      drawLine(ctx, xi, yi, xj, yj);
+    }
+  }
+
+  // determine which particles to circle around
+  var ccnt = newarr(lj.g.nc);
+  var mark = newarr(lj.n);
+  for ( i = 0; i < lj.n; i++ ) {
+    ic = lj.g.cid[i];
+    mark[i] = ( ccnt[ic] < 1 );
+    ccnt[ic] = 1;
+  }
 
   // draw each particle
   var zmax = xyz[lj.n - 1][2], zmin = xyz[0][2];
-  for (var i = 0; i < lj.n; i++) {
-    var x = (xyz[i][0] - lj.l * 0.5) * scale + width * 0.5;
-    var y = (xyz[i][1] - lj.l * 0.5) * scale + height * 0.5;
+  for ( i = 0; i < lj.n; i++ ) {
+    var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+    var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scale + height * 0.5 );
     var z = xyz[i][2];
     var zf = (z - zmin) / (zmax - zmin);
-    var color = rgb2str(20, 32, 80 + 160 * zf);
-    var spotcolor = rgb2str(100 + 100 * zf, 100 + 100 * zf, 120 + 100 * zf);
-    if ( idmap[i] === 0 ) {
-      color = rgb2str(64, 180 + 40 * zf, 32);
-      spotcolor = rgb2str(180 + 40 * zf, 200 + 40 * zf, 180 + 40 * zf);
-    } else if ( lj.g.cid[ idmap[i] ] === lj.g.cid[ 0 ] ) {
-      color = rgb2str(20, 80 + 60 * zf, 80);
-      spotcolor = rgb2str(100 + 100 * zf, 120 + 100 * zf, 120 + 100 * zf);
-    }
     // make closer particles larger
-    var rz = radius * (0.7 + 0.3 * zf);
-    drawBall(ctx, x, y, rz, color, spotcolor);
+    var rz = Math.floor( radius * (0.8 + 0.2 * zf) );
+    ic = lj.g.cid[ idmap[i] ];
+    if ( mark[ idmap[i] ] ) {
+      // circle around the first particle of the cluster
+      drawBall(ctx, x, y, rz, "#000000", 5); // outer outline
+      drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
+      //console.log("cluster ", ic, " ", i, " ", idmap[i]);
+    }
+    var color = colors[ic];
+    var spotcolor = "#e0e0e0";
+    paintBall(ctx, x, y, rz, color, spotcolor);
   }
+  console.log("cluster end");
 }
 
 

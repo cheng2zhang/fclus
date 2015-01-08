@@ -40,6 +40,9 @@ var histplot = null;
 var vclsplot = null;
 
 var userscale = 1.0;
+var xpaint = null; // the coordinates to paint
+var paintedges = null;
+var randcolors = null;
 
 
 
@@ -68,6 +71,13 @@ function getparams()
   wl_lnf = get_float("wl_lnfinit", 0.01);
   wl_flatness = get_float("wl_flatness", 0.3);
   wl_frac = get_float("wl_frac", 0.5);
+
+  randcolors = newarr(n + 1);
+  for ( var ic = 0; ic <= n; ic++ ) {
+    randcolors[ic] = randhuecolor(40, 120);
+  }
+  // set the first color to red
+  randcolors[0] = "#ff2010";
 }
 
 
@@ -91,6 +101,7 @@ function ljwheel(e){
     e.preventDefault();
   }
   e.returnValue = false;
+  paint(); // defined later
 }
 
 
@@ -229,6 +240,18 @@ function updatevclsplot(lj)
 
 
 
+function paint()
+{
+  if ( !lj ) return;
+  if ( lj.dim === 2 ) {
+    ljdraw2d(lj, "ljbox", xpaint, userscale, paintedges, randcolors);
+  } else if ( lj.dim === 3 ) {
+    ljdraw3d(lj, "ljbox", xpaint, userscale, paintedges, randcolors);
+  }
+}
+
+
+
 function pulse()
 {
   var sinfo;
@@ -240,18 +263,17 @@ function pulse()
   }
   grab("sinfo").innerHTML = sinfo;
 
-  var x = lj.x;
   var groupclus = grab("groupcluster").checked;
+  paintedges = null;
   if ( groupclus ) {
-    x = lj.x2;
-    lj_wrapclus(lj, lj.x, x, lj.g2, lj.rcls);
+    xpaint = lj.x2;
+    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2, lj.rcls);
+  } else {
+    xpaint = lj.x;
+    paintedges = lj_listedges(lj, lj.x); // list edges
   }
 
-  if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", x, userscale);
-  } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", x, userscale);
-  }
+  paint();
 
   updatehistplot(lj);
   updatevclsplot(lj);
@@ -279,6 +301,7 @@ function stopsimul()
 
 function pausesimul()
 {
+  if ( !lj ) return;
   if ( ljtimer !== null ) {
     clearInterval(ljtimer);
     ljtimer = null;
@@ -299,6 +322,7 @@ function startsimul()
   getparams();
   lj = new LJ(n, D, rho, rcdef, rcls);
   lj.force();
+  lj.mkgraph(lj.g);
   installmouse();
   ljtimer = setInterval(
     function(){ pulse(); },

@@ -6,11 +6,41 @@
 
 
 
+/* draw line */
+function drawLine(ctx, xi, yi, xj, yj)
+{
+  ctx.beginPath();
+  ctx.moveTo(xi, yi);
+  ctx.lineTo(xj, yj);
+  ctx.stroke();
+}
+
+
+
+/* draw a ball that is centered at (x, y) with radius r
+ * color is the color of the ball
+ * the format of color is "#rrggbb" */
+function drawBall(ctx, x, y, r, color, lineWidth)
+{
+  if ( color  ) {
+    ctx.strokeStyle = color;
+  }
+  if ( lineWidth ) {
+    ctx.lineWidth = lineWidth;
+  }
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, 2*Math.PI);
+  ctx.closePath();
+  ctx.stroke();
+}
+
+
+
 /* draw a ball that is centered at (x, y) with radius r
  * color is the color of the ball
  * spotcolor is the color of the spotlight
  * the format of color is "#rrggbb" */
-function drawBall(ctx, x, y, r, color, spotcolor,
+function paintBall(ctx, x, y, r, color, spotcolor,
     spotx, spoty, spotr)
 {
   if ( spotcolor === undefined || spotcolor === null ) {
@@ -55,6 +85,43 @@ function rgb2str(r, g, b)
   }
 
   return "#" + r + g + b;
+}
+
+
+
+function randhuecolor(cmin, cmax)
+{
+  var x = Math.random() * 6;
+  var i = Math.floor( x ), r = 0, g = 0, b = 0;
+
+  if ( cmin === undefined || cmin === null ) {
+    cmin = 0;
+  }
+  if ( cmax === undefined || cmax === null ) {
+    cmax = 255;
+  }
+  var cvar = cmax - cmin + 1;
+  x -= i;
+  if ( i < 1 ) { // red to yellow
+    r = cmax;
+    g = cmin + Math.floor( cvar * x );
+  } else if ( i < 2 ) { // yellow to green
+    r = cmin + Math.floor( cvar * (1 - x) );
+    g = cmax;
+  } else if ( i < 3 ) { // green to cyan
+    g = cmax;
+    b = cmin + Math.floor( cvar * x );
+  } else if ( i < 4 ) { // cyan to blue
+    g = cmin + Math.floor( cvar * (1 - x) );
+    b = cmax;
+  } else if ( i < 5 ) { // blue to magenta
+    b = cmax;
+    r = cmin + Math.floor( cvar * x );
+  } else {
+    b = cmin + Math.floor( cvar * (1 - x) );
+    r = cmax;
+  }
+  return rgb2str(r, g, b);
 }
 
 
