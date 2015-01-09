@@ -9,5 +9,10 @@
 
 ## Demonstration ##
 
- [App Engine](http://cheng2zhang.appspot.com/prog/fclus/web/lj.html)
+  [App Engine](http://cheng2zhang.appspot.com/prog/fclus/web/lj.html)
+
+
+## Notes ##
+
+The code is based on the `lj` module of the `snippets` project.
 

@@ -40,9 +40,10 @@ var histplot = null;
 var vclsplot = null;
 
 var userscale = 1.0;
-var xpaint = null; // the coordinates to paint
-var paintedges = null;
-var randcolors = null;
+var adjustscale = 1.0;
+var xpaint = null; // coordinates used for painting
+var paintedges = null; // edges for visualization
+var randcolors = null; // random colors for each cluster
 
 
 
@@ -243,10 +244,11 @@ function updatevclsplot(lj)
 function paint()
 {
   if ( !lj ) return;
+  var s = userscale * adjustscale;
   if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", xpaint, userscale, paintedges, randcolors);
+    ljdraw2d(lj, "ljbox", xpaint, s, paintedges, randcolors);
   } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", xpaint, userscale, paintedges, randcolors);
+    ljdraw3d(lj, "ljbox", xpaint, s, paintedges, randcolors);
   }
 }
 
@@ -268,9 +270,14 @@ function pulse()
   if ( groupclus ) {
     xpaint = lj.x2;
     paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2, lj.rcls);
+    // if we group particles according to clusters
+    // some particles will flow out of the box
+    // so we need a smaller scale
+    adjustscale = 0.7;
   } else {
     xpaint = lj.x;
     paintedges = lj_listedges(lj, lj.x); // list edges
+    adjustscale = 1.0;
   }
 
   paint();
@@ -288,7 +295,6 @@ function stopsimul()
     clearInterval(ljtimer);
     ljtimer = null;
   }
-  lj = null;
   mctot = 0.0;
   mcacc = 0.0;
   sum1 = 1e-30;

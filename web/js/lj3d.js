@@ -152,10 +152,8 @@ function transform(x, l)
   var xyz = newarr(n), xc = [l * 0.5, l * 0.5, l * 0.5], xi = [0, 0, 0];
 
   for ( var i = 0; i < n; i++ ) {
-    //xyz[i] = [0,0,0]; vcopy(xyz[i], x[i]);
     vdiff(xi, x[i], xc);
     xyz[i] = mmulv(viewmat, xi);
-    //console.log(x[i], xi, xc, xyz[i]);
     vinc(xyz[i], xc);
   }
   return xyz;
@@ -253,7 +251,9 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
       var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scale + height * 0.5 );
       var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
       var yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * scale + height * 0.5 );
-      drawLine(ctx, xi, yi, xj, yj);
+      drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
+      drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
+      drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
     }
   }
 
@@ -280,7 +280,6 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
       // circle around the first particle of the cluster
       drawBall(ctx, x, y, rz, "#000000", 5); // outer outline
       drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
-      //console.log("cluster ", ic, " ", i, " ", idmap[i]);
     }
     var color = colors[ic];
     var spotcolor = "#e0e0e0";

@@ -7,8 +7,14 @@
 
 
 /* draw line */
-function drawLine(ctx, xi, yi, xj, yj)
+function drawLine(ctx, xi, yi, xj, yj, color, lineWidth)
 {
+  if ( color  ) {
+    ctx.strokeStyle = color;
+  }
+  if ( lineWidth ) {
+    ctx.lineWidth = lineWidth;
+  }
   ctx.beginPath();
   ctx.moveTo(xi, yi);
   ctx.lineTo(xj, yj);
@@ -67,6 +73,7 @@ function paintBall(ctx, x, y, r, color, spotcolor,
 
 
 
+/* convert RGB values to string */
 function rgb2str(r, g, b)
 {
   r = Math.floor(r).toString(16);

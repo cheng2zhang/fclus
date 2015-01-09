@@ -87,12 +87,12 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
   ctx.fillRect(0, 0, width, height);
 
   ctx.fillStyle = "#d0d0d0";
-  ctx.fillRect( -(lj.l + 1) * 0.5 * scale + width * 0.5,
+  ctx.fillRect( -(lj.l + 1) * 0.5 * scale + width  * 0.5,
                 -(lj.l + 1) * 0.5 * scale + height * 0.5,
                 scale * (lj.l + 1), scale * (lj.l + 1));
 
   ctx.fillStyle = "#f0f0f0";
-  ctx.fillRect( -lj.l * 0.5 * scale + width * 0.5,
+  ctx.fillRect( -lj.l * 0.5 * scale + width  * 0.5,
                 -lj.l * 0.5 * scale + height * 0.5,
                 scale * lj.l, scale * lj.l);
 
@@ -100,8 +100,6 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
 
   // draw lines that were used to group clusters
   if ( edges ) {
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#808080';
     for ( ic = 0; ic < edges.length; ic++ ) {
       i = edges[ic][0];
       j = edges[ic][1];
@@ -109,7 +107,9 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
       var yi = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
       var xj = Math.floor(  (xin[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
       var yj = Math.floor( -(xin[j][1] - lj.l * 0.5) * scale + height * 0.5 );
-      drawLine(ctx, xi, yi, xj, yj);
+      drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
+      drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
+      drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
     }
   }
 
@@ -123,7 +123,6 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
       // circle around the first particle of the cluster
       drawBall(ctx, x, y, radius, "#000000", 5); // outer outline
       drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
-      //console.log("cluster", ic, "/", lj.g.nc, " i ", i, " size ", lj.g.csize[ic], x, y);
     }
     var color = colors[ic];
     var spotcolor = "#e0e0e0";

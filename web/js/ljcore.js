@@ -459,6 +459,8 @@ LJ.prototype.commit = function(i, xi, du, dvir, ucls)
   }
   this.ecls = ucls;
   this.g.copy( this.g2 );
+  // enable the following line to check if
+  // this.r2ij and this.g are correct
   //lj_mkr2ij(this, this.x, this.r2ij, true);
 };
 
