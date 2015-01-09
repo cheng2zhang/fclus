@@ -96,7 +96,19 @@ function rgb2str(r, g, b)
 
 
 
-function randhuecolor(cmin, cmax)
+/* get the red, green and blue components of a color string */
+function parseRGB(color)
+{
+  return {
+    r: parseInt(color.substr(1, 2), 16),
+    g: parseInt(color.substr(3, 2), 16),
+    b: parseInt(color.substr(5, 2), 16)
+  };
+}
+
+
+
+function randHueColor(cmin, cmax)
 {
   var x = Math.random() * 6;
   var i = Math.floor( x ), r = 0, g = 0, b = 0;
@@ -134,13 +146,13 @@ function randhuecolor(cmin, cmax)
 
 
 /* darken a color */
-function darkenColor(colorStr) {
-  // Defined in dygraph-utils.js
-  var color = Dygraph.toRGB_(colorStr);
-  color.r = Math.floor((255 + color.r) / 2);
-  color.g = Math.floor((255 + color.g) / 2);
-  color.b = Math.floor((255 + color.b) / 2);
-  return 'rgb(' + color.r + ',' + color.g + ',' + color.b + ')';
+function darkenColor(colorStr, fac) {
+  if ( !fac ) fac = 0.5;
+  var color = parseRGB(colorStr);
+  color.r = Math.floor(color.r * fac);
+  color.g = Math.floor(color.g * fac);
+  color.b = Math.floor(color.b * fac);
+  return rgb2str(color.r, color.g, color.b);
 }
 
 
@@ -151,7 +163,7 @@ function barChartPlotter(e) {
   var points = e.points;
   var y_bottom = e.dygraph.toDomYCoord(0);
 
-  ctx.fillStyle = darkenColor(e.color);
+  ctx.fillStyle = e.color;
 
   // Find the minimum separation between x-values.
   // This determines the bar width.

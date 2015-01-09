@@ -55,7 +55,7 @@ function getparams()
     D = dim;
   }
   rho = get_float("density", 0.7);
-  temp = get_float("temp", 1.5);
+  tp = get_float("temperature", 1.5);
   rcdef = get_float("rcutoff", 1000.0);
   rcls = get_float("rcluster", 1.6);
 
@@ -73,9 +73,11 @@ function getparams()
   wl_flatness = get_float("wl_flatness", 0.3);
   wl_frac = get_float("wl_frac", 0.5);
 
+  userscale = get_float("ljscale");
+
   randcolors = newarr(n + 1);
   for ( var ic = 0; ic <= n; ic++ ) {
-    randcolors[ic] = randhuecolor(40, 120);
+    randcolors[ic] = randHueColor(40, 120);
   }
   // set the first color to red
   randcolors[0] = "#ff2010";
@@ -83,7 +85,15 @@ function getparams()
 
 
 
-/* for mouse wheel event */
+function changescale()
+{
+  userscale = get_float("ljscale");
+  paint();
+}
+
+
+
+/* for the mouse wheel event */
 function ljwheel(e){
   var delta = 0; // positive for scrolling up
   e = e || window.event;
@@ -97,6 +107,7 @@ function ljwheel(e){
   } else if ( delta < 0 ) {
     userscale *= 0.95;
   }
+  grab("ljscale").value = userscale;
   //console.log("wheel", delta);
   if ( e.preventDefault ) {
     e.preventDefault();
@@ -107,7 +118,7 @@ function ljwheel(e){
 
 
 
-/* for the wheel event */
+/* install the mouse wheel event */
 function installwheel(target, handler)
 {
   if ( target.addEventListener ) {
@@ -129,6 +140,14 @@ function installmouse()
   target.onmouseup = ljmouseup;
   target.onmousemove = ljmousemove;
   installwheel(target, ljwheel);
+}
+
+
+
+function changegroupclus()
+{
+  //var groupclus = grab("groupcluster").checked;
+  paint();
 }
 
 
@@ -244,6 +263,22 @@ function updatevclsplot(lj)
 function paint()
 {
   if ( !lj ) return;
+
+  var groupclus = grab("groupcluster").checked;
+  paintedges = null;
+  if ( groupclus ) {
+    xpaint = lj.x2;
+    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2, lj.rcls);
+    // if we group particles according to clusters
+    // some particles will flow out of the box
+    // so we need a smaller scale
+    adjustscale = 0.7;
+  } else {
+    xpaint = lj.x;
+    paintedges = lj_listedges(lj, lj.x); // list edges
+    adjustscale = 1.0;
+  }
+
   var s = userscale * adjustscale;
   if ( lj.dim === 2 ) {
     ljdraw2d(lj, "ljbox", xpaint, s, paintedges, randcolors);
@@ -264,21 +299,6 @@ function pulse()
     sinfo = domc();
   }
   grab("sinfo").innerHTML = sinfo;
-
-  var groupclus = grab("groupcluster").checked;
-  paintedges = null;
-  if ( groupclus ) {
-    xpaint = lj.x2;
-    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2, lj.rcls);
-    // if we group particles according to clusters
-    // some particles will flow out of the box
-    // so we need a smaller scale
-    adjustscale = 0.7;
-  } else {
-    xpaint = lj.x;
-    paintedges = lj_listedges(lj, lj.x); // list edges
-    adjustscale = 1.0;
-  }
 
   paint();
 

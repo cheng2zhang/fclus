@@ -226,7 +226,6 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
 
   // the system dimension is L + two radii
   var scale = userscale * Math.min(width, height) / (lj.l + 1.0);
-  var radius = 0.5 * scale;
 
   // draw the background
   ctx.fillStyle = "#ffffff";
@@ -240,6 +239,8 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
   // xyz[ invmap[i] ] --> xt[ i ]
   var i, j, ic;
 
+  var zmax = xyz[lj.n - 1][2], zmin = xyz[0][2];
+
   // draw lines that were used to group clusters
   if ( edges ) {
     ctx.lineWidth = 2;
@@ -247,10 +248,14 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     for ( ic = 0; ic < edges.length; ic++ ) {
       i = invmap[ edges[ic][0] ];
       j = invmap[ edges[ic][1] ];
-      var xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
-      var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scale + height * 0.5 );
-      var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
-      var yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * scale + height * 0.5 );
+      var zfi = (xyz[i][2] - zmin) / (zmax - zmin);
+      var scli = scale * (0.7 + 0.3 * zfi);
+      var xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
+      var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
+      var zfj = (xyz[j][2] - zmin) / (zmax - zmin);
+      var sclj = scale * (0.7 + 0.3 * zfj);
+      var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
+      var yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
       drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
       drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
       drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
@@ -267,25 +272,25 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
   }
 
   // draw each particle
-  var zmax = xyz[lj.n - 1][2], zmin = xyz[0][2];
   for ( i = 0; i < lj.n; i++ ) {
-    var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
-    var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scale + height * 0.5 );
     var z = xyz[i][2];
     var zf = (z - zmin) / (zmax - zmin);
     // make closer particles larger
-    var rz = Math.floor( radius * (0.8 + 0.2 * zf) );
+    var scl = scale * (0.7 + 0.3 * zf);
+    var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scl + width  * 0.5 );
+    var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scl + height * 0.5 );
+    var rz = Math.floor( 0.5 * scl );
     ic = lj.g.cid[ idmap[i] ];
+    var color = colors[ic];
     if ( mark[ idmap[i] ] ) {
       // circle around the first particle of the cluster
-      drawBall(ctx, x, y, rz, "#000000", 5); // outer outline
+      drawBall(ctx, x, y, rz, color,     5); // outer outline
       drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
     }
-    var color = colors[ic];
     var spotcolor = "#e0e0e0";
-    paintBall(ctx, x, y, rz, color, spotcolor);
+    var color2 = darkenColor(color, 0.7 + 0.3 * zf);
+    paintBall(ctx, x, y, rz, color2, spotcolor);
   }
-  console.log("cluster end");
 }
 
 

@@ -119,12 +119,12 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
     var x = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
     var y = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
     ic = lj.g.cid[i];
+    var color = colors[ic];
     if ( ccnt[ic] < 1 ) {
       // circle around the first particle of the cluster
-      drawBall(ctx, x, y, radius, "#000000", 5); // outer outline
+      drawBall(ctx, x, y, radius, color,     5); // outer outline
       drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
     }
-    var color = colors[ic];
     var spotcolor = "#e0e0e0";
     paintBall(ctx, x, y, radius, color, spotcolor);
     ccnt[ic] += 1;

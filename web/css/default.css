@@ -5,16 +5,16 @@ body {
 }
 
 div.wrapper {
-  background-color: #ffffff;
+  background-color: #f7f7f7;
   padding: 2px 20px 2px 20px;
 }
 
 form {
-  width: 1000px;
-  padding: 20px 20px;
-  border: 1px single #e0e0e0;
-  background-color: #f0f0f0;
-  margin: auto;
+  width: 92%;
+  padding: 10px 2%;
+  margin: 0% 2%;
+  border: 1px solid #e0e0e0;
+  background-color: #f7f7f7;
 }
 
 h1, h2, h3 {
@@ -22,7 +22,7 @@ h1, h2, h3 {
   text-align: center;
   background-color: #f0f0ff;
   padding: 15px;
-  margin-bottom: 0px;
+  margin-bottom: 10px;
   border-top: 1px solid #cccccc;
   border-bottom: 1px solid #cccccc;
 }
@@ -72,7 +72,7 @@ option {
 .largebtn {
   font-family: Georgia, serif;
   font-size: 120%;
-  font-weight: bold;
+  font-weight: normal;
   line-height: 180%;
   padding: 0px 50px;
 }
@@ -111,8 +111,8 @@ div.panel {
 .panel-title {
   background-color: #f0f0f0;
   text-align: center;
-  font-family: Verdana, Helvetica, Arial, sans-serif;
-  font-weight: bold;
+  font-family: Verdana, "DejaVu Sans", Tahoma, Helvetica, Arial, sans-serif;
+  font-weight: normal;
   padding: 2px;
   margin: 5px 10px 15px 10px;
   border: 1px solid #e0e0e0;
