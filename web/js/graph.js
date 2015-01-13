@@ -13,6 +13,7 @@ function Graph(n)
   this.mat = newarr2d(n, n);
   this.nc = 0;
   this.csize = newarr(n);
+  this.cseed = newarr(n);
   this.cid = newarr(n);
   this.queue = newarr(n);
   this.icmax = -1;
@@ -80,7 +81,7 @@ Graph.prototype.copy = function(g2)
 
 
 /* do clustering */
-Graph.prototype.clus = function()
+Graph.prototype.clus = function(seed)
 {
   var i, j, n = this.n, ic;
   var head, end, max;
@@ -89,15 +90,20 @@ Graph.prototype.clus = function()
 
   max = 0;
   for ( ic = 0; ; ic++ ) {
-    // find the first free atom
-    for ( i = 0; i < n; i++ )
-      if ( this.cid[i] < 0 )
-        break;
-    if ( i >= n ) break;
+    if ( ic === 0 && seed !== undefined && seed !== null ) {
+      i = seed;
+    } else {
+      // find the first free atom
+      for ( i = 0; i < n; i++ )
+        if ( this.cid[i] < 0 )
+          break;
+      if ( i >= n ) break;
+    }
 
     // grow a cluster starting from i
     this.queue[ head = 0 ] = i;
     this.cid[i] = ic;
+    this.cseed[ic] = i;
     end = 1;
     for ( ; head < end; head++ ) {
       i = this.queue[head];

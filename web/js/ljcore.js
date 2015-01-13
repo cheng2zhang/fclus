@@ -117,6 +117,7 @@ function LJ(n, dim, rho, rcdef, rcls)
   this.vcls = newarr(n + 1);
   this.chist = newarr(n + 1);
   this.chist_cnt = 0;
+  this.cseed = 0; // seed of the cluster
 }
 
 
@@ -149,7 +150,7 @@ function lj_mkgraph(lj, g, rm)
       }
     }
   }
-  g.clus();
+  g.clus(lj.cseed);
 }
 
 
@@ -182,7 +183,7 @@ function lj_mkgraph2(lj, g, k, rm)
       }
     }
   }
-  g.clus();
+  g.clus(lj.cseed);
 }
 
 
@@ -195,10 +196,10 @@ LJ.prototype.mkgraph2 = function(g, k)
 
 
 /* compute the cluster energy
- * call lj_mkgraph() first */
+ * call mkgraph() first */
 function lj_eclus(lj, g)
 {
-  return lj.vcls[ g.csize[ g.cid[0] ] ];
+  return lj.vcls[ g.csize[ g.cid[ lj.cseed ] ] ];
 }
 
 
@@ -466,7 +467,8 @@ LJ.prototype.commit = function(i, xi, du, dvir, ucls)
 
 
 
-/* Metropolis algorithm */
+/* Metropolis algorithm
+ * graph lj.g is updated */
 LJ.prototype.metro = function(amp, bet)
 {
   var acc = 0;
@@ -496,6 +498,32 @@ LJ.prototype.metro = function(amp, bet)
 
 
 
+/* change the seed for clustering */
+LJ.prototype.changeseed = function(g)
+{
+  var i = (this.cseed + 1 + Math.floor(rand01() * (this.n - 1))) % this.n;
+  var sz0 = g.csize[ g.cid[ this.cseed ] ];
+  var sz1 = g.csize[ g.cid[ i ] ];
+  var acc;
+  if ( sz0 === sz1 ) {
+    acc = true;
+  } else {
+    var dv = this.vcls[ sz1 ] - this.vcls[ sz0 ];
+    if ( dv < 0 ) {
+      acc = true;
+    } else {
+      var r = rand01();
+      acc = ( r < Math.exp(-dv) );
+    }
+  }
+  if ( acc ) {
+    this.cseed = i;
+    this.mkgraph(this.g);
+  }
+};
+
+
+
 LJ.prototype.chist_clear = function()
 {
   this.chist_cnt = 0;
@@ -509,7 +537,7 @@ LJ.prototype.chist_clear = function()
 LJ.prototype.chist_add = function(g)
 {
   this.chist_cnt += 1;
-  this.chist[ g.csize[ g.cid[0] ] ] += 1;
+  this.chist[ g.csize[ g.cid[ this.cseed ] ] ] += 1;
 };
 
 
@@ -541,7 +569,7 @@ LJ.prototype.clus = function()
 LJ.prototype.update_vcls = function(g, lnf)
 {
   var i;
-  this.vcls[ g.csize[ g.cid[0] ] ] += lnf;
+  this.vcls[ g.csize[ g.cid[ this.cseed ] ] ] += lnf;
 
   // find the minimal of the potential and subtract it
   var min = 1e30;
@@ -616,7 +644,7 @@ function lj_mkr2ij(lj, x, r2ij, check)
 
 
 /* wrap coordinates to group particles in the same cluster */
-function lj_wrapclus(lj, xin, xout, g, rm)
+function lj_wrapclus(lj, xin, xout, g)
 {
   var ic, i, j, n = lj.n, head, end;
   var l = lj.l, invl = 1 / l, dx = newarr(lj.dim);
@@ -626,8 +654,9 @@ function lj_wrapclus(lj, xin, xout, g, rm)
     vcopy(xout[i], xin[i]);
   }
 
-  // shift xout[0] to the center of the box
-  vdiff(dx, [l * 0.5, l * 0.5, l * 0.5], xout[0]);
+  // shift xout[lj.cseed] to the center of the box
+  vdiff(dx, [l * 0.5, l * 0.5, l * 0.5], xout[lj.cseed]);
+  //console.log("before", lj.cseed, xout[lj.cseed], dx);
   for ( i = 0; i < n; i++ ) {
     vinc( xout[i], dx );
     vwrap( xout[i], l );
@@ -635,18 +664,17 @@ function lj_wrapclus(lj, xin, xout, g, rm)
 
   //lj_mkr2ij(lj, xout, lj.r2ij, true);
   lj.mkgraph(g);
+  //console.log("after", lj.cseed, xout[lj.cseed], g.cid[lj.cseed], lj.g.cseed[0]);
+
+  var gg = lj.g;
+  if ( gg.cid[lj.cseed] !== 0 || gg.cseed[0] !== lj.cseed ) {
+    stop();
+    throw new Error("bad seed! " + lj.cseed + " " + gg.cseed[0] + " " + g.cseed[0]);
+  }
 
   for ( ic = 0; ic < g.nc; ic++ ) {
     // find the seed of this cluster
-    for ( i = 0; i < n; i++ ) {
-      if ( g.cid[i] === ic ) {
-        break;
-      }
-    }
-    if ( i >= n ) {
-      throw new Error("no particle in cluster " + ic);
-      return null;
-    }
+    i = g.cseed[ic];
 
     g.queue[ head = 0 ] = i;
     g.cid[ i ] = -1;

@@ -26,8 +26,8 @@ double nstrep = 100000;
 const char *fnpos = "lj.pos";
 const char *fnchist = "chist.dat";
 
-double flatness = 0.3;
-double frac = 0.5;
+double wl_flatness = 0.3;
+double wl_frac = 0.5;
 
 double tot = 0, acc = 0;
 
@@ -52,26 +52,30 @@ int main(void)
   double t;
   lj_t *lj;
   double epsm = 0;
-  double lnf = 0.001 * tp;
+  double lnf = 0.001;
 
+  /* make a Lennard-Jones object */
   lj = lj_open(n, rho, rcdef, rcls);
-  /* potential energy */
+
+  /* compute the potential energy */
   lj_energy(lj);
-  /* compute the cluster energy */
-  lj_mkgraph(lj, lj->g, rcls);
-  lj->ecls = lj_eclus(lj, lj->g);
+  /* build a graph */
+  lj_mkgraph(lj, lj->g);
 
   for ( t = 1; t <= nsteps; t++ ) {
-    /* Metropolis algorithm for a step */
+    /* a step of Metropolis algorithm
+     * graph is implicitly computed */
     tot += 1;
     acc += lj_metro(lj, amp, 1/tp);
+    /* try to change the seed particle */
+    lj_changeseed(lj, lj->g);
 
-    /* add the cluster size to this histogram */
+    /* add the cluster size to the histogram */
     lj_chist_add(lj, lj->g);
     /* update the adaptive potential */
     lj_update_vcls(lj, lj->g, lnf);
     /* change the updating magnitude */
-    if ( lj_update_lnf(lj, &lnf, flatness, frac) != 0 ) {
+    if ( lj_update_lnf(lj, &lnf, wl_flatness, wl_frac) != 0 ) {
       /* update the MC amplitude */
       update_mcamp(&acc, &tot);
     }
@@ -79,8 +83,10 @@ int main(void)
     if ( fmod(t, nstrep) < 0.1 ) {
       lj_writepos(lj, lj->x, lj->v, fnpos);
       lj_chist_save(lj, fnchist);
-      fprintf(stderr, "t %g, acc %.2f%% ep %g, ecls %g, lnf %g, flat %g%%, ",
-          t, 100*acc/tot, lj->epot, lj->ecls, lnf, lj->hflatness*100);
+      fprintf(stderr, "t %g, acc %.2f%% ep %g, seed %d, csize %d, lnf %g, flat %g%%, ",
+          t, 100*acc/tot, lj->epot,
+          lj->cseed, graph_getcsize(lj->g, 0),
+          lnf, lj->hflatness*100);
       graph_clus_print(lj->g);
     }
     epsm += lj->epot;

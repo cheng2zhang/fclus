@@ -21,10 +21,12 @@ var mddt = 0.002;
 var thdt = 0.02;
 var nstepspsmd = 100; // number of steps per second for MD
 var nstepspfmd = 10;  // number of steps per frame for MD
+var nstepsmd = 0;
 
 var mcamp = 0.2;
 var nstepspsmc = 10000; // number of steps per second for MC
 var nstepspfmc = 1000;  // number of steps per frame for MC
+var nstepsmc = 0;
 var mctot = 0.0;
 var mcacc = 0.0;
 
@@ -44,6 +46,7 @@ var adjustscale = 1.0;
 var xpaint = null; // coordinates used for painting
 var paintedges = null; // edges for visualization
 var randcolors = null; // random colors for each cluster
+var seedcolor = "#ff2010"; // color of the special cluster
 
 
 
@@ -64,10 +67,12 @@ function getparams()
   thdt = get_float("thermostatdt", 0.01);
   nstepspsmd = get_int("nstepspersecmd", 100);
   nstepspfmd = nstepspsmd * timer_interval / 1000;
+  nstepsmd = 0;
 
   mcamp = get_float("mcamp", 0.2);
   nstepspsmc = get_int("nstepspersecmc", 10000);
   nstepspfmc = nstepspsmc * timer_interval / 1000;
+  nstepsmc = 0;
 
   wl_lnf = get_float("wl_lnfinit", 0.01);
   wl_flatness = get_float("wl_flatness", 0.3);
@@ -79,8 +84,6 @@ function getparams()
   for ( var ic = 0; ic <= n; ic++ ) {
     randcolors[ic] = randHueColor(40, 120);
   }
-  // set the first color to red
-  randcolors[0] = "#ff2010";
 }
 
 
@@ -163,6 +166,8 @@ function domd()
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
   }
+  nstepsmd += nstepspfmd;
+  sinfo += 'step ' + nstepsmd + ", ";
   sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
   sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
   return sinfo;
@@ -175,8 +180,11 @@ function domc()
   var istep, sinfo = "";
 
   for ( istep = 0; istep < nstepspfmc; istep++ ) {
+    // do a step of Metropolis algorithm
     mctot += 1.0;
     mcacc += lj.metro(mcamp, 1.0 / tp);
+    // try to change the seed of the cluster, unnecessary
+    lj.changeseed(lj.g);
     lj.chist_add(lj.g);
     lj.update_vcls(lj.g, wl_lnf);
     wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
@@ -192,10 +200,13 @@ function domc()
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
   }
+  nstepsmc += nstepspfmc;
+  sinfo += "step: " + nstepsmc + ", ";
   sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%, ";
   sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl_lnf + ", ";
   sinfo += 'flatness: ' + roundto(lj.hflatness * 100, 2) + "%. ";
-  sinfo += '<br>clusters: ';
+  sinfo += '<br>seed: ' + lj.cseed + ", ";
+  sinfo += 'clusters: ';
   for ( var ic = 0; ic < lj.g.nc; ic++ ) {
     sinfo += "" + lj.g.csize[ic];
     if ( ic < lj.g.nc - 1 ) {
@@ -276,7 +287,7 @@ function paint()
   paintedges = null;
   if ( groupclus ) {
     xpaint = lj.x2;
-    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2, lj.rcls);
+    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2);
     // if we group particles according to clusters
     // some particles will flow out of the box
     // so we need a smaller scale

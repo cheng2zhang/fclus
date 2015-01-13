@@ -83,6 +83,7 @@ __inline static int graph_copy(graph_t *g, const graph_t *g2)
 }
 
 
+
 /* do clustering */
 __inline static void graph_clus(graph_t *g)
 {
@@ -121,6 +122,14 @@ __inline static void graph_clus(graph_t *g)
     }
   }
   g->nc = ic;
+}
+
+
+
+/* return the size of the cluster that contains particle i */
+__inline int graph_getcsize(const graph_t *g, int i)
+{
+  return g->csize[ g->cid[i] ];
 }
 
 

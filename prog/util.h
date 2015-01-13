@@ -34,6 +34,14 @@ __inline static void vzero(double *x)
 
 
 
+__inline static void vinv(double *x)
+{
+  int d;
+  for ( d = 0; d < D; d++ ) x[d] = -x[d];
+}
+
+
+
 __inline static double *vcopy(double *x, const double *y)
 {
   int d;
