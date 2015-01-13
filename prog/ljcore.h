@@ -582,7 +582,7 @@ __inline static void lj_update_vcls(lj_t *lj, const graph_t *g, double lnf)
 
 
 /* change the updating magnitude */
-__inline static double lj_update_lnf(lj_t *lj, double lnf,
+__inline static int lj_update_lnf(lj_t *lj, double *lnf,
     double flatness, double frac)
 {
   int i, n = lj->n;
@@ -594,7 +594,7 @@ __inline static double lj_update_lnf(lj_t *lj, double lnf,
     sh += h;
     shh += h * h;
   }
-  if ( sh <= 0 ) return lnf;
+  if ( sh <= 0 ) return 0;
   sh /= n;
   shh = shh / n - sh * sh;
   if ( shh < 0 ) shh = 0;
@@ -603,10 +603,13 @@ __inline static double lj_update_lnf(lj_t *lj, double lnf,
   lj->hflatness = sqrt(shh) / sh;
   if ( lj->hflatness < flatness ) {
     lj_chist_clear(lj);
-    printf("changing lnf from %g to %g\n", lnf, lnf * frac);
-    lnf *= frac;
+    printf("changing lnf from %g to %g, flatness %g%%\n",
+        *lnf, *lnf * frac, lj->hflatness*100);
+    *lnf *= frac;
+    return 1;
+  } else {
+    return 0;
   }
-  return lnf;
 }
 
 

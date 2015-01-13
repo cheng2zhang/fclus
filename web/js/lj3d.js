@@ -284,8 +284,9 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     var color = colors[ic];
     if ( mark[ idmap[i] ] ) {
       // circle around the first particle of the cluster
-      drawBall(ctx, x, y, rz, color,     5); // outer outline
-      drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
+      //drawBall(ctx, x, y, rz, color,     5); // outer outline
+      //drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
+      paintBall(ctx, x, y, rz * 1.2, "#ffffdd", color, 0, 0, rz * 0.7);
     }
     var spotcolor = "#e0e0e0";
     var color2 = darkenColor(color, 0.7 + 0.3 * zf);

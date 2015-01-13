@@ -125,9 +125,9 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
       drawBall(ctx, x, y, radius, color,     5); // outer outline
       drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
     }
+    ccnt[ic] += 1;
     var spotcolor = "#e0e0e0";
     paintBall(ctx, x, y, radius, color, spotcolor);
-    ccnt[ic] += 1;
   }
 }
 

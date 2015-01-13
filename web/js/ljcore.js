@@ -575,6 +575,9 @@ LJ.prototype.update_lnf = function(lnf, flatness, frac)
     this.chist_clear();
     console.log("change lnf from " + lnf + " to " + (lnf * frac) );
     lnf *= frac;
+    this.lnf_changed = true;
+  } else {
+    this.lnf_changed = false;
   }
   return lnf;
 };

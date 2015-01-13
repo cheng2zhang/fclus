@@ -180,6 +180,14 @@ function domc()
     lj.chist_add(lj.g);
     lj.update_vcls(lj.g, wl_lnf);
     wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
+    if ( lj.lnf_changed ) {
+      // adjust the MC move size, to make acceptance ratio to 0.5
+      mcamp *= Math.max( Math.min( Math.sqrt(mcacc/mctot/0.5 ), 2 ), 0.5 );
+      console.log("acc", mcacc/mctot, ", amp", mcamp);
+      grab("mcamp").value = roundto(mcamp, 4);
+      mctot = 1e-30;
+      mcacc = 0;
+    }
     sum1 += 1.0;
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
@@ -350,6 +358,7 @@ function startsimul()
   lj.force();
   lj.mkgraph(lj.g);
   installmouse();
+  grab("pause").value = "Pause";
   ljtimer = setInterval(
     function(){ pulse(); },
     timer_interval);
