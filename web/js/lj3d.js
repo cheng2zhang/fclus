@@ -282,6 +282,9 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     var rz = Math.floor( 0.5 * scl );
     ic = lj.g.cid[ idmap[i] ];
     var color = colors[ic];
+    if ( ic === 0 ) {
+      color = seedcolor;
+    }
     if ( mark[ idmap[i] ] ) {
       // circle around the first particle of the cluster
       //drawBall(ctx, x, y, rz, color,     5); // outer outline

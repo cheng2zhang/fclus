@@ -20,6 +20,16 @@ function vzero(x)
 
 
 
+function vinv(x)
+{
+  for ( var d = 0; d < D; d++ ) {
+    x[d] = -x[d];
+  }
+  return x;
+}
+
+
+
 function vcopy(x, y)
 {
   for ( var d = 0; d < D; d++ ) {

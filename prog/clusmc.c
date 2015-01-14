@@ -53,6 +53,7 @@ int main(void)
   lj_t *lj;
   double epsm = 0;
   double lnf = 0.001;
+  int csize;
 
   /* make a Lennard-Jones object */
   lj = lj_open(n, rho, rcdef, rcls);
@@ -70,10 +71,11 @@ int main(void)
     /* try to change the seed particle */
     lj_changeseed(lj, lj->g);
 
+    csize = graph_getcsize(lj->g, lj->cseed);
     /* add the cluster size to the histogram */
-    lj_chist_add(lj, lj->g);
+    lj_chist_add(lj, csize);
     /* update the adaptive potential */
-    lj_update_vcls(lj, lj->g, lnf);
+    lj_update_vcls(lj, csize, lnf);
     /* change the updating magnitude */
     if ( lj_update_lnf(lj, &lnf, wl_flatness, wl_frac) != 0 ) {
       /* update the MC amplitude */

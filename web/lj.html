@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
-  <title> Lennard-Jones fluid </title>
+  <title> Cluster sampling for the Lennard-Jones fluid </title>
   <link rel="stylesheet" type="text/css" href="./css/default.css" />
   <script type="text/javascript" src="./js/dygraph-combined.js"></script>
   <script type="text/javascript" src="./js/dygraph-utils.js"></script>
@@ -10,6 +10,7 @@
   <script type="text/javascript" src="./js/mtrand.js"></script>
   <script type="text/javascript" src="./js/graph.js"></script>
   <script type="text/javascript" src="./js/draw.js"></script>
+  <script type="text/javascript" src="./js/hmc.js"></script>
   <script type="text/javascript" src="./js/ljcore.js"></script>
   <script type="text/javascript" src="./js/vct.js"></script>
   <script type="text/javascript" src="./js/lj2d.js"></script>
@@ -39,17 +40,19 @@
     <option value="3">3</option>
   </select>.
   &nbsp;
-  <br>
 
   Number of particles,
   <span class="math"><i>N</i></span>:
   <input type="text" size="6" value="55" id="n"
     onchange="changeparams()">.
+  &nbsp;
+  <br>
 
   Density,
   <span class="math"><i>&rho;</i></span>:
   <input type="text" size="6" value="0.35" id="density"
     onchange="changeparams()">.
+  &nbsp;
 
   Temperature,
   <span class="math"><i>T</i></span>:
@@ -73,18 +76,24 @@
 
   Simulation method
   <select id="simulmethod" onchange="changeparams()">
-    <option value="MD" disabled>molecular dynamics (MD)</option>
+    <option value="MD">molecular dynamics (MD) with hybrid MC</option>
     <option value="MC" selected>Monte Carlo (MC)</option>
   </select>
-  </div>
+  <br>
+
+  <input type="checkbox" id="changeseed" onchange="changeparams()">
+  Dynamically change the cluster seed.
+  <br>
+
+  </div> <!-- panel -->
 
 
 
   <div class="panel">
-  <div class="panel-title">Molecular dynamics (MD)</div>
+  <div class="panel-title">Molecular dynamics (MD) with hybrid MC (HMC)</div>
 
   Number of MD steps per second:
-  <input type="text" size="10" value="100"
+  <input type="text" size="10" value="2000"
     id="nstepspersecmd" onchange="changeparams()">.
   <br>
 
@@ -94,10 +103,18 @@
   <br>
 
   Thermostat time step:
-  <input type="text" size="6" value="0.02" id="thermostatdt"
+  <input type="text" size="6" value="0.1" id="thermostatdt"
     onchange="changeparams()">.
   <br>
 
+  Do HMC every
+  <input type="text" size="6" value="1" id="nsthmc"
+    onchange="changeparams()"> step(s).
+  <br>
+
+  Number of velocity swaps after HMC:
+  <input type="text" size="6" value="1" id="nvswaps"
+    onchange="changeparams()">.
   </div>
 
 
@@ -115,6 +132,10 @@
     onchange="changeparams()">.
   <br>
 
+  <input type="checkbox" id="adjmcamp" checked>
+  Dynamically adjust the MC move size.
+  <br>
+
   </div>
 
 
@@ -123,19 +144,22 @@
   <div class="panel-title">Wang-Landau updating</div>
 
   Initial <span class="math">ln <i>f</i> </span>:
-  <input type="text" size="6" value="0.001"
+  <input type="text" size="6" value="0.0004"
     id="wl_lnfinit" onchange="changeparams()">.
   &nbsp;
+  <br>
 
   Multiplicative factor to
   <span class="math">ln <i>f</i> </span>:
   <input type="text" size="6" value="0.5"
-    id="wl_frac" onchange="changeparams()">.
+    id="wl_frac">.
   <br>
 
   Histogram flatness to switch stages:
-  <input type="text" size="10" value="0.3"
-    id="wl_flatness" onchange="changeparams()">.
+  <input type="range" value="0.3"
+    min="0.001" max="1.0" step="0.001"
+    style="width: 140px; border: 1px solid #cccccc;"
+    id="wl_flatness">.
   <br>
 
   </div>
@@ -165,10 +189,11 @@
     <tr>
       <td>
         <div class="center">
-          <canvas id="ljbox" width="560" height="560"></canvas>
+          <canvas id="ljbox" width="600" height="600"></canvas>
           <br>
-          <input id="ljscale" type="range" value="1.0"
-            min="0.05" max="3.0" step="0.01" style="width: 480px"
+          Zoom: <input id="ljscale" type="range" value="1.0"
+            min="0.05" max="3.0" step="0.01"
+            style="width: 480px; border: 1px solid #cccccc;"
             onchange="changescale()">
           <br>
         </div>
@@ -212,14 +237,12 @@
   <p>The source code can be found at
   <ul>
     <li>
-      <a href="http://github.com/cheng2zhang/fclus">
-        github
-      </a> (source code).
+      <a href="http://github.com/cheng2zhang/fclus">GitHub</a>
+      (source code).
     </li>
     <li>
-      <a href="https://www.dropbox.com/sh/1918tkacrp5stuo/AADMxMNMTKs_Zp1zDHRMObGra">
-        Dropbox
-      </a> (source code plus some extra files).
+      <a href="https://www.dropbox.com/sh/1918tkacrp5stuo/AADMxMNMTKs_Zp1zDHRMObGra">Dropbox</a>
+      (source code plus some extra files).
     </li>
     <li>
       <span class="code">/Bossman/cz1/fclus</span>

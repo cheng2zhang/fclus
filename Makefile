@@ -8,7 +8,8 @@ clean:
 	$(MAKE) -C prog clean
 	rstrip.py -Rlv
 
-excludes = --exclude=".*" --exclude="*~" --exclude="bak"
+excludes = --exclude=".*" --exclude="*~" --exclude="bak" \
+	   --exclude="tmp*"
 
 Dropbox: clean
 	rsync -avzL $(excludes) * ~/Dropbox/fclus/

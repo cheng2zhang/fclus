@@ -22,6 +22,10 @@ var thdt = 0.02;
 var nstepspsmd = 100; // number of steps per second for MD
 var nstepspfmd = 10;  // number of steps per frame for MD
 var nstepsmd = 0;
+var hmctot = 0.0;
+var hmcacc = 0.0;
+var nsthmc = 1;
+var nvswaps = 1;
 
 var mcamp = 0.2;
 var nstepspsmc = 10000; // number of steps per second for MC
@@ -37,6 +41,10 @@ var sumP = 0.0;
 var wl_lnf = 0.01;
 var wl_flatness = 0.3;
 var wl_frac = 0.5;
+
+var hmc = null;
+
+var changeseed = true;
 
 var histplot = null;
 var vclsplot = null;
@@ -65,6 +73,8 @@ function getparams()
   simulmethod = grab("simulmethod").value;
   mddt = get_float("mddt", 0.002);
   thdt = get_float("thermostatdt", 0.01);
+  nsthmc = get_int("nsthmc", 1);
+  nvswaps = get_int("nvswaps", 1);
   nstepspsmd = get_int("nstepspersecmd", 100);
   nstepspfmd = nstepspsmd * timer_interval / 1000;
   nstepsmd = 0;
@@ -75,8 +85,8 @@ function getparams()
   nstepsmc = 0;
 
   wl_lnf = get_float("wl_lnfinit", 0.01);
-  wl_flatness = get_float("wl_flatness", 0.3);
-  wl_frac = get_float("wl_frac", 0.5);
+
+  changeseed = grab("changeseed").checked;
 
   userscale = get_float("ljscale");
 
@@ -155,21 +165,63 @@ function changegroupclus()
 
 
 
+/* return a string of the current simulation details */
+function getinfo()
+{
+  var sinfo = "";
+
+  sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl_lnf + ", ";
+  sinfo += 'flatness: ' + roundto(lj.hflatness * 100, 2) + "%. ";
+  sinfo += '<br>seed: ' + lj.cseed + ", ";
+  sinfo += 'clusters: ';
+  for ( var ic = 0; ic < lj.g.nc; ic++ ) {
+    sinfo += "" + lj.g.csize[ic];
+    if ( ic < lj.g.nc - 1 ) {
+      sinfo += ", ";
+    } else {
+      sinfo += ".";
+    }
+  }
+  return sinfo
+}
+
+
+
 function domd()
 {
   var istep, sinfo = "";
 
-  for ( istep = 0; istep < nstepspfmd; istep++ ) {
+  for ( istep = 1; istep <= nstepspfmd; istep++ ) {
     lj.vv(mddt);
     lj.vrescale(tp, thdt);
+    lj.mkgraph(lj.g);
+    if ( changeseed ) {
+      lj.changeseed(lj.g);
+    }
+
+    // use hybrid MC to sample a flat histogram
+    if ( nsthmc > 0 && istep % nsthmc === 0 ) {
+      hmctot += 1;
+      hmcacc += lj.dohmc(hmc);
+      lj.ekin = lj_vscramble(lj.v, lj.n, nvswaps);
+    } else {
+      lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
+    }
+
+    lj.chist_add(lj.csize);
+    lj.update_vcls(lj.csize, wl_lnf);
+    wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
+
     sum1 += 1.0;
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
   }
   nstepsmd += nstepspfmd;
   sinfo += 'step ' + nstepsmd + ", ";
-  sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
-  sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
+  sinfo += "hmcacc: " + roundto(100.0 * hmcacc / hmctot, 2) + "%, ";
+  //sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
+  //sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
+  sinfo += getinfo();
   return sinfo;
 }
 
@@ -184,15 +236,20 @@ function domc()
     mctot += 1.0;
     mcacc += lj.metro(mcamp, 1.0 / tp);
     // try to change the seed of the cluster, unnecessary
-    lj.changeseed(lj.g);
-    lj.chist_add(lj.g);
-    lj.update_vcls(lj.g, wl_lnf);
+    if ( changeseed ) {
+      lj.changeseed(lj.g);
+    }
+    lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
+    lj.chist_add(lj.csize);
+    lj.update_vcls(lj.csize, wl_lnf);
     wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
     if ( lj.lnf_changed ) {
-      // adjust the MC move size, to make acceptance ratio to 0.5
-      mcamp *= Math.max( Math.min( Math.sqrt(mcacc/mctot/0.5 ), 2 ), 0.5 );
+      // adjust the MC move size, to make acceptance ratio close to 0.5
+      if ( grab("adjmcamp").checked ) {
+        mcamp *= Math.max( Math.min( Math.sqrt(mcacc/mctot/0.5 ), 2 ), 0.5 );
+        grab("mcamp").value = roundto(mcamp, 4);
+      }
       console.log("acc", mcacc/mctot, ", amp", mcamp);
-      grab("mcamp").value = roundto(mcamp, 4);
       mctot = 1e-30;
       mcacc = 0;
     }
@@ -203,20 +260,9 @@ function domc()
   nstepsmc += nstepspfmc;
   sinfo += "step: " + nstepsmc + ", ";
   sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%, ";
-  sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl_lnf + ", ";
-  sinfo += 'flatness: ' + roundto(lj.hflatness * 100, 2) + "%. ";
-  sinfo += '<br>seed: ' + lj.cseed + ", ";
-  sinfo += 'clusters: ';
-  for ( var ic = 0; ic < lj.g.nc; ic++ ) {
-    sinfo += "" + lj.g.csize[ic];
-    if ( ic < lj.g.nc - 1 ) {
-      sinfo += ", ";
-    } else {
-      sinfo += ".";
-    }
-  }
   //sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
   //sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
+  sinfo += getinfo();
   return sinfo;
 }
 
@@ -312,6 +358,10 @@ function pulse()
 {
   var sinfo;
 
+  // the following parameter might have been changed
+  wl_flatness = get_float("wl_flatness", 0.3);
+  wl_frac = get_float("wl_frac", 0.5);
+
   if ( simulmethod === "MD" ) {
     sinfo = domd();
   } else if ( simulmethod === "MC" ) {
@@ -334,7 +384,10 @@ function stopsimul()
     clearInterval(ljtimer);
     ljtimer = null;
   }
-  mctot = 0.0;
+  grab("pause").value = "Pause";
+  hmctot = 1e-30;
+  hmcacc = 0.0;
+  mctot = 1e-30;
   mcacc = 0.0;
   sum1 = 1e-30;
   sumU = 0.0;
@@ -368,8 +421,10 @@ function startsimul()
   lj = new LJ(n, D, rho, rcdef, rcls);
   lj.force();
   lj.mkgraph(lj.g);
+  hmc = new HMC(lj.n, 1, 1);
+  hmc.push(lj.x, lj.v, lj.f,
+      [ lj.g.csize[ lj.g.cid[ lj.cseed ] ] ], [lj.epot]);
   installmouse();
-  grab("pause").value = "Pause";
   ljtimer = setInterval(
     function(){ pulse(); },
     timer_interval);

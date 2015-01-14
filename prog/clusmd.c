@@ -31,6 +31,7 @@ const char *fnchist = "chist.dat";
 double wl_flatness = 0.3;
 double wl_frac = 0.5;
 
+int changeseed = 0;
 int nvswaps = 1;
 
 
@@ -41,7 +42,7 @@ int main(void)
   lj_t *lj;
   double epsm = 0;
   hmc_t *hmc;
-  int hmc_csize = 0;
+  int idat[2], csize;
   double hmcacc = 0, hmctot = DBL_MIN;
   double lnf = 1e-4;
 
@@ -56,11 +57,15 @@ int main(void)
   /* compute the cluster energy */
   lj_mkgraph(lj, lj->g);
 
-  /* make a hybrid Monte-Carlo object */
-  hmc = hmc_open(n);
-  hmc_push(hmc, lj->x, lj->v, lj->f);
-  hmc_csize = graph_getcsize(lj->g, lj->cseed);
+  /* make a hybrid Monte-Carlo object
+   * with two extra integers: cluster size and seed
+   * and one extra floating-point: potential energy */
+  hmc = hmc_open(n, 2, 1);
+  idat[0] = graph_getcsize(lj->g, lj->cseed);
+  idat[1] = lj->cseed;
+  hmc_push(hmc, lj->x, lj->v, lj->f, idat, &lj->epot);
 
+  /* main molecular dynamics loop */
   for ( t = 1; t <= nsteps; t++ ) {
     /* velocity verlet */
     lj_vv(lj, dt);
@@ -68,18 +73,21 @@ int main(void)
     lj->ekin = lj_vrescale(lj, tp, thdt);
     /* build a graph */
     lj_mkgraph(lj, lj->g);
-    lj_changeseed(lj, lj->g);
+    if ( changeseed ) lj_changeseed(lj, lj->g);
 
     /* use hybrid MC to sample a flat histogram along the cluster size */
     if ( t % nsthmc == 0 ) {
       hmctot += 1;
-      hmcacc += lj_hmc(lj, hmc, &hmc_csize, nvswaps);
+      hmcacc += lj_hmc(lj, hmc, &csize);
+      lj->ekin = lj_vscramble(lj->v, lj->n, nvswaps);
+    } else {
+      csize = graph_getcsize(lj->g, lj->cseed);
     }
 
     /* add the cluster size to the histogram */
-    lj_chist_add(lj, lj->g);
+    lj_chist_add(lj, csize);
     /* update the adaptive potential */
-    lj_update_vcls(lj, lj->g, lnf);
+    lj_update_vcls(lj, csize, lnf);
     /* change the updating magnitude */
     lj_update_lnf(lj, &lnf, wl_flatness, wl_frac);
 
@@ -88,7 +96,7 @@ int main(void)
       //lj_chist_print(lj);
       lj_chist_save(lj, fnchist);
       fprintf(stderr, "t %d, ep %g, ek %g, csize %d, hmcacc %.2f%%, flatness %.2f%%, ",
-          t, lj->epot, lj->ekin, graph_getcsize(lj->g, 0),
+          t, lj->epot, lj->ekin, graph_getcsize(lj->g, lj->cseed),
           100.0 * hmcacc / hmctot, 100.0 * lj->hflatness );
       graph_clus_print(lj->g);
     }

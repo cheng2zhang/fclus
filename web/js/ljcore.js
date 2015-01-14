@@ -334,6 +334,23 @@ function lj_ekin(v, n)
 
 
 
+/* randomly swap the velocities of m pairs of particles */
+function lj_vscramble(v, n, m)
+{
+  var vt = newarr(D);
+
+  for ( var im = 0; im < m; im++ ) {
+    var i = Math.floor(rand01() * n);
+    var j = (i + 1 + Math.floor(rand01() * (n - 1))) % n;
+    vcopy(vt, v[i]);
+    vcopy(v[i], v[j]);
+    vcopy(v[j], vt);
+  }
+  return lj_ekin(v, n);
+}
+
+
+
 /* exact velocity rescaling thermostat */
 function lj_vrescale_low(v, n, dof, tp, dt)
 {
@@ -524,6 +541,38 @@ LJ.prototype.changeseed = function(g)
 
 
 
+/* hybrid MC */
+LJ.prototype.dohmc = function(hmc)
+{
+  var acc;
+  // compute the current cluster size
+  var csize = this.g.csize[ this.g.cid[this.cseed] ];
+  // hmc.iarr[0] is the previous size
+  var dv = this.vcls[ csize ] - this.vcls[ hmc.idat[0] ];
+  var iarr = [ csize, this.cseed ];
+  var farr = [ this.epot ];
+
+  if ( dv <= 0 ) {
+    acc = 1;
+  } else {
+    var r = rand01();
+    acc = ( r < Math.exp( -dv ) );
+  }
+  if ( acc ) {
+    hmc.push(this.x, this.v, this.f, iarr, farr);
+  } else {
+    hmc.pop(this.x, this.v, this.f, iarr, farr, true);
+    this.cseed = iarr[1];
+    this.epot = farr[0];
+    //this.force();
+    //this.mkgraph(this.g);
+  }
+  this.csize = iarr[0];
+  return acc;
+};
+
+
+
 LJ.prototype.chist_clear = function()
 {
   this.chist_cnt = 0;
@@ -534,10 +583,10 @@ LJ.prototype.chist_clear = function()
 
 
 
-LJ.prototype.chist_add = function(g)
+LJ.prototype.chist_add = function(csize)
 {
   this.chist_cnt += 1;
-  this.chist[ g.csize[ g.cid[ this.cseed ] ] ] += 1;
+  this.chist[ csize ] += 1;
 };
 
 
@@ -566,10 +615,10 @@ LJ.prototype.clus = function()
 
 
 
-LJ.prototype.update_vcls = function(g, lnf)
+LJ.prototype.update_vcls = function(csize, lnf)
 {
   var i;
-  this.vcls[ g.csize[ g.cid[ this.cseed ] ] ] += lnf;
+  this.vcls[ csize ] += lnf;
 
   // find the minimal of the potential and subtract it
   var min = 1e30;

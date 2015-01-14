@@ -254,7 +254,8 @@ __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
 #define lj_force(lj) \
   lj->epot = lj_force_low(lj, lj->x, lj->f, lj->r2ij, &lj->vir, &lj->ep0, &lj->eps)
 
-/* compute force and virial, return energy */
+/* compute force and virial, return energy
+ * the pair distances are recomputed */
 __inline static double lj_force_low(lj_t *lj, double (*x)[D], double (*f)[D],
     double *r2ij, double *virial, double *ep0, double *eps)
 {
@@ -325,7 +326,7 @@ static double lj_ekin(double (*v)[D], int n)
 
 
 
-/* randomly swap the velocities of a pair of atoms */
+/* randomly swap the velocities of m pairs of particles */
 __inline static double lj_vscramble(double (*v)[D], int n, int m)
 {
   int im, i, j;
@@ -540,14 +541,13 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
 
 
 
-__inline static int lj_hmc(lj_t *lj, hmc_t *hmc,
-    int *hmc_csize, int nvswaps)
+__inline static int lj_hmc(lj_t *lj, hmc_t *hmc, int *csize1)
 {
-  int acc;
   /* compute the current cluster size */
   int csize = graph_getcsize(lj->g, lj->cseed);
-  /* *hmc_csize is the previous size */
-  double dv = lj->vcls[ csize ] - lj->vcls[ *hmc_csize ];
+  int acc, idat[2] = { csize, lj->cseed };
+  /* hmc->idat[0] is the previous size */
+  double dv = lj->vcls[ csize ] - lj->vcls[ hmc->idat[0] ];
   if ( dv <= 0 ) {
     acc = 1;
   } else {
@@ -555,14 +555,15 @@ __inline static int lj_hmc(lj_t *lj, hmc_t *hmc,
     acc = ( r < exp( -dv ) );
   }
   if ( acc ) {
-    hmc_push(hmc, lj->x, lj->v, lj->f);
-    *hmc_csize = csize;
+    hmc_push(hmc, lj->x, lj->v, lj->f, idat, &lj->epot);
   } else {
-    hmc_pop(hmc, lj->x, lj->v, lj->f, 1);
-    lj_force(lj);
-    lj->ekin = lj_vscramble(lj->v, lj->n, nvswaps);
-    lj_mkgraph(lj, lj->g);
+    hmc_pop(hmc, lj->x, lj->v, lj->f, idat, &lj->epot, 1);
+    lj->cseed = idat[1];
+    /* lj->r2ij should be refreshed in the next step */
+    //lj_force(lj);
+    //lj_mkgraph(lj, lj->g);
   }
+  *csize1 = idat[0];
   return acc;
 }
 
@@ -579,10 +580,10 @@ __inline static void lj_chist_clear(lj_t *lj)
 
 
 
-__inline static void lj_chist_add(lj_t *lj, const graph_t *g)
+__inline static void lj_chist_add(lj_t *lj, int csize)
 {
   lj->chist_cnt += 1;
-  lj->chist[ graph_getcsize(g, lj->cseed) ] += 1;
+  lj->chist[ csize ] += 1;
 }
 
 
@@ -669,22 +670,13 @@ __inline static int lj_chist_load(lj_t *lj, const char *fn)
 
 
 
-/* do clustering */
-__inline static void lj_clus(lj_t *lj)
-{
-  lj_mkgraph(lj, lj->g);
-  lj_chist_add(lj, lj->g);
-}
-
-
-
 /* update the cluster potential */
-__inline static void lj_update_vcls(lj_t *lj, const graph_t *g, double lnf)
+__inline static void lj_update_vcls(lj_t *lj, int csize, double lnf)
 {
   int i;
   double min = DBL_MAX;
 
-  lj->vcls[ graph_getcsize(g, lj->cseed) ] += lnf;
+  lj->vcls[ csize ] += lnf;
 
   /* find the minimal of the potential */
   for ( i = 1; i <= lj->n; i++ )
