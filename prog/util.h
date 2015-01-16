@@ -156,5 +156,20 @@ __inline static double *vwrap(double *x, double l)
 
 
 
+/* update the MC move size according to the acceptance ratio */
+__inline static void update_mcamp(double *amp, double acc,
+    double *nacc, double *ntot)
+{
+  double x = sqrt( *nacc / *ntot / acc );
+  if ( x > 2 ) x = 2;
+  else if ( x < 0.5 ) x = 0.5;
+  *amp *= x;
+  fprintf(stderr, "acc %g%%, amp %g\n", 100*(*nacc)/(*ntot), *amp);
+  *nacc = 0;
+  *ntot = DBL_MIN;
+}
+
+
+
 #endif
 

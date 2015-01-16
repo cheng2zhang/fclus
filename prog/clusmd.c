@@ -1,4 +1,5 @@
-/* basic molecular dynamics simulation in the NVT or NVE ensemble */
+/* molecular dynamics simulation with hybrid MC
+ * to sample a flat histogram along the cluster size */
 #ifndef D
 #define D 3
 #endif
@@ -48,6 +49,8 @@ int main(void)
 
   /* make a Lennard-Jones object */
   lj = lj_open(n, rho, rcdef, rcls);
+  /* change the degrees of freedom, with velocity swaps
+   * the angular momenta are no longer conserved */
   if ( nvswaps > 0 ) {
     lj->dof = (n - 1) * D;
   }
@@ -92,7 +95,7 @@ int main(void)
     lj_update_lnf(lj, &lnf, wl_flatness, wl_frac);
 
     if ( t % nstrep == 0 ) {
-      lj_writepos(lj, lj->x, lj->v, fnpos);
+      lj_writepos(lj, lj->x, lj->v, fnpos, 1);
       //lj_chist_print(lj);
       lj_chist_save(lj, fnchist);
       fprintf(stderr, "t %d, ep %g, ek %g, csize %d, hmcacc %.2f%%, flatness %.2f%%, ",

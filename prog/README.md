@@ -5,12 +5,15 @@
  File         | Description
 --------------|------------------------------
 clusmc.c      | Monte Carlo, flat histogram,
-clusmd.c      | molecular dynamics, flat histogram, using hybrid MC
+clusmd.c      | molecular dynamics with hybrid MC, flat histogram
+
 
 
 ## Notes ##
 
 ### Hybrid MC ###
+
+The following notes apply to `clusmd.c`.
 
   * Higher acceptance ratios (> 50%) of hybrid MC is usually good, unlike regular MC.
   * Sometimes the system would be locked into a state in hybrid MC.  No solution when this happens.

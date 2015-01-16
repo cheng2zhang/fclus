@@ -499,12 +499,13 @@ LJ.prototype.metro = function(amp, bet)
   lj.mkgraph2(lj.g2, i);
   var ucls = lj_eclus(lj, lj.g2);
   var ducls = ucls - lj_eclus(lj, lj.g);
+  var dutot = bet * du + ducls;
 
-  if ( du + ducls < 0 ) {
+  if ( dutot < 0 ) {
     acc = 1;
   } else {
     var r = rand01();
-    acc = ( r < Math.exp( -bet * (du + ducls) ) );
+    acc = ( r < Math.exp( -dutot ) );
   }
   if ( acc ) {
     this.commit(i, xi, du, dvir, ucls);

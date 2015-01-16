@@ -1,5 +1,4 @@
-/* Monte Carlo simulation that samples a flat histogram along the cluster size
- * Wang-Landau algorithm is used */
+/* implicit Gibbs-ensemble simulation */
 #ifndef D
 #define D 3
 #endif
@@ -13,7 +12,7 @@
 
 
 int n = 108;
-double rho = 0.3;
+double rho = 0.1;
 double tp = 1.32;
 double rcdef = 1e9;
 double amp = 0.2;
@@ -25,10 +24,7 @@ double nstrep = 100000;
 const char *fnpos = "lj.pos";
 const char *fnchist = "chist.dat";
 
-double wl_flatness = 0.3;
-double wl_frac = 0.5;
-
-double tot = 0, acc = 0;
+double mctot = 0, mcacc = 0;
 
 
 
@@ -36,44 +32,41 @@ int main(void)
 {
   double t;
   lj_t *lj;
-  double epsm = 0;
-  double lnf = 0.001;
   int csize;
+  double epsm = 0;
 
   /* make a Lennard-Jones object */
   lj = lj_open(n, rho, rcdef, rcls);
+  /* turn off the regular clustering energy */
+  lj->lamcls = 0;
+  /* turn on the division energy */
+  lj->lamdiv = -0.5;
 
   /* compute the potential energy */
   lj_energy(lj);
   /* build a graph */
   lj_mkgraph(lj, lj->g);
+  lj->ediv = lj_ediv(lj, lj->g, lj->cseed);
 
   for ( t = 1; t <= nsteps; t++ ) {
     /* a step of Metropolis algorithm
      * graph is implicitly computed */
-    tot += 1;
-    acc += lj_metro(lj, amp, 1/tp);
+    mctot += 1;
+    mcacc += lj_metro(lj, amp, 1/tp);
     /* try to change the seed particle */
-    lj_changeseed(lj, lj->g);
+    lj_chseeddiv(lj, lj->g);
+    //printf("cseed %d, %g, %g\n", lj->cseed, lj->ediv, lj_ediv(lj, lj->g, lj->cseed)); getchar();
 
-    csize = graph_getcsize(lj->g, lj->cseed);
     /* add the cluster size to the histogram */
+    csize = graph_getcsize(lj->g, lj->cseed);
     lj_chist_add(lj, csize);
-    /* update the adaptive potential */
-    lj_update_vcls(lj, csize, lnf);
-    /* change the updating magnitude */
-    if ( lj_update_lnf(lj, &lnf, wl_flatness, wl_frac) != 0 ) {
-      /* update the MC amplitude */
-      update_mcamp(&amp, 0.5, &acc, &tot);
-    }
 
     if ( fmod(t, nstrep) < 0.1 ) {
-      lj_writepos(lj, lj->x, lj->v, fnpos, 1);
+      lj_writepos(lj, lj->x, lj->v, fnpos, 0);
       lj_chist_save(lj, fnchist);
-      fprintf(stderr, "t %g, acc %.2f%% ep %g, seed %d, csize %d, lnf %g, flat %g%%, ",
-          t, 100*acc/tot, lj->epot,
-          lj->cseed, graph_getcsize(lj->g, lj->cseed),
-          lnf, lj->hflatness*100);
+      fprintf(stderr, "t %g, mcacc %.2f%% ep %g, ediv %g, seed %d, csize %d, ",
+          t, 100*mcacc/mctot, lj->epot, lj->ediv,
+          lj->cseed, csize);
       graph_clus_print(lj->g);
     }
     epsm += lj->epot;

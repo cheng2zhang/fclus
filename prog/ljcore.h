@@ -44,6 +44,10 @@ typedef struct {
   double chist_cnt;
   int cseed; /* seed of cluster */
   double hflatness;
+  double lamcls; /* coupling factor for the clustering energy */
+
+  double ediv; /* division energy */
+  double lamdiv; /* coupling factor the division energy */
 } lj_t;
 
 
@@ -128,6 +132,9 @@ static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
   lj->chist_cnt = 0;
 
   lj->cseed = 0; /* seed particle of the cluster */
+
+  lj->lamcls = 1;
+  lj->lamdiv = 0;
   return lj;
 }
 
@@ -227,7 +234,7 @@ static void lj_mkgraph2_low(lj_t *lj, graph_t *g, int k, double rm)
 __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
     double *r2ij, double *virial, double *ep0, double *eps)
 {
-  double dx[D], dr2, dr6, ep, vir, rc2 = lj->rc2;
+  double dx[D], dr2, ir6, ep, vir, rc2 = lj->rc2;
   double l = lj->l, invl = 1/l;
   int i, j, npr = 0, n = lj->n;
 
@@ -237,9 +244,9 @@ __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
       if ( r2ij != NULL ) r2ij[i*n + j] = dr2;
       if ( dr2 >= rc2 ) continue;
       dr2 = 1 / dr2;
-      dr6 = dr2 * dr2 * dr2;
-      vir += dr6 * (48 * dr6 - 24); /* f.r */
-      ep += 4 * dr6 * (dr6 - 1);
+      ir6 = dr2 * dr2 * dr2;
+      vir += ir6 * (48 * ir6 - 24); /* f.r */
+      ep += 4 * ir6 * (ir6 - 1);
       npr++;
     }
   }
@@ -259,7 +266,7 @@ __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
 __inline static double lj_force_low(lj_t *lj, double (*x)[D], double (*f)[D],
     double *r2ij, double *virial, double *ep0, double *eps)
 {
-  double dx[D], fi[D], dr2, dr6, fs, ep, vir, rc2 = lj->rc2;
+  double dx[D], fi[D], dr2, ir6, fs, ep, vir, rc2 = lj->rc2;
   double l = lj->l, invl = 1/l;
   int i, j, npr = 0, n = lj->n;
 
@@ -271,13 +278,13 @@ __inline static double lj_force_low(lj_t *lj, double (*x)[D], double (*f)[D],
       if ( r2ij != NULL ) r2ij[i*n + j] = dr2;
       if ( dr2 >= rc2 ) continue;
       dr2 = 1 / dr2;
-      dr6 = dr2 * dr2 * dr2;
-      fs = dr6 * (48 * dr6 - 24); /* f.r */
+      ir6 = dr2 * dr2 * dr2;
+      fs = ir6 * (48 * ir6 - 24); /* f.r */
       vir += fs; /* f.r */
       fs *= dr2; /* f.r / r^2 */
       vsinc(fi, dx, fs);
       vsinc(f[j], dx, -fs);
-      ep += 4 * dr6 * (dr6 - 1);
+      ep += 4 * ir6 * (ir6 - 1);
       npr++;
     }
     vinc(f[i], fi);
@@ -452,7 +459,7 @@ __inline static double lj_depot(lj_t *lj, int i, double *xi, double *vir)
 
 /* commit a particle displacement */
 __inline static void lj_commit(lj_t *lj, int i, const double *xi,
-    double du, double dvir)
+    double du, double dvir, double dudiv)
 {
   int j, n = lj->n;
 
@@ -460,6 +467,7 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
   lj->ep0 += du;
   lj->epot += du;
   lj->vir += dvir;
+  lj->ediv += dudiv;
   for ( j = 0; j < i; j++ ) lj->r2ij[j*n + i] = lj->r2i[j];
   for ( j = i + 1; j < n; j++ ) lj->r2ij[i*n + j] = lj->r2i[j];
   graph_copy(lj->g, lj->g2);
@@ -485,28 +493,117 @@ __inline static double lj_eclus(const lj_t *lj, const graph_t *g)
 
 
 
+#define LJ_R2WCA 1.2599210498948732
+
+/* compute the division energy
+ * this functions uses lj->r2ij, so call lj_energy()/lj_force() first */
+__inline static double lj_ediv(lj_t *lj, const graph_t *g, int cseed)
+{
+  int ic = g->cid[ cseed ]; /* cluster of the seed */
+  int i, j, n = lj->n;
+  double dr2, ir6, rc2 = lj->rc2, ep = 0;
+
+  for ( i = 0; i < n; i++ ) {
+    /* i must be in the cluster ic */
+    if ( g->cid[i] != ic ) continue;
+    for ( j = 0; j < n; j++ ) {
+      /* j must not be in the cluster ic */
+      if ( g->cid[j] == ic ) continue;
+
+      if ( i < j ) {
+        dr2 = lj->r2ij[i*n + j];
+      } else {
+        dr2 = lj->r2ij[j*n + i];
+      }
+
+      if ( dr2 < LJ_R2WCA ) {
+        ep += 1;
+      } else if ( dr2 < rc2 ) {
+        ir6 = 1/(dr2 * dr2 * dr2);
+        ep -= 4 * ir6 * (ir6 - 1);
+      }
+    }
+  }
+  return ep;
+}
+
+
+
+/* compute the trial division energy
+ * this functions uses lj->r2ij, lj->r2i */
+__inline static double lj_ediv2(lj_t *lj, const graph_t *g, int k, int cseed)
+{
+  int ic = g->cid[ cseed ]; /* cluster of the seed */
+  int i, j, n = lj->n;
+  double dr2, ir6, rc2 = lj->rc2, ep = 0;
+
+  for ( i = 0; i < n; i++ ) {
+    /* i must be in the cluster ic */
+    if ( g->cid[i] != ic ) continue;
+    for ( j = 0; j < n; j++ ) {
+      /* j must not be in the cluster ic */
+      if ( g->cid[j] == ic ) continue;
+
+      if ( i == k ) {
+        dr2 = lj->r2i[j];
+      } else if ( j == k ) {
+        dr2 = lj->r2i[i];
+      } else if ( i < j ) {
+        dr2 = lj->r2ij[i*n + j];
+      } else {
+        dr2 = lj->r2ij[j*n + i];
+      }
+
+      if ( dr2 < LJ_R2WCA ) {
+        ep += 1;
+      } else if ( dr2 < rc2 ) {
+        ir6 = 1/(dr2 * dr2 * dr2);
+        ep -= 4 * ir6 * (ir6 - 1);
+      }
+    }
+  }
+  return ep;
+}
+
+
+
 /* Metropolis algorithm */
 __inline static int lj_metro(lj_t *lj, double amp, double bet)
 {
   int i, acc = 0;
-  double xi[D], r, du = 0, dvir = 0;
-  double ucls, ducls;
+  double xi[D], r, du = 0, dutot, dvir = 0;
+  double ucls, ducls = 0;
+  double udiv, dudiv = 0;
 
   i = lj_randmv(lj, xi, amp);
   du = lj_depot(lj, i, xi, &dvir);
 
   lj_mkgraph2(lj, lj->g2, i);
-  ucls = lj_eclus(lj, lj->g2);
-  ducls = ucls - lj_eclus(lj, lj->g); // change of the cluster energy
 
-  if ( du + ducls < 0 ) {
+  /* compute the clustering energy */
+  if ( fabs( lj->lamcls ) > 0 ) {
+    ucls = lj_eclus(lj, lj->g2);
+    /* since the clustering potential might have been changed
+     * we have to recompute the old clustering energy */
+    ducls = ucls - lj_eclus(lj, lj->g);
+  }
+
+  /* compute the division energy */
+  if ( fabs( lj->lamdiv ) > 0 ) {
+    udiv = lj_ediv2(lj, lj->g2, i, lj->cseed);
+    //lj->ediv = lj_ediv(lj, lj->g);
+    dudiv = udiv - lj->ediv;
+  }
+
+  dutot = bet * (du + lj->lamdiv * dudiv) + lj->lamcls * ducls;
+  if ( dutot < 0 ) {
     acc = 1;
   } else {
     r = rand01();
-    acc = ( r < exp( -bet * du - ducls ) );
+    acc = ( r < exp( -dutot ) );
   }
   if ( acc ) {
-    lj_commit(lj, i, xi, du, dvir);
+    lj_commit(lj, i, xi, du, dvir, dudiv);
     return 1;
   }
   return 0;
@@ -530,11 +627,37 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
       acc = 1;
     } else {
       double r = rand01();
-      acc = (r < exp(-dv));
+      acc = (r < exp( -lj->lamcls * dv ));
     }
   }
   if ( acc ) {
     lj->cseed = i;
+  }
+  return acc;
+}
+
+
+
+/* attempt to change the seed for division energy */
+__inline static int lj_chseeddiv(lj_t *lj, const graph_t *g)
+{
+  int i, acc = 0;
+  double ediv, dv;
+
+  /* generate the new seed */
+  i = (lj->cseed + 1 + (int) (rand01() * (lj->n - 1))) % lj->n;
+  //printf("cseed %d, %g, %g\n", lj->cseed, lj->ediv, lj_ediv(lj, lj->g, lj->cseed)); getchar();
+  ediv = lj_ediv(lj, g, i);
+  dv = ediv - lj->ediv;
+  if ( dv < 0 ) {
+    acc = 1;
+  } else {
+    double r = rand01();
+    acc = (r < exp( -lj->lamdiv * dv ));
+  }
+  if ( acc ) {
+    lj->cseed = i;
+    lj->ediv = ediv;
   }
   return acc;
 }
@@ -722,6 +845,21 @@ __inline static int lj_update_lnf(lj_t *lj, double *lnf,
 
 
 
+/* wrap coordinates such that particles stay in the box */
+__inline static int lj_wrapbox(lj_t *lj,
+    double (*xin)[D], double (*xout)[D])
+{
+  int i, n = lj->n;
+  double l = lj->l;
+
+  for ( i = 0; i < n; i++ ) {
+    vwrap( vcopy(xout[i], xin[i]), l );
+  }
+  return 0;
+}
+
+
+
 /* wrap cluster coordinates such that particles
  * in the same cluster stay close */
 __inline static int lj_wrapclus(lj_t *lj,
@@ -772,7 +910,8 @@ __inline static int lj_wrapclus(lj_t *lj,
 
 /* write positions (and possibly velocities) */
 __inline static int lj_writepos(lj_t *lj,
-    double (*x)[D], double (*v)[D], const char *fn)
+    double (*x)[D], double (*v)[D],
+    const char *fn, int wrap)
 {
   FILE *fp;
   int i, d, n = lj->n;
@@ -783,7 +922,11 @@ __inline static int lj_writepos(lj_t *lj,
   }
 
   /* wrap coordinates according to clusters */
-  lj_wrapclus(lj, x, lj->x2, lj->g2);
+  if ( wrap ) {
+    lj_wrapclus(lj, x, lj->x2, lj->g2);
+  } else {
+    lj_wrapbox(lj, x, lj->x2);
+  }
 
   fprintf(fp, "# %d %d %d %.14e\n", D, n, (v != NULL), lj->l);
   for ( i = 0; i < n; i++ ) {
