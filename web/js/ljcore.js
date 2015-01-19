@@ -118,6 +118,8 @@ function LJ(n, dim, rho, rcdef, rcls)
   this.chist = newarr(n + 1);
   this.chist_cnt = 0;
   this.cseed = 0; // seed of the cluster
+
+  this.renv = newarr(n);
 }
 
 
@@ -775,3 +777,31 @@ function lj_listedges(lj, x)
   return edges;
 }
 
+
+
+/* find the envelope radius */
+function lj_findenv(lj, x, g)
+{
+  var i, j, n = lj.n, ic, jc;
+  var dr2, dr2min;
+
+  for ( i = 0; i < n; i++ ) {
+    // find the closest particle that is not in this cluster
+    ic = g.cid[i];
+    dr2min = 1e30;
+    for ( j = 0; j < n; j++ ) {
+      jc = g.cid[j];
+      if ( jc === ic ) continue;
+      if ( i < j ) {
+        dr2 = lj.r2ij[i][j];
+      } else {
+        dr2 = lj.r2ij[j][i];
+      }
+      if ( dr2 < dr2min ) {
+        dr2min = dr2;
+      }
+    }
+    lj.renv[i] = Math.sqrt( dr2min ) * 0.5;
+  }
+ //console.log(lj.renv);
+}

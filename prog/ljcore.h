@@ -860,7 +860,7 @@ __inline static int lj_wrapbox(lj_t *lj,
 
 
 
-/* wrap cluster coordinates such that particles
+/* wrap coordinates such that particles
  * in the same cluster stay close */
 __inline static int lj_wrapclus(lj_t *lj,
     double (*xin)[D], double (*xout)[D], graph_t *g)

@@ -247,11 +247,12 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     ctx.strokeStyle = '#808080';
     for ( ic = 0; ic < edges.length; ic++ ) {
       i = invmap[ edges[ic][0] ];
-      j = invmap[ edges[ic][1] ];
       var zfi = (xyz[i][2] - zmin) / (zmax - zmin);
       var scli = scale * (0.7 + 0.3 * zfi);
       var xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
       var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
+
+      j = invmap[ edges[ic][1] ];
       var zfj = (xyz[j][2] - zmin) / (zmax - zmin);
       var sclj = scale * (0.7 + 0.3 * zfj);
       var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );

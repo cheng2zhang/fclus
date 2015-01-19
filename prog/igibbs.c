@@ -12,7 +12,7 @@
 
 
 int n = 108;
-double rho = 0.1;
+double rho = 0.2;
 double tp = 1.32;
 double rcdef = 1e9;
 double amp = 0.2;
@@ -40,7 +40,7 @@ int main(void)
   /* turn off the regular clustering energy */
   lj->lamcls = 0;
   /* turn on the division energy */
-  lj->lamdiv = -0.5;
+  lj->lamdiv = -1.5;
 
   /* compute the potential energy */
   lj_energy(lj);

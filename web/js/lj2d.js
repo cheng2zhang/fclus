@@ -98,6 +98,18 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
 
   var i, j, ic;
 
+  lj_findenv(lj, xin, lj.g);
+  // shade the cluster
+  for ( i = 0; i < lj.n; i++ ) {
+    var x = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+    var y = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+    ic = lj.g.cid[i];
+    if ( ic === 0 ) {
+      var r1 = lj.renv[i] * scale;
+      paintBall(ctx, x, y, r1, "#ccddee", "#ccddee", 0, 0);
+    }
+  }
+
   // draw lines that were used to group clusters
   if ( edges ) {
     for ( ic = 0; ic < edges.length; ic++ ) {
