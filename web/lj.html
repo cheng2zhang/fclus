@@ -185,15 +185,27 @@
 
 
   <!-- Visualization -->
-  <table>
+  <table style="font-family: Tahoma, sans-serif;">
     <tr>
       <td>
         <div class="center">
           <canvas id="ljbox" width="600" height="600"></canvas>
-          <br>
-          Zoom: <input id="ljscale" type="range" value="1.0"
+        </div>
+        <div style="font: 150% Arial bold;">
+          <span onclick="startsimul()" id="startsm"
+            style="color: #40dd40;"
+          >&#9654;</span>
+          <span onclick="pausesimul()" id="pausesm"
+            style="line-height:150%;"
+          >&#9724;</span>
+          <!-- &#9616;&#9616; -->
+          <span onclick="stopsimul()" id="stopsm"
+            style="color: #dd4020;"
+          >&#9679;</span>
+          <!-- Zoom: -->
+          <input id="ljscale" type="range" value="1.0"
             min="0.05" max="3.0" step="0.01"
-            style="width: 480px; border: 1px solid #cccccc;"
+            style="width: 400px; border: 1px solid #cccccc;"
             onchange="changescale()">
           <br>
         </div>
@@ -226,7 +238,7 @@
     </tr>
   </table>
 
-  <div id="sinfo" class="center"></div>
+  <div id="sinfo" class="center" style="font-family: Lucida Console, Liberation Mono, FreeMono, serif;"></div>
 
 </form>
 

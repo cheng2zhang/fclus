@@ -216,6 +216,19 @@ function sortbyz(x)
 
 
 
+// compute the mutual volume of two spheres of radii ri and rj
+// with the mutual distance of dij
+function mutvol3d(ri, rj, dij)
+{
+  var xi = (ri*ri + dij*dij - rj*rj)/(2*dij);
+  var vi = Math.PI * ( 2 * ri * ri * ri / 3 - ri * ri * xi + xi * xi * xi / 3 );
+  var xj = (rj*rj + dij*dij - ri*ri)/(2*dij);
+  var vj = Math.PI * ( 2 * rj * rj * rj / 3 - rj * rj * xj + xj * xj * xj / 3 );
+  return vi + vj;
+}
+
+
+
 // draw all atoms in the box
 function ljdraw3d(lj, target, xin, userscale, edges, colors)
 {
@@ -290,7 +303,9 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
       // circle around the first particle of the cluster
       //drawBall(ctx, x, y, rz, color,     5); // outer outline
       //drawBall(ctx, x, y, rz, "#f0f0f0", 2); // inner outline
-      paintBall(ctx, x, y, rz * 1.2, "#ffffdd", color, 0, 0, rz * 0.7);
+
+      // add some shade around the root vertices
+      paintBall(ctx, x, y, rz * 1.3, transpColor(color, 0.0), color, 0, 0, rz * 0.8);
     }
     var spotcolor = "#e0e0e0";
     var color2 = darkenColor(color, 0.7 + 0.3 * zf);

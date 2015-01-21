@@ -168,21 +168,28 @@ function changegroupclus()
 /* return a string of the current simulation details */
 function getinfo()
 {
-  var sinfo = "";
+  var sinfo = "", clist = "";
 
   sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl_lnf + ", ";
   sinfo += 'flatness: ' + roundto(lj.hflatness * 100, 2) + "%. ";
-  sinfo += '<br>seed: ' + lj.cseed + ", ";
+  sinfo += 'seed: ' + lj.cseed + "";
+  sinfo += '<br>';
   sinfo += 'clusters: ';
   for ( var ic = 0; ic < lj.g.nc; ic++ ) {
-    sinfo += "" + lj.g.csize[ic];
+    clist += "" + lj.g.csize[ic];
     if ( ic < lj.g.nc - 1 ) {
-      sinfo += ", ";
+      clist += ", ";
     } else {
-      sinfo += ".";
+      clist += ".";
     }
   }
-  return sinfo
+  var nlen = clist.length;
+  while ( nlen < 25 ) {
+    clist += "&nbsp;";
+    nlen += 1;
+  }
+  sinfo += clist + "<br>";
+  return sinfo;
 }
 
 
@@ -246,7 +253,11 @@ function domc()
     if ( lj.lnf_changed ) {
       // adjust the MC move size, to make acceptance ratio close to 0.5
       if ( grab("adjmcamp").checked ) {
-        mcamp *= Math.max( Math.min( Math.sqrt(mcacc/mctot/0.5 ), 2 ), 0.5 );
+        var avacc = mcacc/mctot;
+        var acctarget = 0.5
+        if ( Math.abs(avacc - acctarget) > 0.02 ) {
+          mcamp *= Math.max( Math.min( Math.sqrt(avacc/acctarget), 2 ), 0.5 );
+        }
         grab("mcamp").value = roundto(mcamp, 4);
       }
       console.log("acc", mcacc/mctot, ", amp", mcamp);
@@ -367,6 +378,8 @@ function pulse()
   } else if ( simulmethod === "MC" ) {
     sinfo = domc();
   }
+  lj_clusvol(lj, lj.g);
+  sinfo += "cluster volume: " + roundto(lj.clsvol[0], 2) + "/" + roundto(lj.vol, 2) + "\n";
   grab("sinfo").innerHTML = sinfo;
 
   paint();
@@ -385,6 +398,7 @@ function stopsimul()
     ljtimer = null;
   }
   grab("pause").value = "Pause";
+  grab("pausesm").innerHTML = "&#9724;";
   hmctot = 1e-30;
   hmcacc = 0.0;
   mctot = 1e-30;
@@ -404,11 +418,13 @@ function pausesimul()
     clearInterval(ljtimer);
     ljtimer = null;
     grab("pause").value = "Resume";
+    grab("pausesm").innerHTML = "&#10704";
   } else {
     ljtimer = setInterval(
         function() { pulse(); },
         timer_interval);
     grab("pause").value = "Pause";
+    grab("pausesm").innerHTML = "&#9724;";
   }
 }
 

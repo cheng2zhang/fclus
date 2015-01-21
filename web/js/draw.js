@@ -108,6 +108,15 @@ function parseRGB(color)
 
 
 
+/* add transparency to color */
+function transpColor(color, transp)
+{
+  var c = parseRGB(color);
+  return "rgba(" + c.r + ", " + c.g + ", " + c.b + ", " + transp + ")";
+}
+
+
+
 function randHueColor(cmin, cmax)
 {
   var x = Math.random() * 6;

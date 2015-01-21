@@ -70,6 +70,19 @@ function lj_shiftang2d(x, v, n)
 
 
 
+// compute the mutual volume of two spheres of radii ri and rj
+// with the distance of dij
+function mutvol2d(ri, rj, dij)
+{
+  var ai = Math.acos( (ri*ri + dij*dij - rj*rj) / (2*ri*dij) );
+  var vi = ri * ri * (ai - Math.sin(ai));
+  var aj = Math.acos( (rj*rj + dij*dij - ri*ri) / (2*rj*dij) );
+  var vj = rj * rj * (aj - Math.sin(aj));
+  return vi + vj;
+}
+
+
+
 // draw all atoms in the box
 function ljdraw2d(lj, target, xin, userscale, edges, colors)
 {
@@ -98,15 +111,17 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
 
   var i, j, ic;
 
-  lj_findenv(lj, xin, lj.g);
+  lj_getrenv(lj, lj.g);
   // shade the cluster
+  var color0 = "#edc9af";
+  var color1 = transpColor(color0, 0.3);
   for ( i = 0; i < lj.n; i++ ) {
     var x = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
     var y = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
     ic = lj.g.cid[i];
     if ( ic === 0 ) {
       var r1 = lj.renv[i] * scale;
-      paintBall(ctx, x, y, r1, "#ccddee", "#ccddee", 0, 0);
+      paintBall(ctx, x, y, r1, color1, color0, 0, 0, r1 * 0.7);
     }
   }
 
@@ -136,8 +151,11 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
     }
     if ( i === lj.g.cseed[ic] ) {
       // circle around the first particle of the cluster
-      drawBall(ctx, x, y, radius, color,     5); // outer outline
-      drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
+      //drawBall(ctx, x, y, radius, color,     5); // outer outline
+      //drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
+
+      // add some shade around the root vertices
+      paintBall(ctx, x, y, radius * 1.4, transpColor(color, 0.0), color, 0, 0, radius * 0.8);
     }
     var spotcolor = "#e0e0e0";
     paintBall(ctx, x, y, radius, color, spotcolor);

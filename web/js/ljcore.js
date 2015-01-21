@@ -780,10 +780,17 @@ function lj_listedges(lj, x)
 
 
 /* find the envelope radius */
-function lj_findenv(lj, x, g)
+function lj_getrenv(lj, g)
 {
   var i, j, n = lj.n, ic, jc;
   var dr2, dr2min;
+
+  // NOTE: currently, we'll use the uniform radius for all balls
+  // for simplicity.
+  for ( i = 0; i < n; i++ ) {
+    lj.renv[i] = lj.rcls * 0.5;
+  }
+  return lj.renv;
 
   for ( i = 0; i < n; i++ ) {
     // find the closest particle that is not in this cluster
@@ -803,5 +810,80 @@ function lj_findenv(lj, x, g)
     }
     lj.renv[i] = Math.sqrt( dr2min ) * 0.5;
   }
- //console.log(lj.renv);
+
+  // TODO: refine these parameters here
+  var zinmax = (D == 3) ? 6 : 3;
+  // exclude internal points
+  for ( i = 0; i < n; i++ ) {
+    ic = g.cid[i];
+    var r2i = lj.renv[i] * lj.renv[i];
+    var zin = 0;
+    for ( j = 0; j < n; j++ ) {
+      jc = g.cid[j];
+      if ( jc !== ic || j === i ) continue;
+      if ( i < j ) {
+        dr2 = lj.r2ij[i][j];
+      } else {
+        dr2 = lj.r2ij[j][i];
+      }
+      if ( dr2 < r2i ) {
+        zin += 1;
+      }
+    }
+    // reduce radius for the internal points
+    if ( zin > zinmax ) {
+      lj.renv[i] = rcls * .5;
+    }
+  }
+  //console.log(lj.renv);
 }
+
+
+
+// compute the cluster volume
+function lj_clusvol(lj, g)
+{
+  var ic, i, j, n = lj.n;
+  var vol = 0, ri, rj, dij;
+
+  lj_getrenv(lj, g);
+  lj.clsvol = newarr(g.nc);
+
+  for ( ic = 0; ic < g.nc; ic++ ) {
+    for ( i = 0; i < n; i++ ) {
+      if ( g.cid[i] !== ic ) {
+        continue;
+      }
+      ri = lj.renv[i];
+      if ( D === 2 ) {
+        vol += Math.PI * ri * ri;
+      } else if ( D === 3 ) {
+        vol += 4 * Math.PI / 3 * ri * ri * ri;
+      }
+      // compute the mutual exclusion volume
+      for ( j = i + 1; j < n; j++ ) {
+        var rj = lj.renv[j];
+        var dij = Math.sqrt( lj.r2ij[i][j] );
+        if ( dij >= ri + rj
+          || ri + dij >= rj
+          || rj + dij >= ri ) continue;
+        if ( D === 2 ) {
+          vol -= mutvol2d(ri, rj, dij);
+        } else {
+          vol -= mutvol3d(ri, rj, dij);
+        }
+        if ( isNaN(vol) ) {
+          console.log( ic, i, j, ri, rj, dij, vol );
+          throw new Error("invalid volume");
+        }
+      }
+    }
+    lj.clsvol[ic] = vol;
+  }
+
+  return lj.clsvol;
+}
+
+
+
+
