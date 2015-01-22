@@ -287,6 +287,8 @@ function updatehistplot(lj)
   for ( i = 1; i <= lj.n; i++ )
     dat += "" + i + "," + (lj.chist[i] / lj.chist_cnt) + "\n";
   if ( histplot === null ) {
+    var h = grab("ljbox").height / 2 - 5;
+    var w = h * 3 / 2;
     var options = {
       //title: 'Histogram of cluster size',
       xlabel: '<small>Cluster size, <i>s</i></small>',
@@ -297,8 +299,8 @@ function updatehistplot(lj)
       pointSize: 2,
       xRangePad: 2,
       plotter: barChartPlotter,
-      width: 360,
-      height: 240
+      width: w,
+      height: h
     };
     histplot = new Dygraph(grab("histplot"), dat, options);
   } else {
@@ -316,6 +318,8 @@ function updatevclsplot(lj)
   for ( i = 1; i <= lj.n; i++ )
     dat += "" + i + "," + lj.vcls[i] + "\n";
   if ( vclsplot === null ) {
+    var h = grab("ljbox").height / 2 - 5;
+    var w = h * 3 / 2;
     var options = {
       //title: 'Adaptive potential',
       xlabel: '<small>Cluster size, <i>s</i></small>',
@@ -325,8 +329,8 @@ function updatevclsplot(lj)
       axisLabelFontSize: 10,
       pointSize: 2,
       xRangePad: 2,
-      width: 360,
-      height: 240
+      width: w,
+      height: h
     };
     vclsplot = new Dygraph(grab("vclsplot"), dat, options);
   } else {
@@ -397,8 +401,7 @@ function stopsimul()
     clearInterval(ljtimer);
     ljtimer = null;
   }
-  grab("pause").value = "Pause";
-  grab("pausesm").innerHTML = "&#9724;";
+  grab("pause").innerHTML = "&#9724;";
   hmctot = 1e-30;
   hmcacc = 0.0;
   mctot = 1e-30;
@@ -417,14 +420,12 @@ function pausesimul()
   if ( ljtimer !== null ) {
     clearInterval(ljtimer);
     ljtimer = null;
-    grab("pause").value = "Resume";
-    grab("pausesm").innerHTML = "&#10704";
+    grab("pause").innerHTML = "&#10704";
   } else {
     ljtimer = setInterval(
         function() { pulse(); },
         timer_interval);
-    grab("pause").value = "Pause";
-    grab("pausesm").innerHTML = "&#9724;";
+    grab("pause").innerHTML = "&#9724;";
   }
 }
 
@@ -448,10 +449,111 @@ function startsimul()
 
 
 
+function pausesimul2()
+{
+  if ( !lj ) {
+    startsimul();
+  } else {
+    pausesimul();
+  }
+}
+
+
+
 function changeparams()
 {
   if ( ljtimer !== null ) {
     startsimul();
   }
+}
+
+
+
+function showtab(who)
+{
+  who = grab(who);
+  var par = who.parentNode;
+  var c = par.childNodes;
+  var i, iwho, k = 0;
+  for ( i = 0; i < c.length; i++ ) {
+    if ( c[i].className === "params-panel" ) {
+      if ( c[i] !== who ) {
+        c[i].style.zIndex = k;
+        k += 1;
+      } else {
+        iwho = k;
+      }
+    }
+  }
+  who.style.zIndex = k;
+
+  // make the clickable tabs above
+  k += 1;
+  var pt = grab("tabsrow");
+  pt.style.zIndex = k;
+  var ct = pt.childNodes, k = 0;
+  for ( i = 0; i < ct.length; i++ ) {
+    if ( ct[i].tagName ) {
+      if ( k === iwho ) {
+        ct[i].style.fontWeight = "bold";
+      } else {
+        ct[i].style.fontWeight = "normal";
+      }
+      k += 1;
+    }
+  }
+}
+
+
+
+function resizecontainer(a)
+{
+  var canvas = grab("ljbox");
+  var ctx = canvas.getContext("2d");
+  var w, h;
+  if ( a === null || a === undefined ) {
+    w = canvas.width;
+    h = canvas.height;
+  } else {
+    a = parseInt( grab(a).value );
+    w = h = a;
+    canvas.width = w;
+    canvas.height = h;
+  }
+  ctx.font = "24px Verdana";
+  ctx.fillText("Click to start", w/2-40, h/2-10);
+  grab("simulbox").style.width = "" + w + "px";
+  grab("simulbox").style.height = "" + h + "px";
+  grab("simulbox").style.top = "20px";
+  grab("controlbox").style.top = "" + (h + 20) + "px";
+  grab("ljscale").style.width = "" + (w - 100) + "px";
+  grab("histplot").style.left = "" + w + "px";
+  grab("histplot").style.height = "" + h/2 + "px";
+  grab("vclsplot").style.left = "" + w + "px";
+  grab("vclsplot").style.height = "" + h/2 + "px";
+  grab("vclsplot").style.top = "" + (h/2 + 20) + "px";
+  grab("tabsrow").style.top = "" + (h + 50) + "px";
+  grab("tabsrow").style.width = "" + w + "px";
+  var c = grab("container").childNodes;
+  var i;
+  /* tabs */
+  for ( i = 0; i < c.length; i++ ) {
+    if ( c[i].className === "params-panel" ) {
+      c[i].style.top = "" + (h + 70) + "px";
+      c[i].style.width = "" + (w - 20) + "px";
+    }
+  }
+  grab("sinfo").style.top = "" + (h + 70) + "px";
+  grab("sinfo").style.left = "" + (w + 10) + "px";
+  grab("container").style.height = "" + (h + 320) + "px";
+  grab("container").style.width = "" + (w + h*3/4) + "px";
+}
+
+
+
+function init()
+{
+  resizecontainer();
+  showtab("system-params");
 }
 

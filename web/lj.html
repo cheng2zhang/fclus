@@ -17,7 +17,7 @@
   <script type="text/javascript" src="./js/lj3d.js"></script>
   <script type="text/javascript" src="./js/ljmain.js"></script>
 </head>
-<body>
+<body onload="init()">
 
 <div class="wrapper">
 
@@ -29,8 +29,51 @@
 
 <h3>Online demonstration</h3>
 
-<form>
-  <div class="panel">
+<!-- container -->
+<div id="container">
+
+  <input id="containerscale" type="range" value="440"
+    min="400" max="640" step="4"
+    onchange="resizecontainer('containerscale')">
+
+  <div id="simulbox">
+    <canvas id="ljbox" width="440" height="440"
+      style="border: 1px solid #cccccc;"
+      onclick="pausesimul2()"></canvas>
+  </div>
+
+  <div id="controlbox">
+    <span onclick="startsimul()" id="start"
+      class="classbtn" style="color: #40dd40;"
+    >&#9654;</span>
+    <span onclick="pausesimul()" id="pause"
+      class="smallbtn" style="line-height:150%;"
+    >&#9724;</span>
+    <!-- &#9616;&#9616; -->
+    <span onclick="stopsimul()" id="stop"
+      class="smallbtn" style="color: #dd4020;"
+    >&#9679;</span>
+    <!-- Zoom: -->
+    <input id="ljscale" type="range" value="1.0"
+      min="0.05" max="3.0" step="0.01"
+      style="width: 400px; border: 1px solid #cccccc;"
+      onchange="changescale()">
+    <br>
+  </div>
+
+  <div id="histplot" class="plot"></div>
+
+  <div id="vclsplot" class="plot"></div>
+
+  <div id="tabsrow">
+    <span class="tab" onclick="showtab('system-params')">System</span>
+    <span class="tab" onclick="showtab('md-params')">MD/HMC</span>
+    <span class="tab" onclick="showtab('mc-params')">MC</span>
+    <span class="tab" onclick="showtab('wl-params')">Wang-Landau</span>
+    <span class="tab" onclick="showtab('visual-params')">Visualization</span>
+  </div>
+
+  <div class="params-panel" id="system-params">
   <div class="panel-title">System</div>
 
   Dimension,
@@ -89,7 +132,7 @@
 
 
 
-  <div class="panel">
+  <div class="params-panel" id="md-params">
   <div class="panel-title">Molecular dynamics (MD) with hybrid MC (HMC)</div>
 
   Number of MD steps per second:
@@ -119,7 +162,7 @@
 
 
 
-  <div class="panel">
+  <div class="params-panel" id="mc-params">
   <div class="panel-title">Monte Carlo (MC)</div>
 
   Number of MC steps per second:
@@ -140,7 +183,7 @@
 
 
 
-  <div class="panel">
+  <div class="params-panel" id="wl-params">
   <div class="panel-title">Wang-Landau updating</div>
 
   Initial <span class="math">ln <i>f</i> </span>:
@@ -165,82 +208,22 @@
   </div>
 
 
-
-  <div class="center">
-    <input type="button" value="Start simulation"
-      id="start" class="largebtn" onclick="startsimul()">
-
-    <input type="button" value="Pause"
-      id="pause" class="largebtn" onclick="pausesimul()">
-
-    <input type="button" value="Stop"
-      id="stop" class="largebtn" onclick="stopsimul()">
-
-    <input type="reset" value="Reset"
-      id="reset" class="largebtn">
+  <div class="params-panel" id="visual-params">
+  <div class="panel-title"> Visualization </div>
+  <input type="checkbox" id="groupcluster"
+   onchange="changegroupclus()">
+  Group particles in the same cluster.
   </div>
 
-  <hr>
 
 
 
-  <!-- Visualization -->
-  <table style="font-family: Tahoma, sans-serif;">
-    <tr>
-      <td>
-        <div class="center">
-          <canvas id="ljbox" width="600" height="600"></canvas>
-        </div>
-        <div style="font: 150% Arial bold;">
-          <span onclick="startsimul()" id="startsm"
-            style="color: #40dd40;"
-          >&#9654;</span>
-          <span onclick="pausesimul()" id="pausesm"
-            style="line-height:150%;"
-          >&#9724;</span>
-          <!-- &#9616;&#9616; -->
-          <span onclick="stopsimul()" id="stopsm"
-            style="color: #dd4020;"
-          >&#9679;</span>
-          <!-- Zoom: -->
-          <input id="ljscale" type="range" value="1.0"
-            min="0.05" max="3.0" step="0.01"
-            style="width: 400px; border: 1px solid #cccccc;"
-            onchange="changescale()">
-          <br>
-        </div>
-      </td>
 
-      <td>
-        <!-- plots -->
-        <table>
-          <tr>
-            <td>
-              <div id="histplot" class="plot"></div>
-            </td>
-          </tr>
-          <tr>
-            <td>
-              <div id="vclsplot" class="plot"></div>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <input type="checkbox" id="groupcluster"
-         onchange="changegroupclus()">
-        Group particles in the same cluster.
-      </td>
-      <td>
-      </td>
-    </tr>
-  </table>
+  <div id="sinfo"></div>
 
-  <div id="sinfo" class="center" style="font-family: Lucida Console, Liberation Mono, FreeMono, serif;"></div>
 
-</form>
+</div> <!-- container -->
+
 
 
 <h3>Download</h3>
