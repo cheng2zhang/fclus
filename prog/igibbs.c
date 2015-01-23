@@ -11,15 +11,15 @@
 
 
 
-int n = 108;
-double rho = 0.12;
+int n = 256;
+double rho = 0.225;
 double tp = 1.32;
 double rcdef = 1e9;
 double amp = 0.2;
 double rcls = 1.6;
 
 double nsteps = 1e10;
-double nstrep = 100000;
+double nstrep = 10000;
 
 const char *fnpos = "lj.pos";
 const char *fnchist = "chist.dat";
@@ -32,7 +32,7 @@ int main(void)
 {
   double t;
   lj_t *lj;
-  int csize;
+  int divsize;
   double epsm = 0;
 
   /* make a Lennard-Jones object */
@@ -40,34 +40,31 @@ int main(void)
   /* turn off the regular clustering energy */
   lj->lamcls = 0;
   /* turn on the division energy */
-  lj->lamdiv = -1.5;
+  lj->lamdiv = 1.0;
 
   /* compute the potential energy */
   lj_energy(lj);
   /* build a graph */
   lj_mkgraph(lj, lj->g);
-  lj->ediv = lj_ediv(lj, lj->g, lj->cseed);
 
   for ( t = 1; t <= nsteps; t++ ) {
     /* a step of Metropolis algorithm
      * graph is implicitly computed */
     mctot += 1;
     mcacc += lj_metro(lj, amp, 1/tp);
-    /* try to change the seed particle */
-    lj_chseeddiv(lj, lj->g);
-    //printf("cseed %d, %g, %g\n", lj->cseed, lj->ediv, lj_ediv(lj, lj->g, lj->cseed)); getchar();
+    /* try to change the division */
+    lj_changediv(lj, 1.0/tp);
+    //printf("%d, %g, %g\n", lj_getdivsize(lj, lj->idiv), lj->ediv, lj_ediv(lj, lj->idiv)); getchar();
 
-    /* add the cluster size to the histogram */
-    csize = graph_getcsize(lj->g, lj->cseed);
-    lj_chist_add(lj, csize);
+    /* add the division size to histogram */
+    divsize = lj_getdivsize(lj, lj->idiv);
+    lj_chist_add(lj, divsize);
 
     if ( fmod(t, nstrep) < 0.1 ) {
       lj_writepos(lj, lj->x, lj->v, fnpos, 0);
       lj_chist_save(lj, fnchist);
-      fprintf(stderr, "t %g, mcacc %.2f%% ep %g, ediv %g, seed %d, csize %d, ",
-          t, 100*mcacc/mctot, lj->epot, lj->ediv,
-          lj->cseed, csize);
-      graph_clus_print(lj->g);
+      fprintf(stderr, "t %g, mcacc %.2f%% ep %g, ediv %g, divsize %d\n",
+          t, 100*mcacc/mctot, lj->epot, lj->ediv, divsize);
     }
     epsm += lj->epot;
   }

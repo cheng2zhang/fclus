@@ -48,6 +48,8 @@ typedef struct {
 
   double ediv; /* division energy */
   double lamdiv; /* coupling factor the division energy */
+  int *idiv; /* division id, either 0 or 1 */
+  int *idiv2; /* trial division */
 } lj_t;
 
 
@@ -135,6 +137,14 @@ static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
 
   lj->lamcls = 1;
   lj->lamdiv = 0;
+  xnew(lj->idiv, n);
+  xnew(lj->idiv2, n);
+  /* initially put everything within a single division */
+  for ( i = 0; i < n; i++ ) {
+    lj->idiv[i] = 0;
+    lj->idiv2[i] = 0;
+  }
+  lj->ediv = 0;
   return lj;
 }
 
@@ -153,6 +163,8 @@ static void lj_close(lj_t *lj)
   graph_close(lj->g2);
   free(lj->vcls);
   free(lj->chist);
+  free(lj->idiv);
+  free(lj->idiv2);
   free(lj);
 }
 
@@ -493,22 +505,33 @@ __inline static double lj_eclus(const lj_t *lj, const graph_t *g)
 
 
 
+__inline static int lj_getdivsize(lj_t *lj, const int *idiv)
+{
+  int i, c = 0, n = lj->n;
+
+  for ( i = 0; i < n; i++ )
+    c += (idiv[i] == 0);
+  return ( c >= n - c ) ? c : n - c;
+}
+
+
+
 #define LJ_R2WCA 1.2599210498948732
 
 /* compute the division energy
- * this functions uses lj->r2ij, so call lj_energy()/lj_force() first */
-__inline static double lj_ediv(lj_t *lj, const graph_t *g, int cseed)
+ * this functions uses lj->r2ij, so call lj_energy()/lj_force() first
+ * idiv[i] gives the division id of particle i */
+__inline static double lj_ediv(lj_t *lj, const int *idiv)
 {
-  int ic = g->cid[ cseed ]; /* cluster of the seed */
   int i, j, n = lj->n;
   double dr2, ir6, rc2 = lj->rc2, ep = 0;
 
   for ( i = 0; i < n; i++ ) {
-    /* i must be in the cluster ic */
-    if ( g->cid[i] != ic ) continue;
+    /* i must be in division 0 */
+    if ( idiv[i] != 0 ) continue;
     for ( j = 0; j < n; j++ ) {
-      /* j must not be in the cluster ic */
-      if ( g->cid[j] == ic ) continue;
+      /* j must not be in division 1 */
+      if ( idiv[j] == 0 ) continue;
 
       if ( i < j ) {
         dr2 = lj->r2ij[i*n + j];
@@ -531,18 +554,17 @@ __inline static double lj_ediv(lj_t *lj, const graph_t *g, int cseed)
 
 /* compute the trial division energy
  * this functions uses lj->r2ij, lj->r2i */
-__inline static double lj_ediv2(lj_t *lj, const graph_t *g, int k, int cseed)
+__inline static double lj_ediv2(lj_t *lj, const int *idiv, int k)
 {
-  int ic = g->cid[ cseed ]; /* cluster of the seed */
   int i, j, n = lj->n;
   double dr2, ir6, rc2 = lj->rc2, ep = 0;
 
   for ( i = 0; i < n; i++ ) {
-    /* i must be in the cluster ic */
-    if ( g->cid[i] != ic ) continue;
+    /* i must be in division 0 */
+    if ( idiv[i] != 0 ) continue;
     for ( j = 0; j < n; j++ ) {
-      /* j must not be in the cluster ic */
-      if ( g->cid[j] == ic ) continue;
+      /* j must not be in division 0 */
+      if ( idiv[j] == 0 ) continue;
 
       if ( i == k ) {
         dr2 = lj->r2i[j];
@@ -590,8 +612,8 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
 
   /* compute the division energy */
   if ( fabs( lj->lamdiv ) > 0 ) {
-    udiv = lj_ediv2(lj, lj->g2, i, lj->cseed);
-    //lj->ediv = lj_ediv(lj, lj->g);
+    udiv = lj_ediv2(lj, lj->idiv, i);
+    //lj->ediv = lj_ediv(lj, lj->idiv);
     dudiv = udiv - lj->ediv;
   }
 
@@ -638,25 +660,31 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
 
 
 
-/* attempt to change the seed for division energy */
-__inline static int lj_chseeddiv(lj_t *lj, const graph_t *g)
+/* attempt to change the division */
+__inline static int lj_changediv(lj_t *lj, double bet)
 {
-  int i, acc = 0;
+  int i, j, acc = 0, n = lj->n;
   double ediv, dv;
 
-  /* generate the new seed */
-  i = (lj->cseed + 1 + (int) (rand01() * (lj->n - 1))) % lj->n;
-  //printf("cseed %d, %g, %g\n", lj->cseed, lj->ediv, lj_ediv(lj, lj->g, lj->cseed)); getchar();
-  ediv = lj_ediv(lj, g, i);
+  /* try to move i to the opposite division */
+  i = (int) ( rand01() * n );
+
+  /* reassign divisions */
+  for ( j = 0; j < n; j++ ) {
+    lj->idiv2[j] = ( j == i ) ? !lj->idiv[j] : lj->idiv[j];
+  }
+
+  /* compute the energy change caused by the change */
+  ediv = lj_ediv2(lj, lj->idiv2, i);
   dv = ediv - lj->ediv;
   if ( dv < 0 ) {
     acc = 1;
   } else {
     double r = rand01();
-    acc = (r < exp( -lj->lamdiv * dv ));
+    acc = (r < exp( - bet * lj->lamdiv * dv ));
   }
   if ( acc ) {
-    lj->cseed = i;
+    lj->idiv[i] = !lj->idiv[i];
     lj->ediv = ediv;
   }
   return acc;
