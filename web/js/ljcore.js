@@ -117,6 +117,8 @@ function LJ(n, dim, rho, rcdef, rcls)
   this.vcls = newarr(n + 1);
   this.chist = newarr(n + 1);
   this.chist_cnt = 0;
+  this.chistall = newarr(n + 1);
+  this.chistall_cnt = 0;
   this.cseed = 0; // seed of the cluster
 
   this.renv = newarr(n);
@@ -579,7 +581,7 @@ LJ.prototype.dohmc = function(hmc)
 LJ.prototype.chist_clear = function()
 {
   this.chist_cnt = 0;
-  for ( var i = 0; i < this.n; i++ ) {
+  for ( var i = 0; i <= this.n; i++ ) {
     this.chist[i] = 0;
   }
 };
@@ -590,6 +592,8 @@ LJ.prototype.chist_add = function(csize)
 {
   this.chist_cnt += 1;
   this.chist[ csize ] += 1;
+  this.chistall_cnt += 1;
+  this.chistall[ csize ] += 1;
 };
 
 

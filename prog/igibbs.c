@@ -12,7 +12,7 @@
 
 
 int n = 108;
-double rho = 0.2;
+double rho = 0.12;
 double tp = 1.32;
 double rcdef = 1e9;
 double amp = 0.2;

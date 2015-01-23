@@ -697,7 +697,7 @@ __inline static void lj_chist_clear(lj_t *lj)
   int i;
 
   lj->chist_cnt = 0;
-  for ( i = 0; i < lj->n; i++ )
+  for ( i = 0; i <= lj->n; i++ )
     lj->chist[i] = 0;
 }
 

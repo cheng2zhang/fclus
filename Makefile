@@ -9,7 +9,7 @@ clean:
 	rstrip.py -Rlv
 
 excludes = --exclude=".*" --exclude="*~" --exclude="bak" \
-	   --exclude="tmp*"
+	   --exclude="tmp*" --exclude="_*"
 
 Dropbox: clean
 	rsync -avzL $(excludes) * ~/Dropbox/fclus/

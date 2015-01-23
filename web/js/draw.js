@@ -99,11 +99,22 @@ function rgb2str(r, g, b)
 /* get the red, green and blue components of a color string */
 function parseRGB(color)
 {
-  return {
-    r: parseInt(color.substr(1, 2), 16),
-    g: parseInt(color.substr(3, 2), 16),
-    b: parseInt(color.substr(5, 2), 16)
-  };
+  if ( color.substr(0, 3) === "rgb" ) {
+    var i0 = color.indexOf("(") + 1;
+    var i1 = color.lastIndexOf(")");
+    var s = color.substring(i0, i1).split(",");
+    return {
+      r: parseInt(s[0], 10),
+      g: parseInt(s[1], 10),
+      b: parseInt(s[2], 10)
+    };
+  } else {
+    return {
+      r: parseInt(color.substr(1, 2), 16),
+      g: parseInt(color.substr(3, 2), 16),
+      b: parseInt(color.substr(5, 2), 16)
+    };
+  }
 }
 
 
@@ -172,7 +183,7 @@ function barChartPlotter(e) {
   var points = e.points;
   var y_bottom = e.dygraph.toDomYCoord(0);
 
-  ctx.fillStyle = e.color;
+  ctx.fillStyle = transpColor( e.color, 0.5 );
 
   // Find the minimum separation between x-values.
   // This determines the bar width.

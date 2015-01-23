@@ -9,6 +9,22 @@ clusmd.c      | molecular dynamics with hybrid MC, flat histogram
 
 
 
+## clusmc Usage ##
+
+./clusmc
+
+
+## Output chist.dat ##
+
+Column        | Meaning
+--------------|------------------------------
+1             | cluster size
+2             | histogram (normalized)
+3             | histogram (unnormalized)
+4             | adaptive potential
+
+
+
 ## Notes ##
 
 ### Hybrid MC ###

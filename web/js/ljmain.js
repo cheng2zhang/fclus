@@ -279,13 +279,31 @@ function domc()
 
 
 
+function normalize_hist(arr, n)
+{
+  var hs = newarr(n + 1);
+  var i, m = 0;
+  for ( i = 1; i <= n; i++ ) {
+    m = Math.max(m, 1.0 * arr[i]);
+  }
+  for ( i = 1; i <= n; i++ ) {
+    hs[i] = 100 * arr[i] / m;
+  }
+  return hs;
+}
+
+
+
 /* update the histogram plot */
 function updatehistplot(lj)
 {
   var i;
-  var dat = "Cluster size,Histogram\n";
+  var dat = "Cluster size,Histogram (all time),Histogram (this stage)\n";
+
+  var chsall = normalize_hist(lj.chistall, lj.n);
+  var chs    = normalize_hist(lj.chist,    lj.n);
   for ( i = 1; i <= lj.n; i++ )
-    dat += "" + i + "," + (lj.chist[i] / lj.chist_cnt) + "\n";
+    dat += "" + i + "," + chsall[i] + "," + chs[i] + "\n";
   if ( histplot === null ) {
     var h = grab("ljbox").height / 2 - 5;
     var w = h * 3 / 2;
