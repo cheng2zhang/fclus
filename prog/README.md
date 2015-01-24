@@ -55,3 +55,13 @@ The following notes apply to `clusmd.c`.
 #### Seed ####
   * Regularly changing the seed particle does not appear to have any effect.
 
+
+
+### igibbs ###
+
+The current implementation uses MC to make an arbitrary 0/1 division of the system.
+The trouble is that the division is not based on physics.
+So it is difficult to know the volume of each division.
+
+Maybe one can draw an arbitrary sphere and use it cover the division?
+

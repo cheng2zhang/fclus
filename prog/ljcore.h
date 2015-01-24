@@ -612,8 +612,8 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
 
   /* compute the division energy */
   if ( fabs( lj->lamdiv ) > 0 ) {
+    //printf("ediv %g, %g\n", lj->ediv, lj_ediv(lj, lj->idiv)); getchar();
     udiv = lj_ediv2(lj, lj->idiv, i);
-    //lj->ediv = lj_ediv(lj, lj->idiv);
     dudiv = udiv - lj->ediv;
   }
 
@@ -660,7 +660,7 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
 
 
 
-/* attempt to change the division */
+/* attempt to change the division by Monte Carlo */
 __inline static int lj_changediv(lj_t *lj, double bet)
 {
   int i, j, acc = 0, n = lj->n;
@@ -675,7 +675,8 @@ __inline static int lj_changediv(lj_t *lj, double bet)
   }
 
   /* compute the energy change caused by the change */
-  ediv = lj_ediv2(lj, lj->idiv2, i);
+  //printf("ediv %g, %g\n", lj->ediv, lj_ediv(lj, lj->idiv)); getchar();
+  ediv = lj_ediv(lj, lj->idiv2);
   dv = ediv - lj->ediv;
   if ( dv < 0 ) {
     acc = 1;

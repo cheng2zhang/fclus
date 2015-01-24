@@ -12,10 +12,10 @@
 
 
 int n = 256;
-double rho = 0.225;
+double rho = 0.25;
 double tp = 1.32;
 double rcdef = 1e9;
-double amp = 0.2;
+double amp = 0.5;
 double rcls = 1.6;
 
 double nsteps = 1e10;
