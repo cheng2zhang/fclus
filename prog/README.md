@@ -55,3 +55,26 @@ The following notes apply to `clusmd.c`.
 #### Seed ####
   * Regularly changing the seed particle does not appear to have any effect.
 
+
+
+
+
+## Ideas ##
+
+* Superposition of ensembles of different parameters (e.g., densities)
+  to the flat histogram.
+  + ensembles should be well chosen
+  + to avoid negative weight in combination
+
+* Easy-hard coupling of the biased potential.
+  X: hard order parameter, like RMSD
+  Y: easy order parameter, like Go-energy
+  Then the bias potential assumes the form of lambda(X) Y.
+
+* Shape-based implicit Gibbs
+  Draw a sphere and disable the interaction between
+  particles inside and out of the sphere.
+  Change the radius of the sphere.
+  + currently, distribution focused on the two ends
+  + missing a vol^n factor?
+  + an elastic sphere, when changing the volume?
