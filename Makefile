@@ -2,10 +2,10 @@ default:
 	$(MAKE) -C prog
 
 clean:
-	rm -rf $(bins) $(bins_d) a.out *.dat* gmon.out \
-	  .*.un~ *~ */.*.un~ */*~ */*/.*.un~ */*/*~ \
+	$(MAKE) -C prog $@
+	rm -rf .*.un~ *~ */.*.un~ */*~ */*/.*.un~ */*/*~ \
+	  */*/*/.*.un~ */*/*/*~ \
 	  r[0-9]*hs
-	$(MAKE) -C prog clean
 	rstrip.py -Rlv
 
 excludes = --exclude=".*" --exclude="*~" --exclude="bak" \
