@@ -33,7 +33,7 @@
 <div id="container">
 
   <input id="containerscale" type="range" value="500"
-    min="400" max="640" step="4"
+    min="400" max="600" step="4"
     onchange="resizecontainer('containerscale')">
 
   <div id="simulbox">
@@ -211,8 +211,26 @@
   <div class="params-panel" id="visual-params">
   <div class="panel-title"> Visualization </div>
   <input type="checkbox" id="groupcluster"
-   onchange="changegroupclus()">
+   onchange="paint()">
   Group particles in the same cluster.
+  <br>
+
+  <input type="checkbox" id="orthographic"
+   onchange="paint()">
+  Orthographic.
+  <br>
+
+  Draw a frame every
+  <select id="timer_interval" onchange="changeparams()">
+    <option value="50">50</option>
+    <option value="100" selected>100</option>
+    <option value="200">200</option>
+    <option value="500">500</option>
+    <option value="1000">1000</option>
+    <option value="2000">2000</option>
+    <option value="5000">5000</option>
+  </select> milliseconds.
+
   </div>
 
 

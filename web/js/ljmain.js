@@ -70,6 +70,7 @@ function getparams()
   rcdef = get_float("rcutoff", 1000.0);
   rcls = get_float("rcluster", 1.6);
 
+  timer_interval = get_int("timer_interval");
   simulmethod = grab("simulmethod").value;
   mddt = get_float("mddt", 0.002);
   thdt = get_float("thermostatdt", 0.01);
@@ -153,14 +154,6 @@ function installmouse()
   target.onmouseup = ljmouseup;
   target.onmousemove = ljmousemove;
   installwheel(target, ljwheel);
-}
-
-
-
-function changegroupclus()
-{
-  //var groupclus = grab("groupcluster").checked;
-  paint();
 }
 
 
@@ -493,6 +486,8 @@ function showtab(who)
   var par = who.parentNode;
   var c = par.childNodes;
   var i, iwho, k = 0;
+
+  // arrange the tabs
   for ( i = 0; i < c.length; i++ ) {
     if ( c[i].className === "params-panel" ) {
       if ( c[i] !== who ) {
@@ -505,19 +500,21 @@ function showtab(who)
   }
   who.style.zIndex = k;
 
-  // make the clickable tabs above
+  // arrange the clickable tab titles
   k += 1;
   var pt = grab("tabsrow");
   pt.style.zIndex = k;
-  var ct = pt.childNodes, k = 0;
+  var ct = pt.childNodes, ik = 0;
   for ( i = 0; i < ct.length; i++ ) {
     if ( ct[i].tagName ) {
-      if ( k === iwho ) {
+      if ( ik === iwho ) {
         ct[i].style.fontWeight = "bold";
+        ct[i].style.borderTop = "1px solid #c0c0d0";
       } else {
         ct[i].style.fontWeight = "normal";
+        ct[i].style.borderTop = "0px solid #e0e0f0";
       }
-      k += 1;
+      ik += 1;
     }
   }
 }

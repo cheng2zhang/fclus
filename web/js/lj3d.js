@@ -229,6 +229,19 @@ function mutvol3d(ri, rj, dij)
 
 
 
+// return the z-scaling factor
+function getzscale(r, zmin, zmax, ortho)
+{
+  if ( ortho ) {
+    return 0.7;
+  } else {
+    var zf = (r[2] - zmin) / (zmax - zmin);
+    return 0.7 + 0.3 * zf;
+  }
+}
+
+
+
 // draw all atoms in the box
 function ljdraw3d(lj, target, xin, userscale, edges, colors)
 {
@@ -239,20 +252,58 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
 
   // the system dimension is L + two radii
   var scale = userscale * Math.min(width, height) / (lj.l + 1.0);
+  var ortho = grab("orthographic").checked;
 
   // draw the background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, width, height);
 
+  var ret, xyz, idmap, invmap, zmin, zmax;
+  var i, j, ic;
+  var xi, yi, scli, xj, yj, sclj;
+
+  // draw the box
+  var l = lj.l;
+  var xbox = [[0,0,0], [0,0,l], [0,l,0], [0,l,l], [l,0,0], [l,0,l], [l,l,0], [l,l,l]];
+  var xboxt = transform(xbox, l); // apply the rotation matrix
+  ret = sortbyz(xboxt); // sort the corners by the z index
+  xyz = ret[0];
+  idmap = ret[1];
+  invmap = ret[2];
+  zmax = xyz[7][2];
+  zmin = xyz[0][2];
+  //console.log(invmap, xbox, xboxt);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#c0c0c0';
+  var boxedges = [[0,1], [2,3], [4,5], [6,7],
+                  [0,2], [1,3], [4,6], [5,7],
+                  [0,4], [1,5], [2,6], [3,7]];
+
+  for ( ic = 0; ic < boxedges.length; ic++ ) {
+    i = invmap[ boxedges[ic][0] ];
+    scli = scale * getzscale(xyz[i], zmin, zmax, ortho);
+    xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
+    yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
+
+    j = invmap[ boxedges[ic][1] ];
+    sclj = scale * getzscale(xyz[j], zmin, zmax, ortho);
+    xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
+    yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
+
+    drawLine(ctx, xi, yi, xj, yj);
+    //console.log(xi, yi, xj, yj, i, j, boxedges[ic], xyz[i], xyz[j], scli, sclj);
+  }
+
+  // start to draw particles
   var xt = transform(xin, lj.l); // apply the rotation matrix
-  var ret = sortbyz(xt); // sort particles by the z order
-  var xyz = ret[0];
-  var idmap = ret[1], invmap = ret[2];
+  ret = sortbyz(xt); // sort particles by the z order
+  xyz = ret[0];
+  idmap = ret[1];
+  invmap = ret[2];
   // xyz[i]           --> xt[ idmap[i] ]
   // xyz[ invmap[i] ] --> xt[ i ]
-  var i, j, ic;
-
-  var zmax = xyz[lj.n - 1][2], zmin = xyz[0][2];
+  zmax = xyz[lj.n - 1][2];
+  zmin = xyz[0][2];
 
   // draw lines that were used to group clusters
   if ( edges ) {
@@ -260,16 +311,14 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     ctx.strokeStyle = '#808080';
     for ( ic = 0; ic < edges.length; ic++ ) {
       i = invmap[ edges[ic][0] ];
-      var zfi = (xyz[i][2] - zmin) / (zmax - zmin);
-      var scli = scale * (0.7 + 0.3 * zfi);
-      var xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
-      var yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
+      scli = scale * getzscale(xyz[i], zmin, zmax, ortho);
+      xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
+      yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
 
       j = invmap[ edges[ic][1] ];
-      var zfj = (xyz[j][2] - zmin) / (zmax - zmin);
-      var sclj = scale * (0.7 + 0.3 * zfj);
-      var xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
-      var yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
+      sclj = scale * getzscale(xyz[j], zmin, zmax, ortho);
+      xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
+      yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
       drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
       drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
       drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
@@ -290,7 +339,8 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
     var z = xyz[i][2];
     var zf = (z - zmin) / (zmax - zmin);
     // make closer particles larger
-    var scl = scale * (0.7 + 0.3 * zf);
+    var zscl = getzscale(xyz[i], zmin, zmax, ortho);
+    var scl = scale * zscl;
     var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scl + width  * 0.5 );
     var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scl + height * 0.5 );
     var rz = Math.floor( 0.5 * scl );
@@ -308,7 +358,8 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
       paintBall(ctx, x, y, rz * 1.3, transpColor(color, 0.0), color, 0, 0, rz * 0.8);
     }
     var spotcolor = "#e0e0e0";
-    var color2 = darkenColor(color, 0.7 + 0.3 * zf);
+    zscl = getzscale(xyz[i], zmin, zmax, false);
+    var color2 = darkenColor(color, zscl);
     paintBall(ctx, x, y, rz, color2, spotcolor);
   }
 }
