@@ -272,6 +272,7 @@ function domc()
 
 
 
+// normalize the histogram such that the maximum is 1.0
 function normalize_hist(arr, n)
 {
   var hs = newarr(n + 1);
@@ -460,11 +461,16 @@ function startsimul()
 
 
 
+// on a mouse click
 function pausesimul2()
 {
+  // skip a mouse-move
+  if ( mousemoved > 0 ) {
+    return;
+  }
   if ( !lj ) {
     startsimul();
-  } else {
+  } else if ( mousemoved === 0 ) {
     pausesimul();
   }
 }
@@ -509,7 +515,7 @@ function showtab(who)
     if ( ct[i].tagName ) {
       if ( ik === iwho ) {
         ct[i].style.fontWeight = "bold";
-        ct[i].style.borderTop = "1px solid #c0c0d0";
+        ct[i].style.borderTop = "2px solid #c0c0d0";
       } else {
         ct[i].style.fontWeight = "normal";
         ct[i].style.borderTop = "0px solid #e0e0f0";
@@ -542,11 +548,15 @@ function resizecontainer(a)
   grab("simulbox").style.top = "20px";
   grab("controlbox").style.top = "" + (h + 20) + "px";
   grab("ljscale").style.width = "" + (w - 100) + "px";
+  histplot = null;
   grab("histplot").style.left = "" + w + "px";
+  grab("histplot").style.width = "" + h*3/4 + "px";
   grab("histplot").style.height = "" + h/2 + "px";
+  vclsplot = null;
   grab("vclsplot").style.left = "" + w + "px";
-  grab("vclsplot").style.height = "" + h/2 + "px";
+  grab("vclsplot").style.width = "" + h*3/4 + "px";
   grab("vclsplot").style.top = "" + (h/2 + 20) + "px";
+  grab("vclsplot").style.height = "" + h/2 + "px";
   grab("tabsrow").style.top = "" + (h + 50) + "px";
   grab("tabsrow").style.width = "" + w + "px";
   var c = grab("container").childNodes;
