@@ -68,7 +68,7 @@ static void hmc_pop(hmc_t *h, double (*x)[D], double (*v)[D], double (*f)[D],
 
   if ( reversev ) {
     for ( i = 0; i < n; i++ )
-      vinv( h->v[i] );
+      vneg( h->v[i] );
   }
   memcpy(x, h->x, sizeof(x[0]) * n);
   memcpy(v, h->v, sizeof(v[0]) * n);

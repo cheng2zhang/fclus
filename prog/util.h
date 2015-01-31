@@ -22,17 +22,6 @@
 #endif
 
 
-__inline static double *vwrap(double *x, double l)
-{
-  int d;
-
-  for ( d = 0; d < D; d++ )
-    x[d] = fmod(x[d] + 1000.*l, l);
-  return x;
-}
-
-
-
 /* update the MC move size according to the acceptance ratio */
 __inline static void update_mcamp(double *amp, double acc,
     double *nacc, double *ntot)

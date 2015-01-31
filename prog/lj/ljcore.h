@@ -518,8 +518,7 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
  * call lj_mkgraph() first */
 __inline static double lj_eclus(const lj_t *lj, const graph_t *g)
 {
-  if ( lj->vcls ) return 0.0;
-  else return lj->vcls[ graph_getcsize(g, lj->cseed) ];
+  return lj->vcls ? lj->vcls[ graph_getcsize(g, lj->cseed) ] : 0.0;
 }
 
 

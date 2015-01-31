@@ -34,6 +34,17 @@ __inline static double *vzero(double *x)
 
 
 
+__inline static double *vneg(double *x)
+{
+  int d;
+
+  for ( d = 0; d < D; d++ )
+    x[d] = -x[d];
+  return x;
+}
+
+
+
 __inline static double *vcopy(double *x, const double *y)
 {
   int d;
@@ -187,16 +198,25 @@ __inline static void rm3_inv(double b[3][3], double a[3][3])
 
 
 
+/* return the distance */
+__inline static double vdistx(double *dx, const double *a, const double *b)
+{
+  vdiff(dx, a, b);
+  return sqrt( vsqr(dx) );
+}
+
+
+
 /* bond angle interaction */
 __inline static double vang(const double *xi, const double *xj, const double *xk,
     double *gi, double *gj, double *gk)
 {
   double xij[D], xkj[D], ri, rk, dot, ang;
 
-  ri = sqrt( vsqr( vdiff(xij, xi, xj) ) );
+  ri = vdistx(xij, xi, xj);
   vsmul(xij, 1.0/ri);
 
-  rk = sqrt( vsqr( vdiff(xkj, xk, xj) ) );
+  rk = vdistx(xkj, xk, xj);
   vsmul(xkj, 1.0/rk);
 
   dot = vdot(xij, xkj);
