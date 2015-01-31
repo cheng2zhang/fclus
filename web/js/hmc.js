@@ -46,7 +46,7 @@ HMC.prototype.pop = function(x, v, f, idat, fdat, reversev)
 
   if ( reversev ) {
     for ( var i = 0; i < n; i++ ) {
-      vinv( this.v[i] );
+      vneg( this.v[i] );
     }
   }
   cparr(x, this.x, n);

@@ -6,6 +6,7 @@
 
 
 
+var wl = null;
 var lj = null;
 var n = 55;
 var rho = 0.7;
@@ -38,9 +39,10 @@ var sum1 = 1e-30;
 var sumU = 0.0;
 var sumP = 0.0;
 
-var wl_lnf = 0.01;
+var wl_lnf0 = 0.01;
 var wl_flatness = 0.3;
 var wl_frac = 0.5;
+var invt_c = 1.0;
 
 var hmc = null;
 
@@ -85,7 +87,10 @@ function getparams()
   nstepspfmc = nstepspsmc * timer_interval / 1000;
   nstepsmc = 0;
 
-  wl_lnf = get_float("wl_lnfinit", 0.01);
+  wl_lnf0 = get_float("wl_lnfinit", 0.01);
+  wl_flatness = get_float("wl_flatness", 0.3);
+  wl_frac = get_float("wl_frac", 0.5);
+  invt_c = get_float("invt_c", 1.0);
 
   changeseed = grab("changeseed").checked;
 
@@ -163,8 +168,9 @@ function getinfo()
 {
   var sinfo = "", clist = "";
 
-  sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl_lnf + ", ";
-  sinfo += 'flatness: ' + roundto(lj.hflatness * 100, 2) + "%. ";
+  var flatness = wl.getflatness();
+  sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + ", ";
+  sinfo += 'flatness: ' + roundto(flatness * 100, 2) + "%. ";
   sinfo += 'seed: ' + lj.cseed + "";
   sinfo += '<br>';
   sinfo += 'clusters: ';
@@ -204,18 +210,17 @@ function domd()
       hmctot += 1;
       hmcacc += lj.dohmc(hmc);
       lj.ekin = lj_vscramble(lj.v, lj.n, nvswaps);
-    } else {
-      lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
     }
-
-    lj.chist_add(lj.csize);
-    lj.update_vcls(lj.csize, wl_lnf);
-    wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
+    lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
+    wl.add( lj.csize );
+    lj.chist_add( lj.csize );
+    wl.updatelnf();
 
     sum1 += 1.0;
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
   }
+  wl.trimv();
   nstepsmd += nstepspfmd;
   sinfo += 'step ' + nstepsmd + ", ";
   sinfo += "hmcacc: " + roundto(100.0 * hmcacc / hmctot, 2) + "%, ";
@@ -240,10 +245,9 @@ function domc()
       lj.changeseed(lj.g);
     }
     lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
-    lj.chist_add(lj.csize);
-    lj.update_vcls(lj.csize, wl_lnf);
-    wl_lnf = lj.update_lnf(wl_lnf, wl_flatness, wl_frac);
-    if ( lj.lnf_changed ) {
+    wl.add( lj.csize );
+    lj.chist_add( lj.csize );
+    if ( wl.updatelnf() ) {
       // adjust the MC move size, to make acceptance ratio close to 0.5
       if ( grab("adjmcamp").checked ) {
         var avacc = mcacc/mctot;
@@ -261,6 +265,7 @@ function domc()
     sumU += lj.epot / lj.n;
     sumP += lj.calcp(tp);
   }
+  wl.trimv();
   nstepsmc += nstepspfmc;
   sinfo += "step: " + nstepsmc + ", ";
   sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%, ";
@@ -275,12 +280,12 @@ function domc()
 // normalize the histogram such that the maximum is 1.0
 function normalize_hist(arr, n)
 {
-  var hs = newarr(n + 1);
+  var hs = newarr(n);
   var i, m = 0;
-  for ( i = 1; i <= n; i++ ) {
+  for ( i = 0; i < n; i++ ) {
     m = Math.max(m, 1.0 * arr[i]);
   }
-  for ( i = 1; i <= n; i++ ) {
+  for ( i = 0; i < n; i++ ) {
     hs[i] = 100 * arr[i] / m;
   }
   return hs;
@@ -289,15 +294,15 @@ function normalize_hist(arr, n)
 
 
 /* update the histogram plot */
-function updatehistplot(lj)
+function updatehistplot(lj, wl)
 {
   var i;
   var dat = "Cluster size,Histogram (all time),Histogram (this stage)\n";
 
   var chsall = normalize_hist(lj.chistall, lj.n);
-  var chs    = normalize_hist(lj.chist,    lj.n);
-  for ( i = 1; i <= lj.n; i++ )
-    dat += "" + i + "," + chsall[i] + "," + chs[i] + "\n";
+  var chs    = normalize_hist(wl.h,        lj.n);
+  for ( i = 0; i < lj.n; i++ )
+    dat += "" + (i+1) + "," + chsall[i] + "," + chs[i] + "\n";
   if ( histplot === null ) {
     var h = grab("ljbox").height / 2 - 5;
     var w = h * 3 / 2;
@@ -327,8 +332,8 @@ function updatevclsplot(lj)
 {
   var i;
   var dat = "Cluster size,potential\n";
-  for ( i = 1; i <= lj.n; i++ )
-    dat += "" + i + "," + lj.vcls[i] + "\n";
+  for ( i = 0; i < lj.n; i++ )
+    dat += "" + (i+1) + "," + lj.vcls[i] + "\n";
   if ( vclsplot === null ) {
     var h = grab("ljbox").height / 2 - 5;
     var w = h * 3 / 2;
@@ -386,8 +391,11 @@ function pulse()
   var sinfo;
 
   // the following parameter might have been changed
-  wl_flatness = get_float("wl_flatness", 0.3);
-  wl_frac = get_float("wl_frac", 0.5);
+  if ( wl ) {
+    wl.flatness = get_float("wl_flatness", 0.3);
+    wl.frac = get_float("wl_frac", 0.5);
+    wl.c = get_float("invt_c", 1.0);
+  }
 
   if ( simulmethod === "MD" ) {
     sinfo = domd();
@@ -400,9 +408,8 @@ function pulse()
 
   paint();
 
-  updatehistplot(lj);
+  updatehistplot(lj, wl);
   updatevclsplot(lj);
-  //console.log( lj.chist_tostr() );
 }
 
 
@@ -447,7 +454,8 @@ function startsimul()
 {
   stopsimul();
   getparams();
-  lj = new LJ(n, D, rho, rcdef, rcls);
+  wl = new WL(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  lj = new LJ(n, D, rho, rcdef, rcls, wl.v);
   lj.force();
   lj.mkgraph(lj.g);
   hmc = new HMC(lj.n, 1, 1);

@@ -11,6 +11,7 @@
   <script type="text/javascript" src="./js/graph.js"></script>
   <script type="text/javascript" src="./js/draw.js"></script>
   <script type="text/javascript" src="./js/hmc.js"></script>
+  <script type="text/javascript" src="./js/wl.js"></script>
   <script type="text/javascript" src="./js/ljcore.js"></script>
   <script type="text/javascript" src="./js/vct.js"></script>
   <script type="text/javascript" src="./js/lj2d.js"></script>
@@ -194,7 +195,9 @@
 
   Multiplicative factor to
   <span class="math">ln <i>f</i> </span>:
-  <input type="text" size="6" value="0.5"
+  <input type="range" value="0.5"
+    min="0.001" max="1.0" step="0.001"
+    style="width: 140px; border: 1px solid #cccccc;"
     id="wl_frac">.
   <br>
 
@@ -203,6 +206,14 @@
     min="0.001" max="1.0" step="0.001"
     style="width: 140px; border: 1px solid #cccccc;"
     id="wl_flatness">.
+  <br>
+
+
+  The asymptotic <i>C</i> in
+  <span class="math">ln <i>f</i> = <i>C</i>/<i>t</i></span>:
+  <input type="text" size="6" value="1.0"
+    id="invt_c" onchange="changeparams()">.
+  &nbsp;
   <br>
 
   </div>

@@ -74,7 +74,7 @@ function lj_shiftang(x, v, n)
 
 
 
-function LJ(n, dim, rho, rcdef, rcls)
+function LJ(n, dim, rho, rcdef, rcls, vcls)
 {
   var i, d;
 
@@ -114,10 +114,8 @@ function LJ(n, dim, rho, rcdef, rcls)
     rcls = 1.6;
   }
   this.rcls = rcls;
-  this.vcls = newarr(n + 1);
-  this.chist = newarr(n + 1);
-  this.chist_cnt = 0;
-  this.chistall = newarr(n + 1);
+  this.vcls = vcls;
+  this.chistall = newarr(n);
   this.chistall_cnt = 0;
   this.cseed = 0; // seed of the cluster
 
@@ -203,7 +201,7 @@ LJ.prototype.mkgraph2 = function(g, k)
  * call mkgraph() first */
 function lj_eclus(lj, g)
 {
-  return lj.vcls[ g.csize[ g.cid[ lj.cseed ] ] ];
+  return lj.vcls[ g.csize[ g.cid[ lj.cseed ] ] - 1 ];
 }
 
 
@@ -530,7 +528,7 @@ LJ.prototype.changeseed = function(g)
   if ( sz0 === sz1 ) {
     acc = true;
   } else {
-    var dv = this.vcls[ sz1 ] - this.vcls[ sz0 ];
+    var dv = this.vcls[ sz1 - 1 ] - this.vcls[ sz0 - 1 ];
     if ( dv < 0 ) {
       acc = true;
     } else {
@@ -553,7 +551,7 @@ LJ.prototype.dohmc = function(hmc)
   // compute the current cluster size
   var csize = this.g.csize[ this.g.cid[this.cseed] ];
   // hmc.iarr[0] is the previous size
-  var dv = this.vcls[ csize ] - this.vcls[ hmc.idat[0] ];
+  var dv = this.vcls[ csize - 1 ] - this.vcls[ hmc.idat[0] - 1 ];
   var iarr = [ csize, this.cseed ];
   var farr = [ this.epot ];
 
@@ -578,92 +576,10 @@ LJ.prototype.dohmc = function(hmc)
 
 
 
-LJ.prototype.chist_clear = function()
-{
-  this.chist_cnt = 0;
-  for ( var i = 0; i <= this.n; i++ ) {
-    this.chist[i] = 0;
-  }
-};
-
-
-
 LJ.prototype.chist_add = function(csize)
 {
-  this.chist_cnt += 1;
-  this.chist[ csize ] += 1;
   this.chistall_cnt += 1;
-  this.chistall[ csize ] += 1;
-};
-
-
-
-LJ.prototype.chist_tostr = function()
-{
-  var s = "";
-
-  if ( this.chist_cnt > 0 ) {
-    for ( var i = 0; i <= this.n; i++ ) {
-      if ( this.chist[i] > 0 ) {
-        s += "" + i + " " + (this.chist[i]/this.chist_cnt) + " " + this.vcls[i] + "\n";
-      }
-    }
-  }
-  return s;
-};
-
-
-
-LJ.prototype.clus = function()
-{
-  this.mkgraph(this.g);
-  this.chist_add(this.g);
-};
-
-
-
-LJ.prototype.update_vcls = function(csize, lnf)
-{
-  var i;
-  this.vcls[ csize ] += lnf;
-
-  // find the minimal of the potential and subtract it
-  var min = 1e30;
-  for ( i = 1; i <= this.n; i++ ) {
-    min = Math.min(this.vcls[i], min);
-  }
-  for ( i = 1; i <= this.n; i++ ) {
-    this.vcls[i] -= min;
-  }
-};
-
-
-
-/* check the flatness of the histogram, return the new lnf */
-LJ.prototype.update_lnf = function(lnf, flatness, frac)
-{
-  var i, n = this.n;
-  var sh = 0.0, shh = 0.0, h;
-
-  for ( i = 1; i <= n; i++ ) {
-    h = this.chist[i];
-    sh += h;
-    shh += h * h;
-  }
-  if ( sh <= 0 ) return lnf;
-  sh /= n;
-  shh = Math.max(shh / n - sh * sh, 0);
-
-  this.hflatness = Math.sqrt(shh) / sh;
-  if ( this.hflatness < flatness ) {
-    this.chist_clear();
-    console.log("change lnf from " + lnf + " to " + (lnf * frac) );
-    lnf *= frac;
-    this.lnf_changed = true;
-  } else {
-    this.lnf_changed = false;
-  }
-  return lnf;
+  this.chistall[ csize - 1 ] += 1;
 };
 
 

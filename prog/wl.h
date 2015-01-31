@@ -92,35 +92,36 @@ __inline static double wl_gethtot(const double *h, int n)
 
 
 /* clear the histogram */
-__inline static void wl_clearh(wl_t *wl)
+__inline static void wl_clearh(double *h, int n)
 {
-  int i, n = wl->n;
+  int i;
 
   for ( i = 0; i < n; i++ ) {
-    wl->h[i] = 0.0;
+    h[i] = 0.0;
   }
 }
 
 
 
 /* trim the bottom of the potential */
-__inline static void wl_trimv(wl_t *wl)
+__inline static void wl_trimv(double *v, int n)
 {
-  double vmin = DBL_MAX;
-  int i, n = wl->n;
+  double vmin = v[0];
+  int i;
 
-  for ( i = 0; i < n; i++ ) {
-    if ( wl->v[i] < vmin ) {
-      vmin = wl->v[i];
+  for ( i = 1; i < n; i++ ) {
+    if ( v[i] < vmin ) {
+      vmin = v[i];
     }
   }
   for ( i = 0; i < n; i++ ) {
-    wl->v[i] -= vmin;
+    v[i] -= vmin;
   }
 }
 
 
 
+/* add an entry, update the histogram and potential */
 __inline static int wl_add(wl_t *wl, int i)
 {
   i -= wl->n0;
@@ -137,17 +138,17 @@ __inline static int wl_add(wl_t *wl, int i)
 
 
 /* compute the histogram flatness from the absolute value */
-__inline static double wl_getflatnessabs(const wl_t *wl)
+__inline static double wl_getflatnessabs(const double *h, int n)
 {
   double hmin, hmax;
-  int i, n = wl->n;
+  int i;
 
-  hmin = hmax = wl->h[0];
+  hmin = hmax = h[0];
   for ( i = 1; i < n; i++ ) {
-    if ( wl->h[i] > hmax ) {
-      hmax = wl->h[i];
-    } else if ( wl->h[i] < hmin ) {
-      hmin = wl->h[i];
+    if ( h[i] > hmax ) {
+      hmax = h[i];
+    } else if ( h[i] < hmin ) {
+      hmin = h[i];
     }
   }
   return hmax > hmin ? (hmax - hmin) / (hmax + hmin) : 1.0;
@@ -156,15 +157,15 @@ __inline static double wl_getflatnessabs(const wl_t *wl)
 
 
 /* compute the histogram flatness from the standard deviation */
-__inline static double wl_getflatnessstd(const wl_t *wl)
+__inline static double wl_getflatnessstd(const double *h, int n)
 {
-  double h, sh, shh;
-  int i, n = wl->n;
+  double y, sh = 0, shh = 0;
+  int i;
 
   for ( i = 0; i < n; i++ ) {
-    h = wl->h[i];
-    sh += h;
-    shh += h * h;
+    y = h[i];
+    sh += y;
+    shh += y * y;
   }
   if ( sh <= 0 ) return 1.0;
   sh /= n;
@@ -178,9 +179,9 @@ __inline static double wl_getflatnessstd(const wl_t *wl)
 __inline static double wl_getflatness(const wl_t *wl)
 {
   if ( wl->flags & WL_FLATNESSABS ) {
-    return wl_getflatnessabs(wl);
+    return wl_getflatnessabs(wl->h, wl->n);
   } else {
-    return wl_getflatnessstd(wl);
+    return wl_getflatnessstd(wl->h, wl->n);
   }
 }
 
@@ -217,7 +218,7 @@ __inline static int wl_updatelnf(wl_t *wl)
       fprintf(stderr, "changing lnf from %g to %g (1/t %g), flatness %g%%\n",
         wl->lnf, nlnf, lnfinvt, flatness*100);
       wl->lnf = nlnf;
-      wl_clearh(wl);
+      wl_clearh(wl->h, wl->n);
     }
     return 1;
   }
@@ -238,7 +239,7 @@ __inline static int wl_save(wl_t *wl, const char *fn)
     return -1;
   }
   htot = wl_gethtot(wl->h, wl->n);
-  wl_trimv(wl);
+  wl_trimv(wl->v, wl->n);
   fprintf(fp, "# %d %d %g\n", wl->n0, wl->n1, wl->tot);
   for ( i = 0; i < wl->n; i++ ) {
     fprintf(fp, "%d %g %g %g\n",

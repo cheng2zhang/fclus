@@ -6,7 +6,7 @@
 
 
 
-var D = 2;
+var D = 3;
 
 
 
@@ -20,7 +20,7 @@ function vzero(x)
 
 
 
-function vinv(x)
+function vneg(x)
 {
   for ( var d = 0; d < D; d++ ) {
     x[d] = -x[d];
@@ -70,10 +70,30 @@ function vsinc(x, dx, s)
 
 
 
+function vadd(c, a, b)
+{
+  for ( var d = 0; d < D; d++ ) {
+    c[d] = a[d] + b[d];
+  }
+  return c;
+}
+
+
+
 function vdiff(c, a, b)
 {
   for ( var d = 0; d < D; d++ ) {
     c[d] = a[d] - b[d];
+  }
+  return c;
+}
+
+
+
+function vnadd(c, a, b)
+{
+  for ( var d = 0; d < D; d++ ) {
+    c[d] = - a[d] - b[d];
   }
   return c;
 }
@@ -86,6 +106,16 @@ function vsmul(x, s)
     x[d] *= s;
   }
   return x;
+}
+
+
+
+function vsmul2(y, x, s)
+{
+  for ( var d = 0; d < D; d++ ) {
+    y[d] = x[d] * s;
+  }
+  return y;
 }
 
 
@@ -154,7 +184,84 @@ function rm3_inv(a)
 
 
 
-/* apply the periodic boundary condition for a pair distance */
+/* bond angle interaction */
+function vang(xi, xj, xk, gi, gj, gk)
+{
+  var xij= [0,0,0], xkj = [0,0,0], ri, rk, dot, ang;
+
+  ri = Math.sqrt( vsqr( vdiff(xij, xi, xj) ) );
+  vsmul(xij, 1.0/ri);
+
+  rk = Math.sqrt( vsqr( vdiff(xkj, xk, xj) ) );
+  vsmul(xkj, 1.0/rk);
+
+  dot = Math.max( Math.min( vdot(xij, xkj), 1.0 ), -1.0);
+  ang = Math.acos( dot );
+
+  if ( gi && gj && gk ) {
+    var sn, gij, gkj;
+    var d;
+    sn = -1.0 / Math.sqrt(1 - dot * dot); // -1.0/sin(phi)
+    for ( d = 0; d < D; d++ ) {
+      gij = sn * (xkj[d] - xij[d]*dot) / ri;
+      gkj = sn * (xij[d] - xkj[d]*dot) / rk;
+      gi[d] = gij;
+      gk[d] = gkj;
+      gj[d] = -(gij + gkj);
+    }
+  }
+  return ang;
+}
+
+
+
+function vdih(xi, xj, xk, xl, gi, gj, gk, gl)
+{
+  var tol, phi, cosphi = 1;
+  var nxkj, nxkj2, m2, n2;
+  var xij = [0,0,0], xkj = [0,0,0], xkl = [0,0,0];
+  var uvec = [0,0,0], vvec = [0,0,0], svec = [0,0,0];
+  var m = [0,0,0], n = [0,0,0]; // the planar vector of xij x xkj, and xkj x xkj
+
+  vdiff(xij, xi, xj);
+  vdiff(xkj, xk, xj);
+  vdiff(xkl, xk, xl);
+  nxkj2 = vsqr(xkj);
+  nxkj = Math.sqrt(nxkj2);
+  tol = nxkj2 * 1e-16;
+
+  m2 = vsqr( vcross3d(m, xij, xkj) );
+  n2 = vsqr( vcross3d(n, xkj, xkl) );
+  if (m2 > tol && n2 > tol) {
+    cosphi = Math.max( Math.min(
+          vdot(m, n) / Math.sqrt(m2 * n2),
+          1), -1);
+  }
+  phi = Math.acos(cosphi);
+  if (vdot(n, xij) < 0.0) phi = -phi;
+
+  /* optionally calculate the gradient */
+  if ( gi && gj && gk && gl ) {
+    if (m2 > tol && n2 > tol) {
+      vsmul2(gi, m, nxkj/m2);
+      vsmul2(gl, n, -nxkj/n2);
+      vsmul2(uvec, gi, vdot(xij, xkj)/nxkj2);
+      vsmul2(vvec, gl, vdot(xkl, xkj)/nxkj2);
+      vdiff(svec, uvec, vvec);
+      vdiff(gj, svec, gi);
+      vnadd(gk, svec, gl);
+    } else { /* clear the gradients */
+      vzero(gi);
+      vzero(gj);
+      vzero(gk);
+      vzero(gl);
+    }
+  }
+  return phi;
+}
+
+
+
 function vpbc(v, l, invl)
 {
   for ( var d = 0; d < D; d++ ) {
