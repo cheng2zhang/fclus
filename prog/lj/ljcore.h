@@ -13,6 +13,7 @@
 #include "util.h"
 #include "graph.h"
 #include "hmc.h"
+#include "wl.h"
 
 
 
@@ -39,12 +40,9 @@ typedef struct {
 
   graph_t *g, *g2;
   double rcls; /* cluster cutoff */
-  double *vcls; /* cluster potential times beta */
-  double *chist; /* cluster histogram */
-  double chist_cnt;
-  int cseed; /* seed of cluster */
-  double hflatness;
   double lamcls; /* coupling factor for the clustering energy */
+  const double *vcls; /* bias potential */
+  int cseed; /* seed of cluster */
 
   double ediv; /* division energy */
   double lamdiv; /* coupling factor the division energy */
@@ -102,7 +100,8 @@ static void lj_rmcom(double (*x)[D], int n)
 
 
 /* open an LJ system */
-static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
+static lj_t *lj_open(int n, double rho, double rcdef,
+    double rcls, const double *vcls)
 {
   lj_t *lj;
   int i, d;
@@ -134,10 +133,7 @@ static lj_t *lj_open(int n, double rho, double rcdef, double rcls)
   lj->g = graph_open(n);
   lj->g2 = graph_open(n);
   lj->rcls = rcls;
-  xnew(lj->vcls, n + 1);
-
-  xnew(lj->chist, n + 1);
-  lj->chist_cnt = 0;
+  lj->vcls = vcls;
 
   lj->cseed = 0; /* seed particle of the cluster */
 
@@ -173,8 +169,6 @@ static void lj_close(lj_t *lj)
   free(lj->r2i);
   graph_close(lj->g);
   graph_close(lj->g2);
-  free(lj->vcls);
-  free(lj->chist);
   free(lj->idiv);
   free(lj->idiv2);
   free(lj);
@@ -524,7 +518,8 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
  * call lj_mkgraph() first */
 __inline static double lj_eclus(const lj_t *lj, const graph_t *g)
 {
-  return lj->vcls[ graph_getcsize(g, lj->cseed) ];
+  if ( lj->vcls ) return 0.0;
+  else return lj->vcls[ graph_getcsize(g, lj->cseed) ];
 }
 
 
@@ -708,7 +703,7 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
   i = (lj->cseed + 1 + (int) (rand01() * (n - 1))) % n;
   sz0 = graph_getcsize(g, lj->cseed);
   sz1 = graph_getcsize(g, i);
-  if ( sz0 == sz1 ) {
+  if ( sz0 == sz1 || lj->vcls == NULL ) {
     acc = 1;
   } else {
     double dv = lj->vcls[ sz1 ] - lj->vcls[ sz0 ];
@@ -768,7 +763,11 @@ __inline static int lj_hmc(lj_t *lj, hmc_t *hmc, int *csize1)
   int csize = graph_getcsize(lj->g, lj->cseed);
   int acc, idat[2] = { csize, lj->cseed };
   /* hmc->idat[0] is the previous size */
-  double dv = lj->vcls[ csize ] - lj->vcls[ hmc->idat[0] ];
+  double dv = 0;
+
+  if ( lj->vcls ) {
+    dv = lj->vcls[ csize ] - lj->vcls[ hmc->idat[0] ];
+  }
   if ( dv <= 0 ) {
     acc = 1;
   } else {
@@ -786,159 +785,6 @@ __inline static int lj_hmc(lj_t *lj, hmc_t *hmc, int *csize1)
   }
   *csize1 = idat[0];
   return acc;
-}
-
-
-
-__inline static void lj_chist_clear(lj_t *lj)
-{
-  int i;
-
-  lj->chist_cnt = 0;
-  for ( i = 0; i <= lj->n; i++ )
-    lj->chist[i] = 0;
-}
-
-
-
-__inline static void lj_chist_add(lj_t *lj, int csize)
-{
-  lj->chist_cnt += 1;
-  lj->chist[ csize ] += 1;
-}
-
-
-
-__inline static void lj_chist_print(const lj_t *lj)
-{
-  int i;
-  double cnt = lj->chist_cnt;
-
-  if ( cnt <= 0 ) {
-    printf("\n");
-    return;
-  }
-  for ( i = 0; i <= lj->n; i++ )
-    if ( lj->chist[i] )
-      printf("%4d %6.2f%%\n", i, 100.0*lj->chist[i]/cnt);
-}
-
-
-
-/* save cluster histogram to file */
-__inline static int lj_chist_save(const lj_t *lj, const char *fn)
-{
-  FILE *fp;
-  int i, n = lj->n;
-  double cnt = lj->chist_cnt;
-
-  if ( cnt <= 0 ) return -1;
-
-  if ( (fp = fopen(fn, "w")) == NULL ) {
-    fprintf(stderr, "cannot write %s\n", fn);
-    return -1;
-  }
-  fprintf(fp, "# %d\n", n);
-  for ( i = 1; i <= n; i++ ) {
-    fprintf(fp, "%d %g %.0f %g\n",
-        i, lj->chist[i]/cnt, lj->chist[i], lj->vcls[i]);
-  }
-  fclose(fp);
-  return 0;
-}
-
-
-
-/* load cluster histogram from file */
-__inline static int lj_chist_load(lj_t *lj, const char *fn)
-{
-  FILE *fp;
-  int i, i1, n = lj->n;
-  double cnt = lj->chist_cnt, x, y, v;
-  char ln[64000] = "";
-
-  if ( cnt <= 0 ) return -1;
-
-  if ( (fp = fopen(fn, "r")) == NULL ) {
-    fprintf(stderr, "cannot read %s\n", fn);
-    return -1;
-  }
-  if ( fgets(ln, sizeof ln, fp) == NULL
-    || ln[0] != '#' || atoi(ln + 1) != n ) {
-    fprintf(fp, "%s: bad information line!\n%s", fn, ln);
-    fclose(fp);
-    return -1;
-  }
-
-  for ( i = 1; i <= n; i++ ) {
-    if ( fgets(ln, sizeof ln, fp) == NULL ) {
-      fprintf(stderr, "cannot read for n %d\n", i);
-      fclose(fp);
-      return -1;
-    }
-    if ( 4 != sscanf(ln, "%d %lf %lf %lf", &i1, &x, &y, &v)
-      || i != i1 ) {
-      fprintf(stderr, "bad line %d\n%s", i, ln);
-      fclose(fp);
-      return -1;
-    }
-    lj->chist[i1] = y;
-    lj->vcls[i1] = v;
-  }
-  fclose(fp);
-  return 0;
-}
-
-
-
-/* update the cluster potential */
-__inline static void lj_update_vcls(lj_t *lj, int csize, double lnf)
-{
-  int i;
-  double min = DBL_MAX;
-
-  lj->vcls[ csize ] += lnf;
-
-  /* find the minimal of the potential */
-  for ( i = 1; i <= lj->n; i++ )
-    if ( lj->vcls[i] < min )
-      min = lj->vcls[i];
-  /* subtract the minimal */
-  for ( i = 1; i <= lj->n; i++ )
-    lj->vcls[i] -= min;
-}
-
-
-
-/* change the updating magnitude */
-__inline static int lj_update_lnf(lj_t *lj, double *lnf,
-    double flatness, double frac)
-{
-  int i, n = lj->n;
-  double sh = 0, shh = 0, h;
-
-  /* compute the flatness of the histogram */
-  for ( i = 1; i <= n; i++ ) {
-    h = lj->chist[i];
-    sh += h;
-    shh += h * h;
-  }
-  if ( sh <= 0 ) return 0;
-  sh /= n;
-  shh = shh / n - sh * sh;
-  if ( shh < 0 ) shh = 0;
-
-  /* compute the flatness */
-  lj->hflatness = sqrt(shh) / sh;
-  if ( lj->hflatness < flatness ) {
-    lj_chist_clear(lj);
-    printf("changing lnf from %g to %g, flatness %g%%\n",
-        *lnf, *lnf * frac, lj->hflatness*100);
-    *lnf *= frac;
-    return 1;
-  } else {
-    return 0;
-  }
 }
 
 

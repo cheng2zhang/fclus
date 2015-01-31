@@ -37,7 +37,7 @@ int main(void)
   double epsm = 0;
 
   /* make a Lennard-Jones object */
-  lj = lj_open(n, rho, rcdef, rcls);
+  lj = lj_open(n, rho, rcdef, rcls, NULL);
   /* turn off the regular clustering energy */
   lj->lamcls = 0;
   /* turn on the division energy */
@@ -61,11 +61,9 @@ int main(void)
 
     /* add the division size to histogram */
     divsize = lj_getdivsize(lj, lj->idiv);
-    lj_chist_add(lj, divsize);
 
     if ( fmod(t, nstrep) < 0.1 ) {
       lj_writepos(lj, lj->x, lj->v, fnpos, 0);
-      lj_chist_save(lj, fnchist);
       fprintf(stderr, "t %g, mcacc %.2f%% ep %g, divacc %.2f%%, ediv %g, "
           "divsize %d, divr %g, divrho %g\n",
           t, 100*mcacc/mctot, lj->epot,
