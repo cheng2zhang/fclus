@@ -12,9 +12,13 @@ var D = 3;
 
 function vzero(x)
 {
+try{
   for ( var d = 0; d < D; d++ ) {
-    x[d] = 0;
+    x[d] = 0.0;
   }
+} catch(err) {
+  console.log(err);
+}
   return x;
 }
 
@@ -36,6 +40,17 @@ function vcopy(x, y)
     x[d] = y[d];
   }
   return x;
+}
+
+
+
+function vswap(x, y)
+{
+  for ( var d = 0; d < D; d++ ) {
+    var z = x[d];
+    x[d] = y[d];
+    y[d] = z;
+  }
 }
 
 
@@ -157,33 +172,6 @@ function vcross3d(z, x, y)
 
 
 
-/* inverse matrix a^(-1) */
-function rm3_inv(a)
-{
-  var d00 = a[1][1]*a[2][2] - a[1][2]*a[2][1];
-  var d01 = a[1][2]*a[2][0] - a[1][0]*a[2][2];
-  var d02 = a[1][0]*a[2][1] - a[1][1]*a[2][0];
-  var detm = a[0][0]*d00 + a[0][1]*d01 + a[0][2]*d02;
-  var dmin = 1e-20;
-
-  if (detm < dmin && detm > -dmin) {
-    detm = (detm < 0) ? -dmin: dmin;
-  }
-  var b = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
-  b[0][0] = d00/detm;
-  b[0][1] = (a[2][1]*a[0][2] - a[0][1]*a[2][2])/detm;
-  b[0][2] = (a[0][1]*a[1][2] - a[0][2]*a[1][1])/detm;
-  b[1][0] = d01/detm;
-  b[1][1] = (a[2][2]*a[0][0] - a[2][0]*a[0][2])/detm;
-  b[1][2] = (a[0][2]*a[1][0] - a[1][2]*a[0][0])/detm;
-  b[2][0] = d02/detm;
-  b[2][1] = (a[2][0]*a[0][1] - a[2][1]*a[0][0])/detm;
-  b[2][2] = (a[0][0]*a[1][1] - a[0][1]*a[1][0])/detm;
-  return b;
-}
-
-
-
 /* bond angle interaction */
 function vang(xi, xj, xk, gi, gj, gk)
 {
@@ -242,7 +230,7 @@ function vdih(xi, xj, xk, xl, gi, gj, gk, gl)
 
   /* optionally calculate the gradient */
   if ( gi && gj && gk && gl ) {
-    if (m2 > tol && n2 > tol) {
+    if ( m2 > tol && n2 > tol ) {
       vsmul2(gi, m, nxkj/m2);
       vsmul2(gl, n, -nxkj/n2);
       vsmul2(uvec, gi, vdot(xij, xkj)/nxkj2);
@@ -286,107 +274,38 @@ function vwrap(v, l)
 
 
 
-/* return a unit matrix */
-function munit(a)
+/* return the norm the vector */
+function vnorm(a)
 {
-  for ( var d1 = 0; d1 < D; d1++ ) {
-    for ( var d2 = 0; d2 < D; d2++ ) {
-      a[d1][d2] = (d1 === d2) ? 1.0 : 0.0;
-    }
-  }
+  return Math.sqrt( vsqr(a) );
 }
 
 
 
-/* copy a matrix, a = b*/
-function mcopy(a, b)
+/* return the distance */
+function vdistx(dx, a, b)
 {
-  for ( var d1 = 0; d1 < D; d1++ ) {
-    for ( var d2 = 0; d2 < D; d2++ ) {
-      a[d1][d2] = b[d1][d2];
-    }
-  }
+  return vnorm( vdiff(dx, a, b) );
 }
 
 
 
-/* return the product of matrix m and vector v */
-function mmulv(m, v)
+/* return the distance */
+function vdist(a, b)
 {
-  var u = newarr2d(D);
-
-  for ( var d = 0; d < D; d++ ) {
-    u[d] = 0;
-    for ( var d2 = 0; d2 < D; d2++ ) {
-      u[d] += m[d][d2] * v[d2];
-    }
-  }
-  return u;
+  var dx = newarr(D);
+  return vnorm( vdiff(dx, a, b) );
 }
 
 
 
-function mxrot3d(m, theta)
+/* normalize the vector */
+function vnormalize(v)
 {
-  theta *= Math.PI / 180;
-  var c = Math.cos(theta);
-  var s = Math.sin(theta);
-  var m2 = newarr2d(3, 3);
-  var d;
-  for ( d = 0; d < 3; d++ ) {
-    m2[0][d] = m[0][d];
-    m2[1][d] = c * m[1][d] - s * m[2][d];
-    m2[2][d] = s * m[1][d] + c * m[2][d];
-  }
-  return m2;
+  var s = Math.sqrt( vsqr(v) );
+  return vsmul(v, 1.0 / s);
 }
 
 
 
-function myrot3d(m, theta)
-{
-  theta *= Math.PI / 180;
-  var c = Math.cos(theta);
-  var s = Math.sin(theta);
-  var m2 = newarr2d(3, 3);
-  var d;
-  for ( d = 0; d < 3; d++ ) {
-    m2[1][d] = m[1][d];
-    m2[2][d] = c * m[2][d] - s * m[0][d];
-    m2[0][d] = s * m[2][d] + c * m[0][d];
-  }
-  return m2;
-}
-
-
-
-function mzrot3d(m, theta)
-{
-  theta *= Math.PI / 180;
-  var c = Math.cos(theta);
-  var s = Math.sin(theta);
-  var m2 = newarr2d(3, 3);
-  var d;
-  for ( d = 0; d < 3; d++ ) {
-    m2[2][d] = m[2][d];
-    m2[0][d] = c * m[0][d] - s * m[1][d];
-    m2[1][d] = s * m[0][d] + c * m[1][d];
-  }
-  return m2;
-}
-
-
-
-function m2str(m)
-{
-  var s = "[";
-  for ( var d = 0; d < D; d++ ) {
-    if ( d > 0 ) {
-      s += ", ";
-    }
-    s += m[d].toString();
-  }
-  s += "]";
-  return s;
-}
 

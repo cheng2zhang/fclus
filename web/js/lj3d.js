@@ -154,11 +154,11 @@ function ljmousemove(e)
 function transform(x, l)
 {
   var n = x.length;
-  var xyz = newarr(n), xc = [l * 0.5, l * 0.5, l * 0.5], xi = [0, 0, 0];
+  var xyz = newarr2d(n, 2), xc = [l * 0.5, l * 0.5, l * 0.5], xi = [0, 0, 0];
 
   for ( var i = 0; i < n; i++ ) {
     vdiff(xi, x[i], xc);
-    xyz[i] = mmulv(viewmat, xi);
+    vmxv(xyz[i], viewmat, xi);
     vinc(xyz[i], xc);
   }
   return xyz;
