@@ -51,27 +51,4 @@ static double lj_gettail(lj_t *lj, double rho, int n, double *ptail)
 
 
 
-/* annihilate the total angular momentum */
-static void lj_shiftang(double (*x)[D], double (*v)[D], int n)
-{
-  int i;
-  double am, r2, xc[D] = {0, 0}, xi[D];
-
-  for (i = 0; i < n; i++) vinc(xc, x[i]);
-  vsmul(xc, 1.f/n);
-  for (am = r2 = 0.f, i = 0; i < n; i++) {
-    vdiff(xi, x[i], xc);
-    am += vcross(xi, v[i]);
-    r2 += vsqr(x[i]);
-  }
-  am = -am/r2;
-  for (i = 0; i < n; i++) {
-    vdiff(xi, x[i], xc);
-    v[i][0] += -am*xi[1];
-    v[i][1] +=  am*xi[0];
-  }
-}
-
-
-
 #endif /* LJ2D_H__ */

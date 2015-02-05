@@ -3,14 +3,13 @@
 
 
 
-/* this file collect routines common to all dimensions
- * define the dimension D before including this file
+/* define the dimension D before including this file
  * Note: coordinates are not reduced */
 
 
 
 #include "mtrand.h"
-#include "util.h"
+#include "util.h" /* vct.h and mat.h are included within */
 #include "graph.h"
 #include "hmc.h"
 #include "wl.h"
@@ -61,7 +60,6 @@ typedef struct {
 /* the following functions are dimension D dependent */
 static void lj_initfcc(lj_t *lj);
 static double lj_gettail(lj_t *lj, double rho, int n, double *ptail);
-static void lj_shiftang(double (*x)[D], double (*v)[D], int n);
 
 
 
@@ -72,29 +70,14 @@ static void lj_setrho(lj_t *lj, double rho)
 
   lj->rho = rho;
   lj->vol = lj->n/rho;
-  lj->l = pow(lj->vol, 1./D);
-  if ((lj->rc = lj->rcdef) > lj->l/2) lj->rc = lj->l/2;
+  lj->l = pow(lj->vol, 1.0 / D);
+  lj->rc = dblmin( lj->rcdef, lj->l * 0.5 );
   lj->rc2 = lj->rc * lj->rc;
-  irc = 1/lj->rc;
+  irc = 1 / lj->rc;
   irc *= irc * irc;
   irc *= irc;
-  lj->epot_shift = 4*irc*(irc - 1);
+  lj->epot_shift = 4 * irc * (irc - 1);
   lj->epot_tail = lj_gettail(lj, rho, lj->n, &lj->p_tail);
-}
-
-
-
-/* remove the center of mass motion */
-static void lj_rmcom(double (*x)[D], int n)
-{
-  int i;
-  double rc[D] = {0};
-
-  for ( i = 0; i < n; i++ )
-    vinc(rc, x[i]);
-  vsmul(rc, 1./n);
-  for ( i = 0; i < n; i++ )
-    vdec(x[i], rc);
 }
 
 
@@ -123,12 +106,12 @@ static lj_t *lj_open(int n, double rho, double rcdef,
   lj_initfcc(lj);
 
   /* initialize random velocities */
-  for (i = 0; i < n; i++)
+  for ( i = 0; i < n; i++ )
     for ( d = 0; d < D; d++ )
       lj->v[i][d] = randgaus();
 
-  lj_rmcom(lj->v, lj->n);
-  lj_shiftang(lj->x, lj->v, lj->n);
+  rmcom(lj->v, NULL, n);
+  shiftang(lj->x, lj->v, NULL, n);
 
   lj->g = graph_open(n);
   lj->g2 = graph_open(n);
