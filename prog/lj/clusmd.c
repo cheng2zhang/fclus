@@ -1,14 +1,7 @@
 /* molecular dynamics simulation with hybrid MC
  * to sample a flat histogram along the cluster size */
-#ifndef D
 #define D 3
-#endif
-
-#if D == 3
-#include "lj3d.h"
-#else
-#include "lj2d.h"
-#endif
+#include "ljcore.h"
 
 
 

@@ -6,7 +6,8 @@
 --------------|------------------------------
 clusmc.c      | Monte Carlo, flat histogram,
 clusmd.c      | molecular dynamics with hybrid MC, flat histogram
-
+igibbs.c      | implicit Gibbs ensemble
+ljdiv.h       | division based energy (used by igibbs.c)
 
 
 ## clusmc Usage ##

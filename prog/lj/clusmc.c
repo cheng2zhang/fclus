@@ -1,14 +1,7 @@
 /* Monte Carlo simulation that samples a flat histogram along the cluster size
  * Wang-Landau algorithm is used */
-#ifndef D
 #define D 3
-#endif
-
-#if D == 3
-#include "lj3d.h"
-#else
-#include "lj2d.h"
-#endif
+#include "ljcore.h"
 
 
 

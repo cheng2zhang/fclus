@@ -42,24 +42,16 @@ typedef struct {
   double lamcls; /* coupling factor for the clustering energy */
   const double *vcls; /* bias potential */
   int cseed; /* seed of cluster */
-
-  double ediv; /* division energy */
-  double lamdiv; /* coupling factor the division energy */
-  int *idiv; /* division id, either 0 or 1 */
-  int *idiv2; /* trial division */
-
-  /* spherical division */
-  int divseed; /* center of the division sphere */
-  double divr; /* radius of the division sphere */
-  double divrmin;
-  double divrmax;
 } lj_t;
 
 
 
-/* the following functions are dimension D dependent */
-static void lj_initfcc(lj_t *lj);
-static double lj_gettail(lj_t *lj, double rho, int n, double *ptail);
+/* functions that are dimension D dependent */
+#if D == 2
+#include "lj2d.h"
+#else
+#include "lj3d.h"
+#endif
 
 
 
@@ -119,23 +111,8 @@ static lj_t *lj_open(int n, double rho, double rcdef,
   lj->vcls = vcls;
 
   lj->cseed = 0; /* seed particle of the cluster */
-
   lj->lamcls = 1;
-  lj->lamdiv = 0;
-  xnew(lj->idiv, n);
-  xnew(lj->idiv2, n);
-  /* initially put everything within a single division */
-  for ( i = 0; i < n; i++ ) {
-    lj->idiv[i] = 0;
-    lj->idiv2[i] = 0;
-  }
-  lj->ediv = 0;
 
-  /* division sphere */
-  lj->divseed = 0;
-  lj->divrmin = 0.9;
-  lj->divrmax = lj->l * sqrt(0.75) + 0.00001;
-  lj->divr = 2; //lj->divrmax;
   return lj;
 }
 
@@ -152,8 +129,6 @@ static void lj_close(lj_t *lj)
   free(lj->r2i);
   graph_close(lj->g);
   graph_close(lj->g2);
-  free(lj->idiv);
-  free(lj->idiv2);
   free(lj);
 }
 
@@ -467,7 +442,7 @@ __inline static double lj_depot(lj_t *lj, int i, double *xi, double *vir)
 
 /* commit a particle displacement */
 __inline static void lj_commit(lj_t *lj, int i, const double *xi,
-    double du, double dvir, double dudiv)
+    double du, double dvir)
 {
   int j, n = lj->n;
 
@@ -475,13 +450,9 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
   lj->ep0 += du;
   lj->epot += du;
   lj->vir += dvir;
-  lj->ediv += dudiv;
   for ( j = 0; j < n; j++ ) {
     lj->r2ij[i*n + j] = lj->r2i[j];
     lj->r2ij[j*n + i] = lj->r2i[j];
-  }
-  for ( j = 0; j < n; j++ ) {
-    lj->idiv2[j] = lj->idiv[j];
   }
   graph_copy(lj->g, lj->g2);
 
@@ -506,139 +477,12 @@ __inline static double lj_eclus(const lj_t *lj, const graph_t *g)
 
 
 
-__inline static int lj_getdivsize(lj_t *lj, const int *idiv)
-{
-  int i, c = 0, n = lj->n;
-
-  for ( i = 0; i < n; i++ ) {
-    c += (idiv[i] == 0);
-  }
-  return c;
-}
-
-
-
-/* compute the division */
-__inline static int lj_getdiv(lj_t *lj, int *idiv,
-    int seed, double divr)
-{
-  int i, n = lj->n, cnt = 0;
-  double divr2 = divr * divr;
-
-  for ( i = 0; i < n; i++ ) {
-    idiv[i] = ( lj->r2ij[seed*n + i] > divr2 );
-    cnt += (idiv[i] == 0);
-  }
-  return cnt;
-}
-
-
-
-/* compute the division */
-__inline static void lj_getdiv2(lj_t *lj, int *idiv,
-    int seed, double divr, int k)
-{
-  int i, n = lj->n;
-  double r2, divr2 = divr * divr;
-
-  for ( i = 0; i < n; i++ ) {
-    if ( i == seed ) {
-      idiv[i] = 0;
-      continue;
-    }
-    if ( i == k ) {
-      r2 = lj->r2i[seed];
-    } else if ( seed == k ) {
-      r2 = lj->r2i[i];
-    } else {
-      r2 = lj->r2ij[seed*n + i];
-    }
-    idiv[i] = ( r2 > divr2 );
-  }
-}
-
-
-
-#define LJ_R2WCA 1.2599210498948732
-
-/* compute the division energy
- * this functions uses lj->r2ij, so call lj_energy()/lj_force() first
- * idiv[i] gives the division id of particle i */
-__inline static double lj_ediv(lj_t *lj, int *idiv,
-    int divseed, double divr)
-{
-  int i, j, n = lj->n;
-  double dr2, ir6, rc2 = lj->rc2, ep = 0;
-
-  /* compute the division */
-  lj_getdiv(lj, idiv, divseed, divr);
-
-  for ( i = 0; i < n; i++ ) {
-    /* i must be in division 0 */
-    if ( idiv[i] != 0 ) continue;
-    for ( j = 0; j < n; j++ ) {
-      /* j must not be in division 1 */
-      if ( idiv[j] == 0 ) continue;
-
-      dr2 = lj->r2ij[i*n + j];
-      if ( dr2 < LJ_R2WCA ) {
-        ep += 1;
-      } else if ( dr2 < rc2 ) {
-        ir6 = 1/(dr2 * dr2 * dr2);
-        ep -= 4 * ir6 * (ir6 - 1);
-      }
-    }
-  }
-  return ep;
-}
-
-
-
-/* compute the trial division energy
- * this functions uses lj->r2ij, lj->r2i */
-__inline static double lj_ediv2(lj_t *lj, int *idiv,
-    int divseed, double divr, int k)
-{
-  int i, j, n = lj->n;
-  double dr2, ir6, rc2 = lj->rc2, ep = 0;
-
-  /* compute the division */
-  lj_getdiv2(lj, idiv, divseed, divr, k);
-  for ( i = 0; i < n; i++ ) {
-    /* i must be in division 0 */
-    if ( idiv[i] != 0 ) continue;
-    for ( j = 0; j < n; j++ ) {
-      /* j must not be in division 0 */
-      if ( idiv[j] == 0 ) continue;
-
-      if ( i == k ) {
-        dr2 = lj->r2i[j];
-      } else if ( j == k ) {
-        dr2 = lj->r2i[i];
-      } else {
-        dr2 = lj->r2ij[i*n + j];
-      }
-
-      if ( dr2 < LJ_R2WCA ) {
-        ep += 1;
-      } else if ( dr2 < rc2 ) {
-        ir6 = 1/(dr2 * dr2 * dr2);
-        ep -= 4 * ir6 * (ir6 - 1);
-      }
-    }
-  }
-  return ep;
-}
-
-
-
 /* Metropolis algorithm */
 __inline static int lj_metro(lj_t *lj, double amp, double bet)
 {
   int i, acc = 0;
   double xi[D], r, du = 0, dutot, dvir = 0;
   double ucls, ducls = 0;
-  double udiv, dudiv = 0;
 
   i = lj_randmv(lj, xi, amp);
   du = lj_depot(lj, i, xi, &dvir);
@@ -653,15 +497,7 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
     ducls = ucls - lj_eclus(lj, lj->g);
   }
 
-  /* compute the division energy */
-  if ( fabs( lj->lamdiv ) > 0 ) {
-    udiv = lj_ediv2(lj, lj->idiv2, lj->divseed, lj->divr, i);
-    //lj->ediv = lj_ediv(lj, lj->idiv, lj->divseed, lj->divr);
-    //printf("ediv %g, %g; seed %d, r %g\n", lj->ediv, lj_ediv(lj, lj->idiv, lj->divseed, lj->divr), lj->divseed, lj->divr); getchar();
-    dudiv = udiv - lj->ediv;
-  }
-
-  dutot = bet * (du + lj->lamdiv * dudiv) + lj->lamcls * ducls;
+  dutot = bet * du + lj->lamcls * ducls;
   if ( dutot < 0 ) {
     acc = 1;
   } else {
@@ -669,7 +505,7 @@ __inline static int lj_metro(lj_t *lj, double amp, double bet)
     acc = ( r < exp( -dutot ) );
   }
   if ( acc ) {
-    lj_commit(lj, i, xi, du, dvir, dudiv);
+    lj_commit(lj, i, xi, du, dvir);
     return 1;
   }
   return 0;
@@ -698,41 +534,6 @@ __inline static int lj_changeseed(lj_t *lj, const graph_t *g)
   }
   if ( acc ) {
     lj->cseed = i;
-  }
-  return acc;
-}
-
-
-
-/* attempt to change the division radius */
-__inline static int lj_changediv(lj_t *lj, double amp, double bet)
-{
-  int i, acc = 0, n = lj->n;
-  double rnew, ediv, dv;
-
-  /* try to move i to the opposite division */
-  rnew = lj->divr + amp * (2 * rand01() - 1);
-  if ( rnew > lj->divrmax || rnew < lj->divrmin ) {
-    return 0;
-  }
-
-  /* compute the energy change caused by the change */
-  ediv = lj_ediv(lj, lj->idiv2, lj->divseed, rnew);
-  //printf("ediv %g, %g; seed %d, r %g\n", lj->ediv, lj_ediv(lj, lj->idiv, lj->divseed, lj->divr), lj->divseed, lj->divr); getchar();
-  dv = ediv - lj->ediv;
-  if ( dv < 0 ) {
-    acc = 1;
-  } else {
-    double r = rand01();
-    acc = (r < exp( - bet * lj->lamdiv * dv ));
-  }
-
-  if ( acc ) {
-    lj->divr = rnew;
-    for ( i = 0; i < n; i++ ) {
-      lj->idiv[i] = lj->idiv2[i];
-    }
-    lj->ediv = ediv;
   }
   return acc;
 }
