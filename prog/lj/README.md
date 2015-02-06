@@ -7,9 +7,6 @@
 clusmc.c      | Monte Carlo, flat histogram,
 clusmd.c      | molecular dynamics with hybrid MC, flat histogram
 ljcls.h       | clustering related routines
---------------|------------------------------
-igibbs.c      | implicit Gibbs ensemble
-ljdiv.h       | division based energy (used by igibbs.c)
 
 
 ## clusmc Usage ##
@@ -74,10 +71,3 @@ The following notes apply to `clusmd.c`.
   Y: easy order parameter, like Go-energy
   Then the bias potential assumes the form of lambda(X) Y.
 
-* Shape-based implicit Gibbs
-  Draw a sphere and disable the interaction between
-  particles inside and out of the sphere.
-  Change the radius of the sphere.
-  + currently, distribution focused on the two ends
-  + missing a vol^n factor?
-  + an elastic sphere, when changing the volume?
