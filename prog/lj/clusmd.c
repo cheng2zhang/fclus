@@ -1,7 +1,6 @@
 /* molecular dynamics simulation with hybrid MC
  * to sample a flat histogram along the cluster size */
-#define D 3
-#include "ljcore.h"
+#include "ljcls.h"
 
 
 
@@ -35,16 +34,19 @@ int main(void)
 {
   int t;
   lj_t *lj;
+  ljcls_t *c;
   wl_t *wl;
   double epsm = 0;
   hmc_t *hmc;
   int idat[2], csize;
   double hmcacc = 0, hmctot = DBL_MIN;
 
+  /* make a Lennard-Jones object */
+  lj = lj_open(n, rho, rcdef);
+
   /* make a Wang-Landau object */
   wl = wl_open(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
-  /* make a Lennard-Jones object */
-  lj = lj_open(n, rho, rcdef, rcls, wl->v - 1);
+  c = ljcls_open(lj, rcls, wl->v - 1);
 
   /* change the degrees of freedom, with velocity swaps
    * the angular momenta are no longer conserved */
@@ -55,14 +57,14 @@ int main(void)
   /* compute the force and potential energy */
   lj_force(lj);
   /* compute the cluster energy */
-  lj_mkgraph(lj, lj->g);
+  ljcls_mkgraph(c, c->g);
 
   /* make a hybrid Monte-Carlo object
    * with two extra integers: cluster size and seed
    * and one extra floating-point: potential energy */
   hmc = hmc_open(n, 2, 1);
-  idat[0] = graph_getcsize(lj->g, lj->cseed);
-  idat[1] = lj->cseed;
+  idat[0] = graph_getcsize(c->g, c->cseed);
+  idat[1] = c->cseed;
   hmc_push(hmc, lj->x, lj->v, lj->f, idat, &lj->epot);
 
   /* main molecular dynamics loop */
@@ -72,19 +74,19 @@ int main(void)
     /* velocity-rescaling thermostat */
     lj->ekin = lj_vrescale(lj, tp, thdt);
     /* build a graph */
-    lj_mkgraph(lj, lj->g);
+    ljcls_mkgraph(c, c->g);
     if ( changeseed ) {
-      lj_changeseed(lj, lj->g);
+      ljcls_changeseed(c, c->g);
     }
 
     /* use hybrid MC to sample a flat histogram along the cluster size */
     if ( t % nsthmc == 0 ) {
       hmctot += 1;
-      hmcacc += lj_hmc(lj, hmc, &csize);
+      hmcacc += ljcls_hmc(c, hmc, &csize);
       lj->ekin = lj_vscramble(lj->v, lj->n, nvswaps);
     }
 
-    csize = graph_getcsize(lj->g, lj->cseed);
+    csize = graph_getcsize(c->g, c->cseed);
     /* add the cluster size to the histogram
      * and update the adaptive potential */
     wl_add(wl, csize);
@@ -95,12 +97,12 @@ int main(void)
 
     if ( t % nstrep == 0 ) {
       double flatness = wl_getflatness(wl);
-      lj_writepos(lj, lj->x, lj->v, fnpos, 1);
+      ljcls_writepos(c, lj->x, lj->v, fnpos, 1);
       wl_save(wl, fnvcls);
       fprintf(stderr, "t %d, ep %g, ek %g, csize %d, hmcacc %.2f%%, flatness %.2f%%, lnf %g, ",
-          t, lj->epot, lj->ekin, graph_getcsize(lj->g, lj->cseed),
+          t, lj->epot, lj->ekin, graph_getcsize(c->g, c->cseed),
           100.0 * hmcacc / hmctot, 100.0 * flatness, wl->lnf);
-      graph_clus_print(lj->g);
+      graph_clus_print(c->g);
     }
     epsm += lj->epot;
   }

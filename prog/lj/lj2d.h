@@ -7,8 +7,9 @@
 
 
 
+#ifndef D
 #define D 2
-#include "ljcore.h"
+#endif
 
 
 

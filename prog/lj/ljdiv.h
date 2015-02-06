@@ -214,8 +214,6 @@ __inline static int ljdiv_metro(ljdiv_t *d, double amp, double bet)
   i = lj_randmv(lj, xi, amp);
   du = lj_depot(lj, i, xi, &dvir);
 
-  lj_mkgraph2(lj, lj->g2, i);
-
   /* compute the division energy */
   udiv = ljdiv_ediv2(d, d->idiv2, d->divseed, d->divr, i);
   //lj->ediv = ljdiv_ediv(d, d->idiv, d->divseed, d->divr);
@@ -274,6 +272,12 @@ __inline static int ljdiv_changediv(ljdiv_t *d, double amp, double bet)
 }
 
 
+
+__inline static double lj_sphrvol(double r)
+{
+  if ( D == 3 ) return 4 * M_PI * r * r * r / 3;
+  else return 4 * M_PI * r * r;
+}
 
 
 

@@ -1,7 +1,6 @@
 /* Monte Carlo simulation that samples a flat histogram along the cluster size
  * Wang-Landau algorithm is used */
-#define D 3
-#include "ljcore.h"
+#include "ljcls.h"
 
 
 
@@ -32,30 +31,33 @@ int main(void)
 {
   double t;
   lj_t *lj;
+  ljcls_t *c;
   wl_t *wl;
   double epsm = 0;
   int csize, it;
 
-  wl = wl_open(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   /* make a Lennard-Jones object */
-  lj = lj_open(n, rho, rcdef, rcls, wl->v - 1);
+  lj = lj_open(n, rho, rcdef);
+
+  wl = wl_open(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  c = ljcls_open(lj, rcls, wl->v - 1);
 
   /* compute the potential energy */
   lj_energy(lj);
   /* build a graph */
-  lj_mkgraph(lj, lj->g);
+  ljcls_mkgraph(c, c->g);
 
   for ( t = nstblk; t <= nsteps; t += nstblk ) {
     for ( it = 0; it < nstblk; it++ ) {
       /* a step of Metropolis algorithm
        * graph is implicitly computed */
       tot += 1;
-      acc += lj_metro(lj, amp, 1/tp);
+      acc += ljcls_metro(c, amp, 1/tp);
 
       /* try to change the seed particle */
-      lj_changeseed(lj, lj->g);
+      ljcls_changeseed(c, c->g);
 
-      csize = graph_getcsize(lj->g, lj->cseed);
+      csize = graph_getcsize(c->g, c->cseed);
       /* add the cluster size to the histogram
        * and update the adaptive potential */
       wl_add(wl, csize);
@@ -69,13 +71,13 @@ int main(void)
 
     if ( fmod(t, nstrep) < 0.1 ) {
       double flatness = wl_getflatness(wl);
-      lj_writepos(lj, lj->x, lj->v, fnpos, 1);
+      ljcls_writepos(c, lj->x, lj->v, fnpos, 1);
       wl_save(wl, fnvcls);
       fprintf(stderr, "t %g, acc %.2f%% ep %g, seed %d, csize %d, flatness %g%%, lnf %g ",
           t, 100*acc/tot, lj->epot,
-          lj->cseed, csize,
+          c->cseed, csize,
           100.0 * flatness, wl->lnf);
-      graph_clus_print(lj->g);
+      graph_clus_print(c->g);
     }
     epsm += lj->epot;
   }

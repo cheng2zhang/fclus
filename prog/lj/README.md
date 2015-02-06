@@ -6,6 +6,8 @@
 --------------|------------------------------
 clusmc.c      | Monte Carlo, flat histogram,
 clusmd.c      | molecular dynamics with hybrid MC, flat histogram
+ljcls.h       | clustering related routines
+--------------|------------------------------
 igibbs.c      | implicit Gibbs ensemble
 ljdiv.h       | division based energy (used by igibbs.c)
 

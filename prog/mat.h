@@ -324,7 +324,7 @@ __inline static int msolvezero(double a[D][D], double (*x)[D])
 
 /* given an eigenvalue, return the corresponding eigenvectors
  * Note: there might be multiple eigenvectors for the eigenvalue */
-__inline static int meigvecs(double (*vecs)[3], double mat[3][3], double val)
+__inline static int meigvecs(double (*vecs)[D], double mat[D][D], double val)
 {
   double m[D][D];
   int d;
