@@ -13,7 +13,6 @@
 
 
 
-
 typedef struct {
   int n; /* number of particles */
   int dof; /* degrees of freedom */
@@ -25,9 +24,8 @@ typedef struct {
   double (*x)[D]; /* position */
   double (*v)[D]; /* velocity */
   double (*f)[D]; /* force */
-  double (*x2)[D];
   double *r2ij; /* pair distances */
-  double *r2i; /* pair distances from i for MC */
+  double *r2i; /* pair distances from i */
   double epot, ep0, eps;
   double vir;
   double ekin;
@@ -80,7 +78,6 @@ static lj_t *lj_open(int n, double rho, double rcdef)
   xnew(lj->x, n);
   xnew(lj->v, n);
   xnew(lj->f, n);
-  xnew(lj->x2, n);
   xnew(lj->r2ij, n * n);
   xnew(lj->r2i, n);
 
@@ -107,7 +104,6 @@ static void lj_close(lj_t *lj)
   free(lj->x);
   free(lj->v);
   free(lj->f);
-  free(lj->x2);
   free(lj->r2ij);
   free(lj->r2i);
   free(lj);
@@ -174,7 +170,8 @@ __inline static double lj_energy_low(lj_t *lj, double (*x)[D],
 
 
 #define lj_force(lj) \
-  lj->epot = lj_force_low(lj, lj->x, lj->f, lj->r2ij, &lj->vir, &lj->ep0, &lj->eps)
+  lj->epot = lj_force_low(lj, lj->x, lj->f, \
+      lj->r2ij, &lj->vir, &lj->ep0, &lj->eps)
 
 /* compute force and virial, return energy
  * the pair distances are recomputed */
@@ -227,11 +224,11 @@ static double lj_calcp(lj_t *lj, double tp)
 __inline static void lj_vv(lj_t *lj, double dt)
 {
   int i, n = lj->n;
-  double dth = dt * .5, l = lj->l;
+  double dth = dt * .5;
 
   for (i = 0; i < n; i++) { /* VV part 1 */
     vsinc(lj->v[i], lj->f[i], dth);
-    vwrap( vsinc(lj->x[i], lj->v[i], dt), l );
+    vsinc(lj->x[i], lj->v[i], dt);
   }
   lj_force(lj);
   for (i = 0; i < n; i++) /* VV part 2 */
@@ -312,7 +309,8 @@ static int lj_randmv(lj_t *lj, double *xi, double amp)
 
 
 /* compute pair energy */
-__inline static int lj_pair(double dr2, double rc2, double *u, double *vir)
+__inline static int lj_pair(double dr2,
+    double rc2, double *u, double *vir)
 {
   if ( dr2 < rc2 ) {
     double invr2 = 1 / dr2;
@@ -372,6 +370,29 @@ __inline static void lj_commit(lj_t *lj, int i, const double *xi,
     lj->r2ij[i*n + j] = lj->r2i[j];
     lj->r2ij[j*n + i] = lj->r2i[j];
   }
+}
+
+
+
+/* Metropolis algorithm */
+__inline static int lj_metro(lj_t *lj, double amp, double bet)
+{
+  int i, acc = 0;
+  double xi[D], r, du = 0, dvir = 0;
+
+  i = lj_randmv(lj, xi, amp);
+  du = lj_depot(lj, i, xi, &dvir);
+  if ( du < 0 ) {
+    acc = 1;
+  } else {
+    r = rand01();
+    acc = ( r < exp( -bet * du ) );
+  }
+  if ( acc ) {
+    lj_commit(lj, i, xi, du, dvir);
+    return 1;
+  }
+  return 0;
 }
 
 

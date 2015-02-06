@@ -21,6 +21,7 @@ typedef struct {
   double rcls; /* cluster cutoff */
   const double *vcls; /* bias potential */
   int cseed; /* seed of cluster */
+  double (*x2)[D];
 } ljcls_t;
 
 
@@ -40,6 +41,7 @@ __inline static ljcls_t *ljcls_open(lj_t *lj,
   c->rcls = rcls;
   c->vcls = vcls;
   c->cseed = 0;
+  xnew(c->x2, n);
   return c;
 }
 
@@ -49,6 +51,7 @@ __inline static void ljcls_close(ljcls_t *c)
 {
   graph_close(c->g);
   graph_close(c->g2);
+  free(c->x2);
   free(c);
 }
 
@@ -261,12 +264,12 @@ __inline static int ljcls_writepos(ljcls_t *c,
   lj_t *lj = c->lj;
 
   if ( wrap ) {
-    ljcls_wrapclus(c, x, lj->x2, c->g2);
+    ljcls_wrapclus(c, x, c->x2, c->g2);
   } else {
-    lj_wrapbox(lj, x, lj->x2);
+    lj_wrapbox(lj, x, c->x2);
   }
 
-  return lj_writepos(lj, lj->x2, v, fn);
+  return lj_writepos(lj, c->x2, v, fn);
 }
 
 

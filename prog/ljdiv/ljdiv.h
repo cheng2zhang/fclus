@@ -48,7 +48,7 @@ static ljdiv_t *ljdiv_open(lj_t *lj)
   /* division sphere */
   d->divseed = 0;
   d->divrmin = 0.9;
-  d->divrmax = lj->l * sqrt(0.75) + 0.00001;
+  d->divrmax = lj->l * 0.5 * sqrt(D) + 0.00001;
   d->divr = 2; //lj->divrmax;
 
   return d;
