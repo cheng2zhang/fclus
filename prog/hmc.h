@@ -30,8 +30,12 @@ __inline static hmc_t *hmc_open(int n, int ni, int nf)
   xnew(h->f, n);
   h->ni = ni;
   h->nf = nf;
-  xnew(h->idat, ni);
-  xnew(h->fdat, nf);
+  if ( ni > 0 ) {
+    xnew(h->idat, ni);
+  }
+  if ( nf > 0 ) {
+    xnew(h->fdat, nf);
+  }
   return h;
 }
 
@@ -55,8 +59,12 @@ static void hmc_push(hmc_t *h, double (*x)[D], double (*v)[D], double (*f)[D],
   memcpy(h->x, x, sizeof(x[0]) * h->n);
   memcpy(h->v, v, sizeof(v[0]) * h->n);
   memcpy(h->f, f, sizeof(f[0]) * h->n);
-  memcpy(h->idat, idat, sizeof(idat[0]) * h->ni);
-  memcpy(h->fdat, fdat, sizeof(fdat[0]) * h->nf);
+  if ( h->ni > 0 ) {
+    memcpy(h->idat, idat, sizeof(idat[0]) * h->ni);
+  }
+  if ( h->nf > 0 ) {
+    memcpy(h->fdat, fdat, sizeof(fdat[0]) * h->nf);
+  }
 }
 
 
@@ -67,17 +75,23 @@ static void hmc_pop(hmc_t *h, double (*x)[D], double (*v)[D], double (*f)[D],
   int i, n = h->n;
 
   if ( reversev ) {
-    for ( i = 0; i < n; i++ )
+    for ( i = 0; i < n; i++ ) {
       vneg( h->v[i] );
+    }
   }
   memcpy(x, h->x, sizeof(x[0]) * n);
   memcpy(v, h->v, sizeof(v[0]) * n);
   memcpy(f, h->f, sizeof(f[0]) * n);
-  memcpy(idat, h->idat, sizeof(idat[0]) * h->ni);
-  memcpy(fdat, h->fdat, sizeof(fdat[0]) * h->nf);
+  if ( h->ni > 0 ) {
+    memcpy(idat, h->idat, sizeof(idat[0]) * h->ni);
+  }
+  if ( h->nf > 0 ) {
+    memcpy(fdat, h->fdat, sizeof(fdat[0]) * h->nf);
+  }
 }
 
 
 
 
 #endif /* HMC_H__ */
+

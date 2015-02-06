@@ -238,37 +238,13 @@ __inline static void lj_vv(lj_t *lj, double dt)
 
 
 /* compute the kinetic energy */
-static double lj_ekin(double (*v)[D], int n)
-{
-  int i;
-  double ek = 0;
-  for ( i = 0; i < n; i++ ) ek += vsqr( v[i] );
-  return ek/2;
-}
+#define lj_ekin(v, n) md_ekin(v, NULL, n)
 
 
 
+/* exact velocity-rescaling thermostat */
 #define lj_vrescale(lj, tp, dt) \
-  lj_vrescale_low(lj->v, lj->n, lj->dof, tp, dt)
-
-/* exact velocity rescaling thermostat */
-__inline static double lj_vrescale_low(double (*v)[D], int n,
-    int dof, double tp, double dt)
-{
-  int i;
-  double ek1, ek2, s, c, r, r2;
-
-  c = (dt < 700) ? exp(-dt) : 0;
-  ek1 = lj_ekin(v, n);
-  r = randgaus();
-  r2 = randchisqr(dof - 1);
-  ek2 = ek1 + (1 - c) * ((r2 + r * r) * tp / 2 - ek1)
-      + 2 * r * sqrt(c * (1 - c) * ek1 * tp / 2);
-  if (ek2 < 0) ek2 = 0;
-  s = sqrt(ek2/ek1);
-  for (i = 0; i < n; i++) vsmul(v[i], s);
-  return ek2;
-}
+  md_vrescale(lj->v, NULL, lj->n, lj->dof, tp, dt)
 
 
 

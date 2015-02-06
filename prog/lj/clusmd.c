@@ -36,7 +36,6 @@ int main(void)
   lj_t *lj;
   ljcls_t *c;
   wl_t *wl;
-  double epsm = 0;
   hmc_t *hmc;
   int idat[2], csize;
   double hmcacc = 0, hmctot = DBL_MIN;
@@ -83,10 +82,11 @@ int main(void)
     if ( t % nsthmc == 0 ) {
       hmctot += 1;
       hmcacc += ljcls_hmc(c, hmc, &csize);
-      lj->ekin = lj_vscramble(lj->v, lj->n, nvswaps);
+      lj->ekin = lj_vscramble(lj, lj->v, nvswaps);
+    } else {
+      csize = graph_getcsize(c->g, c->cseed);
     }
 
-    csize = graph_getcsize(c->g, c->cseed);
     /* add the cluster size to the histogram
      * and update the adaptive potential */
     wl_add(wl, csize);
@@ -104,12 +104,12 @@ int main(void)
           100.0 * hmcacc / hmctot, 100.0 * flatness, wl->lnf);
       graph_clus_print(c->g);
     }
-    epsm += lj->epot;
   }
   lj_close(lj);
-  hmc_close(hmc);
   wl_close(wl);
-  fprintf(stderr, "rho %g, tp %g, ep %g\n", rho, tp, epsm/nsteps/n);
+  ljcls_close(c);
+  hmc_close(hmc);
+  fprintf(stderr, "rho %g, tp %g\n", rho, tp);
   return 0;
 }
 

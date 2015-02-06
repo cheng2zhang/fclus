@@ -488,16 +488,7 @@ __inline static void cago_rmcom(cago_t *go, double (*x)[D], double (*v)[D])
 
 
 /* compute the kinetic energy */
-__inline static double cago_ekin(cago_t *go, double (*v)[D])
-{
-  int i, n = go->n;
-  double ek = 0.0;
-
-  for ( i = 0; i < n; i++ ) {
-    ek += go->m[i] * vsqr( v[i] );
-  }
-  return 0.5 * ek;
-}
+#define cago_ekin(go, v) md_ekin(v, go->m, go->n)
 
 
 
@@ -577,28 +568,9 @@ __inline static int cago_vv(cago_t *go, double fs, double dt)
 
 
 
-/* Exact velocity rescaling thermostat */
-__inline static double cago_vrescale(cago_t *go,
-    double (*v)[D], double tp, double dt)
-{
-  int i, n = go->n, dof = go->dof;
-  double ekav = 0.5 * tp * dof, ek1, ek2, s, c = 0, r, r2;
-
-  c = exp(-dt);
-  ek1 = cago_ekin(go, v);
-  r = randgaus();
-  r2 = randchisqr(dof - 1);
-  ek2 = ek1 + (1 - c) * (ekav*(r2 + r*r)/dof - ek1)
-      + 2 * r * sqrt(c*(1 - c) * ekav/dof*ek1);
-  if ( ek2 < 0 ) {
-    ek2 = 0;
-  }
-  s = sqrt(ek2 / ek1);
-  for ( i = 0; i < n; i++ ) {
-    vsmul(v[i], s);
-  }
-  return ek2;
-}
+/* exact velocity rescaling thermostat */
+#define cago_vrescale(go, v, tp, dt) \
+  md_vrescale(v, go->m, go->n, go->dof, tp, dt)
 
 
 

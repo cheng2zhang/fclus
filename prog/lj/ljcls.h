@@ -175,6 +175,8 @@ __inline static int ljcls_changeseed(ljcls_t *c, const graph_t *g)
 
 
 
+/* a step of HMC
+ * `*csize1` gives the current cluster size on return */
 __inline static int ljcls_hmc(ljcls_t *c, hmc_t *hmc, int *csize1)
 {
   lj_t *lj = c->lj;
@@ -274,21 +276,8 @@ __inline static int ljcls_writepos(ljcls_t *c,
 
 
 
-/* randomly swap the velocities of m pairs of particles */
-__inline static double lj_vscramble(double (*v)[D], int n, int m)
-{
-  int im, i, j;
-  double vt[D];
-
-  for ( im = 0; im < m; im++ ) {
-    i = (int) (rand01() * n);
-    j = (i + 1 + (int) (rand01() * (n - 1))) % n;
-    vcopy(vt, v[i]);
-    vcopy(v[i], v[j]);
-    vcopy(v[j], vt);
-  }
-  return lj_ekin(v, n);
-}
+/* randomly swap the velocities of k pairs of particles */
+#define lj_vscramble(lj, v, k) md_vscramble(v, NULL, lj->n, k)
 
 
 

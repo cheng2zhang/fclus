@@ -36,9 +36,10 @@ int main(void)
   double epsm = 0;
   int csize, it;
 
-  /* make a Lennard-Jones object */
+  /* open a Lennard-Jones object */
   lj = lj_open(n, rho, rcdef);
 
+  /* open a Wang-Landau object */
   wl = wl_open(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   c = ljcls_open(lj, rcls, wl->v - 1);
 
@@ -84,6 +85,7 @@ int main(void)
   //printf("epot: %g, %g\n", lj->epot, lj_energy_low(lj, lj->x, lj->r2ij, NULL, NULL, NULL));
   lj_close(lj);
   wl_close(wl);
+  ljcls_close(c);
   fprintf(stderr, "rho %g, tp %g, ep %g\n", rho, tp, epsm/nsteps/n);
   return 0;
 }

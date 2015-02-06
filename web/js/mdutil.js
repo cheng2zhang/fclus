@@ -126,3 +126,62 @@ function shiftang(x, v, m, n)
 
 
 
+/* compute the kinetic energy */
+function md_ekin(v, m, n)
+{
+  var ek = 0;
+
+  for ( var i = 0; i < n; i++ ) {
+    var wt = m ? m[i] : 1.0;
+    ek += wt * vsqr( v[i] );
+  }
+  return ek * 0.5;
+}
+
+
+
+/* exact velocity rescaling thermostat */
+function md_vrescale(v, m, n, dof, tp, dt)
+{
+  var c = (dt < 700) ? Math.exp(-dt) : 0;
+  var ek1 = md_ekin(v, m, n);
+  var r = randgaus();
+  var r2 = randchisqr(dof - 1);
+  var ek2 = ek1 + (1 - c) * ((r2 + r * r) * tp / 2 - ek1)
+          + 2 * r * Math.sqrt(c * (1 - c) * ek1 * tp / 2);
+  if ( ek2 < 0 ) {
+    ek2 = 0;
+  }
+  var s = Math.sqrt(ek2 / ek1);
+  for ( var i = 0; i < n; i++ ) {
+    vsmul(v[i], s);
+  }
+  return ek2;
+}
+
+
+
+/* randomly swap the velocities of k pairs of particles */
+function md_vscramble(v, m, n, k)
+{
+  var i, j, l, d;
+  var vi, vj, smi, smj;
+
+  for ( l = 0; l < k; l++ ) {
+    i = Math.floor(rand01() * n);
+    j = (i + 1 + Math.floor(rand01() * (n - 1))) % n;
+    smi = Math.sqrt( m[i] );
+    smj = Math.sqrt( m[j] );
+    for ( d = 0; d < D; d++ ) {
+      vi = smi * v[i][d];
+      vj = smj * v[j][d];
+      v[i][d] = vj / smi;
+      v[j][d] = vi / smj;
+    }
+  }
+  return md_ekin(v, m, n);
+}
+
+
+
+
