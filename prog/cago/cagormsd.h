@@ -15,23 +15,18 @@
 
 typedef struct {
   cago_t *go;
-  double xmin;
-  double dx;
   wl_t *wl;
 } cagormsd_t;
 
 
 
-__inline static cagormsd_t *cagormsd_open(cago_t *go, wl_t *wl,
-    double xmin, double dx)
+__inline static cagormsd_t *cagormsd_open(cago_t *go, wl_t *wl)
 {
   cagormsd_t *r;
 
   xnew(r, 1);
   r->go = go;
   r->wl = wl;
-  r->xmin = xmin;
-  r->dx = dx;
   return r;
 }
 
@@ -44,22 +39,50 @@ __inline static void cagormsd_close(cagormsd_t *r)
 
 
 
-__inline static int cagormsd_id(cagormsd_t *r, double x)
+__inline static double cagormsd_getv(cagormsd_t *r, double x)
 {
-  wl_t *wl = r->wl;
-  int i;
-
-  if ( x < r->xmin ) return -1;
-  i = (int) ( (x - r->xmin) / r->dx );
-  return ( i < wl->n ) ? i : -1;
+  return wl_getvf(r->wl, x);
 }
 
 
 
-__inline static double cagormsd_getv(cagormsd_t *r, double x)
+/* Metropolis algorithm */
+__inline static int cagormsd_metro(cagormsd_t *r,
+    double amp, double bet, double *prmsd)
 {
-  int i = cagormsd_id(r, x);
-  return ( i < 0 ) ? VMAX : r->wl->v[i];
+  cago_t *go = r->go;
+  int i, acc;
+  double xi[D], du, dutot;
+  double rmsd, urmsd, durmsd;
+
+  i = (int) (go->n * rand01());
+  xi[0] = amp * (rand01() * 2 - 1);
+  xi[1] = amp * (rand01() * 2 - 1);
+  xi[2] = amp * (rand01() * 2 - 1);
+  vinc(xi, go->x[i]);
+  du = cago_depot(go, go->x, i, xi);
+
+  rmsd = cago_rmsd2(go, go->x, i, xi);
+  urmsd = cagormsd_getv(r, rmsd);
+  durmsd = urmsd - cagormsd_getv(r, *prmsd);
+
+  dutot = bet * du + durmsd;
+  if ( dutot < 0 ) {
+    acc = 1;
+  } else {
+    double rr = rand01();
+    acc = ( rr < exp( -dutot ) );
+  }
+  if ( acc ) {
+    vcopy(go->x[i], xi);
+    go->epot += du;
+    *prmsd = rmsd;
+    //printf("%g, %g\n", rmsd, cago_rmsd(go, go->x, NULL));
+    //getchar();
+    return 1;
+  } else {
+    return 0;
+  }
 }
 
 

@@ -25,6 +25,21 @@
 
 
 
+/* return the larger of x and y */
+__inline static int intmax(int x, int y)
+{
+  return x > y ? x : y;
+}
+
+
+
+/* return the smaller of x and y */
+__inline static int intmin(int x, int y)
+{
+  return x < y ? x : y;
+}
+
+
 
 /* return the larger of a and b */
 __inline double dblmax(double a, double b)

@@ -116,7 +116,7 @@ __inline static int ljcls_metro(ljcls_t *c, double amp, double bet)
 {
   lj_t *lj = c->lj;
   int i, acc = 0;
-  double xi[D], r, du = 0, dutot, dvir = 0;
+  double xi[D], r, du, dutot, dvir = 0;
   double ucls, ducls = 0;
 
   i = lj_randmv(lj, xi, amp);

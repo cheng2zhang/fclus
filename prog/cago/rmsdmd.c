@@ -9,18 +9,17 @@ double kd1 = 1.0;
 double kd3 = 0.5;
 double nbe = 1.0;
 double nbc = 4.0;
-double rc = 5.0;
+double rc = 6.0;
 
+double tp = 1.1;
 double mddt = 0.002;
 double thdt = 0.1;
-double tp = 1.0;
-long nsteps = 1000000000L;
+long nsteps = 10000000000L;
 long nstrep = 100000;
 
 double rmsdmin = 1.0;
-double rmsdmax = 12.0;
-double rmsddel = 0.1;
-int rmsdcnt;
+double rmsdmax = 11.0;
+double rmsddel = 0.05; /* should be small enough */
 
 const char *fnpos = "go.pos";
 const char *fnvrmsd = "vrmsd.dat";
@@ -43,7 +42,6 @@ int main(void)
   wl_t *wl;
   hmc_t *hmc;
   long t;
-  int id;
   double fdat[2], rmsd = 0;
   double hmcacc = 0, hmctot = DBL_MIN;
 
@@ -56,14 +54,14 @@ int main(void)
   cago_initmd(go, 0, 0.01, tp);
 
   /* open a Wang-Landau object */
-  rmsdcnt = (int) ((rmsdmax - rmsdmin) / rmsddel + 0.5);
-  wl = wl_open(0, rmsdcnt, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
-  r = cagormsd_open(go, wl, rmsdmin, rmsddel);
+  wl = wl_openf(rmsdmin, rmsdmax, rmsddel,
+      wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  r = cagormsd_open(go, wl);
 
   /* change the degrees of freedom, with velocity swaps
    * the angular momenta are no longer conserved */
   if ( nvswaps > 0 ) {
-    go->dof = (go->n - 1) * 3;
+    go->dof = (go->n - 1) * D;
   }
 
   /* warm up the system such that RMSD > rmsdmin */
@@ -97,9 +95,7 @@ int main(void)
     }
 
     /* Wang-Landau updating */
-    if ( (id = cagormsd_id(r, rmsd)) >= 0 ) {
-      wl_add(wl, id);
-    }
+    wl_addf(wl, rmsd);
 
     if ( t % nstblk == 0 ) {
       wl_updatelnf(wl);

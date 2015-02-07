@@ -454,7 +454,7 @@ function startsimul()
 {
   stopsimul();
   getparams();
-  wl = new WL(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  wl = new WL(1, n + 1, 1, false, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   lj = new LJ(n, D, rho, rcdef, rcls, wl.v);
   lj.force();
   lj.mkgraph(lj.g);

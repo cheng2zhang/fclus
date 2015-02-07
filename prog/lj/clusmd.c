@@ -44,7 +44,7 @@ int main(void)
   lj = lj_open(n, rho, rcdef);
 
   /* make a Wang-Landau object */
-  wl = wl_open(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  wl = wl_openi(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   c = ljcls_open(lj, rcls, wl->v - 1);
 
   /* change the degrees of freedom, with velocity swaps
@@ -89,7 +89,7 @@ int main(void)
 
     /* add the cluster size to the histogram
      * and update the adaptive potential */
-    wl_add(wl, csize);
+    wl_addi(wl, csize);
 
     if ( t % nstblk == 0 ) {
       wl_updatelnf(wl);
@@ -106,8 +106,8 @@ int main(void)
     }
   }
   lj_close(lj);
-  wl_close(wl);
   ljcls_close(c);
+  wl_close(wl);
   hmc_close(hmc);
   fprintf(stderr, "rho %g, tp %g\n", rho, tp);
   return 0;
