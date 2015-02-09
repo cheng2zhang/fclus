@@ -2,7 +2,8 @@
 
 
 
-const char *fnpdb = "pdb/1VII.pdb";
+//const char *fnpdb = "pdb/1VII.pdb";
+const char *fnpdb = "pdb/1L2Y.pdb";
 double kb = 200.0;
 double ka = 40.0;
 double kd1 = 1.0;
@@ -11,14 +12,17 @@ double nbe = 1.0;
 double nbc = 4.0;
 double rc = 6.0;
 
-double tp = 1.1;
+//double tp = 1.1;
+double tp = 1.0;
 double amp = 0.2;
 double nsteps = 1e10;
 double nstrep = 1000000;
 
 double rmsdmin = 1.0;
-double rmsdmax = 11.0;
-double rmsddel = 0.05; /* should be small enough */
+//double rmsdmax = 11.0;
+//double rmsddel = 0.05;
+double rmsdmax = 6.0;
+double rmsddel = 0.1; /* should be small enough */
 
 const char *fnpos = "go.pos";
 const char *fnvrmsd = "vrmsd.dat";
@@ -84,11 +88,12 @@ int main(void)
 
     if ( fmod(t, nstrep) < 0.1 ) {
       double flatness = wl_getflatness(wl);
+      int nc = cago_ncontacts(go, go->x, -1, NULL, NULL);
       cago_writepos(go, go->x, go->v, fnpos);
       wl_save(wl, fnvrmsd);
-      fprintf(stderr, "%g: acc %.2f%%, ep %g, rmsd %g, flatness %g%%, lnf %g\n",
+      fprintf(stderr, "%g: acc %.2f%%, ep %g, rmsd %g, nc %d/%d, flatness %g%%, lnf %g\n",
           t, 100.0 * acc / tot, go->epot,
-          rmsd, 100.0 * flatness, wl->lnf);
+          rmsd, nc, go->ncont, 100.0 * flatness, wl->lnf);
       cago_rmcom(go, go->x, go->v);
     }
   }

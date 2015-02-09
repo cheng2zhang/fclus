@@ -76,13 +76,13 @@ option {
 }
 
 textarea {
-  width: 96%;
+  width: 92%;
   margin: 5px;
   padding: 2px 10px;
   color: #202055;
   background-color: #ffffdd;
-  font-family: "Lucida Console", Courier, "Courier New", Monospace;
-  font-weight: bold;
+  font-family: "Consola", Monospace;
+  font-size: x-small;
 }
 
 hr {
@@ -206,7 +206,7 @@ hr {
   left: 0px;
   top: 670px;
   width: 500px;
-  height: 240px;
+  height: 300px;
   margin-top: 0px;
   margin-bottom: 20px;
   /*display: inline-block; */
@@ -222,9 +222,9 @@ hr {
 
 #sinfo {
   position: absolute;
-  top: 670px;
-  width: 320px;
-  left: 620px;
+  top: 990px;
+  width: 250px;
+  /* left: 620px; */
   font-family: Lucida Console, Liberation Mono, FreeMono, monospace;
   font-size: 90%;
   text-align:left;

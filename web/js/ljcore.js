@@ -295,59 +295,10 @@ LJ.prototype.vv = function(dt)
 
 
 
-/* compute the kinetic energy */
-function lj_ekin(v, n)
-{
-  var i;
-  var ek = 0;
-  for ( i = 0; i < n; i++ ) {
-    ek += vsqr( v[i] );
-  }
-  return ek/2;
-}
-
-
-
-/* randomly swap the velocities of m pairs of particles */
-function lj_vscramble(v, n, m)
-{
-  var vt = newarr(D);
-
-  for ( var im = 0; im < m; im++ ) {
-    var i = Math.floor(rand01() * n);
-    var j = (i + 1 + Math.floor(rand01() * (n - 1))) % n;
-    vcopy(vt, v[i]);
-    vcopy(v[i], v[j]);
-    vcopy(v[j], vt);
-  }
-  return lj_ekin(v, n);
-}
-
-
-
 /* exact velocity rescaling thermostat */
-function lj_vrescale_low(v, n, dof, tp, dt)
-{
-  var i;
-  var c = (dt < 700) ? Math.exp(-dt) : 0;
-  var ek1 = lj_ekin(v, n);
-  var r = randgaus();
-  var r2 = randchisqr(dof - 1);
-  var ek2 = ek1 + (1 - c) * ((r2 + r * r) * tp / 2 - ek1)
-      + 2 * r * Math.sqrt(c * (1 - c) * ek1 * tp / 2);
-  ek2 = Math.max(ek2, 0.0);
-  var s = Math.sqrt(ek2 / ek1);
-  for (i = 0; i < n; i++) {
-    vsmul(v[i], s);
-  }
-  return ek2;
-}
-
-
-
 LJ.prototype.vrescale = function(tp, dt)
 {
-  return lj_vrescale_low(this.v, this.n, this.dof, tp, dt);
+  return md_vrescale(this.v, null, this.n, this.dof, tp, dt);
 };
 
 
@@ -544,14 +495,6 @@ LJ.prototype.dohmc = function(hmc)
   }
   this.csize = iarr[0];
   return acc;
-};
-
-
-
-LJ.prototype.chist_add = function(csize)
-{
-  this.chistall_cnt += 1;
-  this.chistall[ csize - 1 ] += 1;
 };
 
 

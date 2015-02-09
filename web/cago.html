@@ -2,32 +2,30 @@
 <html>
 <head>
   <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
-  <title> Cluster sampling for the Lennard-Jones fluid </title>
+  <title> &alpha;-carbon G&#333; model </title>
   <link rel="stylesheet" type="text/css" href="./css/default.css" />
   <script type="text/javascript" src="./js/dygraph-combined.js"></script>
   <script type="text/javascript" src="./js/util.js"></script>
   <script type="text/javascript" src="./js/mtrand.js"></script>
-  <script type="text/javascript" src="./js/graph.js"></script>
-  <script type="text/javascript" src="./js/mouse3d.js"></script>
   <script type="text/javascript" src="./js/draw.js"></script>
+  <script type="text/javascript" src="./js/mouse3d.js"></script>
   <script type="text/javascript" src="./js/hmc.js"></script>
   <script type="text/javascript" src="./js/wl.js"></script>
   <script type="text/javascript" src="./js/vct.js"></script>
   <script type="text/javascript" src="./js/mat.js"></script>
   <script type="text/javascript" src="./js/mdutil.js"></script>
-  <script type="text/javascript" src="./js/lj2d.js"></script>
-  <script type="text/javascript" src="./js/lj3d.js"></script>
-  <script type="text/javascript" src="./js/ljcore.js"></script>
-  <script type="text/javascript" src="./js/ljdraw.js"></script>
-  <script type="text/javascript" src="./js/ljmisc.js"></script>
-  <script type="text/javascript" src="./js/ljmain.js"></script>
+  <script type="text/javascript" src="./js/cagoutil.js"></script>
+  <script type="text/javascript" src="./js/cagocore.js"></script>
+  <script type="text/javascript" src="./js/cagormsd.js"></script>
+  <script type="text/javascript" src="./js/cagodraw.js"></script>
+  <script type="text/javascript" src="./js/cagomain.js"></script>
 </head>
 <body onload="init()">
 
 <div class="wrapper">
 
 <h2 class="center">
-  Sampling a flat histogram along the cluster size for the Lennard-Jones fluid
+  Sampling a flat histogram along the root-mean-squared deviation (RMSD)
 </h2>
 
 
@@ -42,7 +40,7 @@
     onchange="resizecontainer('containerscale')">
 
   <div id="simulbox">
-    <canvas id="ljbox" width="500" height="500"
+    <canvas id="gobox" width="500" height="500"
       style="border: 1px solid #cccccc;"
       onclick="pausesimul2()"></canvas>
   </div>
@@ -59,7 +57,7 @@
       class="smallbtn" style="color: #dd4020;"
     >&#9679;</span>
     <!-- Zoom: -->
-    <input id="ljscale" type="range" value="1.0"
+    <input id="goscale" type="range" value="1.0"
       min="0.05" max="3.0" step="0.01"
       style="width: 400px; border: 1px solid #cccccc;"
       onchange="changescale()">
@@ -72,54 +70,31 @@
 
   <div id="tabsrow">
     <span class="tab" onclick="showtab('system-params')">System</span>
+    <span class="tab" onclick="showtab('ff-params')">Force field</span>
     <span class="tab" onclick="showtab('md-params')">MD/HMC</span>
     <span class="tab" onclick="showtab('mc-params')">MC</span>
     <span class="tab" onclick="showtab('wl-params')">Wang-Landau</span>
     <span class="tab" onclick="showtab('visual-params')">Visualization</span>
   </div>
 
+
+
   <div class="params-panel" id="system-params">
   <div class="panel-title">System</div>
 
-  Dimension,
-  <span class="math"><i>D</i></span>:
-  <select id="dimension" onchange="changeparams()">
-    <option value="2">2</option>
-    <option value="3">3</option>
-  </select>.
-  &nbsp;
-
-  Number of particles,
-  <span class="math"><i>N</i></span>:
-  <input type="text" size="6" value="55" id="n"
-    onchange="changeparams()">.
-  &nbsp;
-  <br>
-
-  Density,
-  <span class="math"><i>&rho;</i></span>:
-  <input type="text" size="6" value="0.35" id="density"
-    onchange="changeparams()">.
-  &nbsp;
-
-  Temperature,
-  <span class="math"><i>T</i></span>:
-  <input type="text" size="6" value="1.5" id="temperature"
-    onchange="changeparams()">.
-  &nbsp;
-  <br>
-
-  Cutoff,
-  <span class="math"><i>r<sub>c</sub></i></span>:
-  <input type="text" size="6" value="2.5" id="rcutoff"
-    onchange="changeparams()">.
-  &nbsp;
-
-  Clustering distance,
-  <span class="math"><i>r<sub>m</sub></i></span>:
-  <input type="text" size="6" value="1.6" id="rcluster"
-    onchange="changeparams()">.
-  &nbsp;
+  PDB file
+  <select id="pdbpreset" onchange="changeparams()">
+    <option value="empty">Empty</option>
+    <option value="1LE1">Trpzip2, 1LE1</option>
+    <option value="1LY2" selected>Trp-cage, 1LY2</option>
+    <option value="2CI2">CI2, 2CI2</option>
+    <option value="1VII">Villin head-piece, 1VII</option>
+    <option value="1KIK">SH3 domain, 1KIK</option>
+    <option value="2A3D">&alpha;3D, 2A3D</option>
+    <option value="4MBN">Myoglobin, 4MBN</option>
+    <option value="user">User</option>
+  </select>
+  <textarea rows="11" id="strpdb" wrap="off"></textarea>
   <br>
 
   Simulation method
@@ -129,11 +104,78 @@
   </select>
   <br>
 
-  <input type="checkbox" id="changeseed" onchange="changeparams()">
-  Dynamically change the cluster seed.
+  </div>
+
+
+
+  <div class="params-panel" id="ff-params">
+  <div class="panel-title">Force field</div>
+
+  Bond length
+  <span class="math">(<i>i</i>, <i>i</i>+1)</span>,
+  <span class="math"><i>k<sub>b</sub></i></span>:
+  <input type="text" size="6" value="200.0" id="kb"
+    onchange="changeparams()">.
+  &nbsp;
   <br>
 
-  </div> <!-- panel -->
+  Bond angle
+  <span class="math">(<i>i</i>, <i>i</i>+1, <i>i</i>+2)</span>,
+  <span class="math"><i>k<sub>a</sub></i></span>:
+  <input type="text" size="6" value="40.0" id="ka"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Dihedral
+  <span class="math">(<i>i</i>, <i>i</i>+1, <i>i</i>+2, <i>i</i>+3)</span>,
+  <span class="math"><i>k</i><sub><i>d</i>1</sub></span>:
+  <input type="text" size="6" value="1.0" id="kd1"
+    onchange="changeparams()">,
+  &nbsp;
+
+  <span class="math"><i>k</i><sub><i>d</i>3</sub></span>:
+  <input type="text" size="6" value="0.5" id="kd3"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Nonbonded,
+  <span class="math"><i>&epsilon;</i></span>:
+  <input type="text" size="6" value="1.0" id="nbe"
+    onchange="changeparams()">.
+  &nbsp;
+
+  <span class="math"><i>&sigma;</i></span>:
+  <input type="text" size="6" value="4.0" id="nbc"
+    onchange="changeparams()"> &#8491;.
+  &nbsp;
+  <br>
+
+  Cutoff distance for contacts,
+  <span class="math"><i>r<sub>c</sub></i></span>:
+  <input type="text" size="6" value="6.0" id="rc"
+    onchange="changeparams()"> &#8491;.
+  &nbsp;
+  <br>
+
+  Contact atoms:
+  <select id="contact_type" onchange="changeparams()">
+    <option value="CA"><i>&alpha;</i>-carbon</option>
+    <option value="Heavy" selected>Heavy (non-hydrogen)</option>
+    <option value="All">All</option>
+  </select>
+
+  <br>
+
+  Temperature,
+  <span class="math"><i>T</i></span>:
+  <input type="text" size="6" value="1.0" id="temperature"
+    onchange="changeparams()">.
+  &nbsp;
+
+  </div>
+
 
 
 
@@ -141,7 +183,7 @@
   <div class="panel-title">Molecular dynamics (MD) with hybrid MC (HMC)</div>
 
   Number of MD steps per second:
-  <input type="text" size="10" value="2000"
+  <input type="text" size="10" value="10000"
     id="nstepspersecmd" onchange="changeparams()">.
   <br>
 
@@ -171,12 +213,12 @@
   <div class="panel-title">Monte Carlo (MC)</div>
 
   Number of MC steps per second:
-  <input type="text" size="10" value="5000"
+  <input type="text" size="10" value="50000"
     id="nstepspersecmc" onchange="changeparams()">.
   <br>
 
   MC move size:
-  <input type="text" size="6" value="0.5" id="mcamp"
+  <input type="text" size="6" value="0.2" id="mcamp"
     onchange="changeparams()">.
   <br>
 
@@ -220,15 +262,26 @@
   &nbsp;
   <br>
 
+  RMSD range:
+  (<input type="text" size="6" value="1.0"
+    id="rmsdmin" onchange="changeparams()">,
+  &nbsp;
+
+  <input type="text" size="6" value="6.0"
+    id="rmsdmax" onchange="changeparams()">).
+  &nbsp;
+  <br>
+
+  Bin size of RMSD:
+  <input type="text" size="6" value="0.1"
+    id="rmsddel" onchange="changeparams()">.
+  &nbsp;
+  <br>
   </div>
 
 
   <div class="params-panel" id="visual-params">
   <div class="panel-title"> Visualization </div>
-  <input type="checkbox" id="groupcluster"
-   onchange="paint()">
-  Group particles in the same cluster.
-  <br>
 
   <input type="checkbox" id="orthographic"
    onchange="paint()">
@@ -247,8 +300,6 @@
   </select> milliseconds.
 
   </div>
-
-
 
 
 

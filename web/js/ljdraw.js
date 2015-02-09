@@ -5,15 +5,6 @@
 
 
 
-function drawLineFancy(ctx, xi, yi, xj, yj)
-{
-  drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
-  drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
-  drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
-}
-
-
-
 /* draw all atoms in the box */
 function ljdraw2d(lj, target, xin, userscale, adjmat, colors)
 {
@@ -64,7 +55,7 @@ function ljdraw2d(lj, target, xin, userscale, adjmat, colors)
       if ( !adjmat[i][j] ) continue;
       var xj = Math.floor(  (xin[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
       var yj = Math.floor( -(xin[j][1] - lj.l * 0.5) * scale + height * 0.5 );
-      drawLineFancy(ctx, xi, yi, xj, yj);
+      drawLineGradient(ctx, xi, yi, xj, yj);
     }
   }
 
@@ -239,7 +230,8 @@ function ljdraw3d(lj, target, xin, userscale, adjmat, colors)
     var scl = scale * zscl;
     var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scl + width  * 0.5 );
     var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scl + height * 0.5 );
-    var rz = Math.floor( 0.5 * scl );
+    var rad = 0.5;
+    var rz = Math.floor( rad * scl );
     ic = lj.g.cid[ idmap[i] ];
     var color = colors[ic];
     if ( ic === 0 ) {
@@ -272,10 +264,15 @@ function ljdraw3d(lj, target, xin, userscale, adjmat, colors)
         if ( !adjmat[id][jd] ) continue;
         j = invmap[ jd ];
         if ( xyz[j][2] < xyz[i][2] ) continue;
+
+        var ri = getContactPoint(xyz[i], xyz[j], rad);
+        xi = Math.floor(  (ri[0] - lj.l * 0.5) * scli + width  * 0.5 );
+        yi = Math.floor( -(ri[1] - lj.l * 0.5) * scli + height * 0.5 );
+
         sclj = scale * getzscale(xyz[j], zmin, zmax, ortho);
         xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
         yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
-        drawLineFancy(ctx, xi, yi, xj, yj);
+        drawLineGradient(ctx, xi, yi, xj, yj);
       }
     }
   }

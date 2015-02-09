@@ -1,4 +1,4 @@
-/* hybrid MC */
+/* hybrid MC routines */
 
 
 

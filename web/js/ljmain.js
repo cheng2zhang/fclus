@@ -6,8 +6,10 @@
 
 
 
-var wl = null;
 var lj = null;
+var wl = null;
+var hmc = null;
+
 var n = 55;
 var rho = 0.7;
 var tp = 1.5;
@@ -35,23 +37,16 @@ var nstepsmc = 0;
 var mctot = 0.0;
 var mcacc = 0.0;
 
-var sum1 = 1e-30;
-var sumU = 0.0;
-var sumP = 0.0;
-
 var wl_lnf0 = 0.01;
 var wl_flatness = 0.3;
 var wl_frac = 0.5;
 var invt_c = 1.0;
 
-var hmc = null;
-
 var changeseed = true;
 
 var histplot = null;
-var vclsplot = null;
+var vplot = null;
 
-var userscale = 1.0;
 var adjustscale = 1.0;
 var xpaint = null; // coordinates used for painting
 var randcolors = null; // random colors for each cluster
@@ -93,7 +88,7 @@ function getparams()
 
   changeseed = grab("changeseed").checked;
 
-  userscale = get_float("ljscale");
+  mousescale = get_float("ljscale");
 
   randcolors = newarr(n + 1);
   for ( var ic = 0; ic <= n; ic++ ) {
@@ -105,74 +100,22 @@ function getparams()
 
 function changescale()
 {
-  userscale = get_float("ljscale");
+  mousescale = get_float("ljscale");
   paint();
 }
 
 
 
-/* for the mouse wheel event */
-function ljwheel(e){
-  var delta = 0; // positive for scrolling up
-  e = e || window.event;
-  if ( e.wheelDelta ) { // IE/Opera
-    delta = e.wheelDelta / 120;
-  } else if ( e.detail ) { // Firefox
-    delta = -e.detail / 3;
-  }
-  if ( delta > 0 ) {
-    userscale *= 1.05;
-  } else if ( delta < 0 ) {
-    userscale *= 0.95;
-  }
-  grab("ljscale").value = userscale;
-  //console.log("wheel", delta);
-  if ( e.preventDefault ) {
-    e.preventDefault();
-  }
-  e.returnValue = false;
-  paint(); // defined later
-}
-
-
-
-/* install the mouse wheel event */
-function installwheel(target, handler)
-{
-  if ( target.addEventListener ) {
-    // for IE9+, Chrome, Safari, Opera
-    target.addEventListener('mousewheel', handler, false);
-    // for Firefox
-    target.addEventListener('DOMMouseScroll', handler, false);
-  } else { // for IE 6/7/8
-    target.attachEvent("onmousewheel", handler);
-  }
-}
-
-
-
-function installmouse()
-{
-  var target = grab("ljbox");
-  target.onmousedown = ljmousedown;
-  target.onmouseup = ljmouseup;
-  target.onmousemove = ljmousemove;
-  installwheel(target, ljwheel);
-}
-
-
-
 /* return a string of the current simulation details */
-function getinfo()
+function getsinfo()
 {
-  var sinfo = "", clist = "";
+  var s = "", clist = "";
 
   var flatness = wl.getflatness();
-  sinfo += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + ", ";
-  sinfo += 'flatness: ' + roundto(flatness * 100, 2) + "%. ";
-  sinfo += 'seed: ' + lj.cseed + "";
-  sinfo += '<br>';
-  sinfo += 'clusters: ';
+  s += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + ".<br>";
+  s += 'flatness: ' + roundto(flatness * 100, 2) + "%.<br>";
+  s += 'seed: ' + lj.cseed + ".<br>";
+  s += 'clusters: ';
   for ( var ic = 0; ic < lj.g.nc; ic++ ) {
     clist += "" + lj.g.csize[ic];
     if ( ic < lj.g.nc - 1 ) {
@@ -186,8 +129,8 @@ function getinfo()
     clist += "&nbsp;";
     nlen += 1;
   }
-  sinfo += clist + "<br>";
-  return sinfo;
+  s += clist + "<br>";
+  return s;
 }
 
 
@@ -208,24 +151,17 @@ function domd()
     if ( nsthmc > 0 && istep % nsthmc === 0 ) {
       hmctot += 1;
       hmcacc += lj.dohmc(hmc);
-      lj.ekin = lj_vscramble(lj.v, lj.n, nvswaps);
+      lj.ekin = md_vscramble(lj.v, null, lj.n, nvswaps);
     }
     lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
     wl.add( lj.csize );
-    lj.chist_add( lj.csize );
     wl.updatelnf();
-
-    sum1 += 1.0;
-    sumU += lj.epot / lj.n;
-    sumP += lj.calcp(tp);
   }
   wl.trimv();
   nstepsmd += nstepspfmd;
   sinfo += 'step ' + nstepsmd + ", ";
-  sinfo += "hmcacc: " + roundto(100.0 * hmcacc / hmctot, 2) + "%, ";
-  //sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
-  //sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
-  sinfo += getinfo();
+  sinfo += "hmcacc: " + roundto(100.0 * hmcacc / hmctot, 2) + "%.<br>";
+  sinfo += getsinfo();
   return sinfo;
 }
 
@@ -245,7 +181,6 @@ function domc()
     }
     lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
     wl.add( lj.csize );
-    lj.chist_add( lj.csize );
     if ( wl.updatelnf() ) {
       // adjust the MC move size, to make acceptance ratio close to 0.5
       if ( grab("adjmcamp").checked ) {
@@ -260,17 +195,12 @@ function domc()
       mctot = 1e-30;
       mcacc = 0;
     }
-    sum1 += 1.0;
-    sumU += lj.epot / lj.n;
-    sumP += lj.calcp(tp);
   }
   wl.trimv();
   nstepsmc += nstepspfmc;
   sinfo += "step: " + nstepsmc + ", ";
-  sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%, ";
-  //sinfo += '<span class="math"><i>U</i>/<i>N</i></span>: ' + roundto(sumU/sum1, 3) + ", ";
-  //sinfo += '<span class="math"><i>P</i></span>: ' + roundto(sumP/sum1, 3);
-  sinfo += getinfo();
+  sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%.<br>";
+  sinfo += getsinfo();
   return sinfo;
 }
 
@@ -285,7 +215,7 @@ function normalize_hist(arr, n)
     m = Math.max(m, 1.0 * arr[i]);
   }
   for ( i = 0; i < n; i++ ) {
-    hs[i] = 100 * arr[i] / m;
+    hs[i] = 1.0 * arr[i] / m;
   }
   return hs;
 }
@@ -293,15 +223,15 @@ function normalize_hist(arr, n)
 
 
 /* update the histogram plot */
-function updatehistplot(lj, wl)
+function updatehistplot(wl)
 {
   var i;
   var dat = "Cluster size,Histogram (all time),Histogram (this stage)\n";
 
-  var chsall = normalize_hist(lj.chistall, lj.n);
-  var chs    = normalize_hist(wl.h,        lj.n);
+  var chhs = normalize_hist(wl.hh, wl.n);
+  var chs  = normalize_hist(wl.h, wl.n);
   for ( i = 0; i < lj.n; i++ )
-    dat += "" + (i+1) + "," + chsall[i] + "," + chs[i] + "\n";
+    dat += "" + (i+1) + "," + chhs[i] + "," + chs[i] + "\n";
   if ( histplot === null ) {
     var h = grab("ljbox").height / 2 - 5;
     var w = h * 3 / 2;
@@ -327,13 +257,13 @@ function updatehistplot(lj, wl)
 
 
 /* update the cluster potential plot */
-function updatevclsplot(lj)
+function updatevplot(wl)
 {
   var i;
   var dat = "Cluster size,potential\n";
-  for ( i = 0; i < lj.n; i++ )
-    dat += "" + (i+1) + "," + lj.vcls[i] + "\n";
-  if ( vclsplot === null ) {
+  for ( i = 0; i < wl.n; i++ )
+    dat += "" + (i+1) + "," + wl.v[i] + "\n";
+  if ( vplot === null ) {
     var h = grab("ljbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
@@ -348,9 +278,9 @@ function updatevclsplot(lj)
       width: w,
       height: h
     };
-    vclsplot = new Dygraph(grab("vclsplot"), dat, options);
+    vplot = new Dygraph(grab("vplot"), dat, options);
   } else {
-    vclsplot.updateOptions({ file: dat });
+    vplot.updateOptions({ file: dat });
   }
 }
 
@@ -358,7 +288,9 @@ function updatevclsplot(lj)
 
 function paint()
 {
-  if ( !lj ) return;
+  if ( !lj ) {
+    return;
+  }
 
   var groupclus = grab("groupcluster").checked;
   var paintmat = null; // adjacency matrix for visualization
@@ -375,7 +307,7 @@ function paint()
     adjustscale = 1.0;
   }
 
-  var s = userscale * adjustscale;
+  var s = mousescale * adjustscale;
   if ( lj.dim === 2 ) {
     ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors);
   } else if ( lj.dim === 3 ) {
@@ -407,8 +339,8 @@ function pulse()
 
   paint();
 
-  updatehistplot(lj, wl);
-  updatevclsplot(lj);
+  updatehistplot(wl);
+  updatevplot(wl);
 }
 
 
@@ -424,9 +356,6 @@ function stopsimul()
   hmcacc = 0.0;
   mctot = 1e-30;
   mcacc = 0.0;
-  sum1 = 1e-30;
-  sumU = 0.0;
-  sumP = 0.0;
   munit(viewmat);
 }
 
@@ -460,7 +389,7 @@ function startsimul()
   hmc = new HMC(lj.n, 1, 1);
   hmc.push(lj.x, lj.v, lj.f,
       [ lj.g.csize[ lj.g.cid[ lj.cseed ] ] ], [lj.epot]);
-  installmouse();
+  installmouse("ljbox", "ljscale");
   ljtimer = setInterval(
     function(){ pulse(); },
     timer_interval);
@@ -550,35 +479,45 @@ function resizecontainer(a)
   }
   ctx.font = "24px Verdana";
   ctx.fillText("Click to start", w/2-40, h/2-10);
+
+  var hsbar = 20; // height of the global scaling bar
+  var hcbar = 30; // height of the control bar
+  var htbar = 20; // height of the tabs bar
+  var wr = h*3/4; // width of the plots
+  var wtab = w; // width of the tabs
+  var htab = 240;
+
   grab("simulbox").style.width = "" + w + "px";
   grab("simulbox").style.height = "" + h + "px";
-  grab("simulbox").style.top = "20px";
-  grab("controlbox").style.top = "" + (h + 20) + "px";
+  grab("simulbox").style.top = "" + hsbar + "px";
+  grab("controlbox").style.top = "" + (h + hsbar) + "px";
   grab("ljscale").style.width = "" + (w - 100) + "px";
   histplot = null;
   grab("histplot").style.left = "" + w + "px";
-  grab("histplot").style.width = "" + h*3/4 + "px";
+  grab("histplot").style.width = "" + wr + "px";
+  grab("vplot").style.top = "" + hcbar + "px";
   grab("histplot").style.height = "" + h/2 + "px";
-  vclsplot = null;
-  grab("vclsplot").style.left = "" + w + "px";
-  grab("vclsplot").style.width = "" + h*3/4 + "px";
-  grab("vclsplot").style.top = "" + (h/2 + 20) + "px";
-  grab("vclsplot").style.height = "" + h/2 + "px";
-  grab("tabsrow").style.top = "" + (h + 50) + "px";
-  grab("tabsrow").style.width = "" + w + "px";
+  vplot = null;
+  grab("vplot").style.left = "" + w + "px";
+  grab("vplot").style.width = "" + wr + "px";
+  grab("vplot").style.top = "" + (h/2 + hcbar) + "px";
+  grab("vplot").style.height = "" + h/2 + "px";
+  grab("tabsrow").style.top = "" + (h + hsbar + hcbar) + "px";
+  grab("tabsrow").style.width = "" + wtab + "px";
   var c = grab("container").childNodes;
   var i;
   /* tabs */
   for ( i = 0; i < c.length; i++ ) {
     if ( c[i].className === "params-panel" ) {
-      c[i].style.top = "" + (h + 70) + "px";
+      c[i].style.top = "" + (h + hsbar + hcbar + htbar) + "px";
       c[i].style.width = "" + (w - 20) + "px";
+      c[i].style.height = "" + htab + "px";
     }
   }
-  grab("sinfo").style.top = "" + (h + 70) + "px";
+  grab("sinfo").style.top = "" + (h + hsbar + hcbar + htbar) + "px";
   grab("sinfo").style.left = "" + (w + 10) + "px";
-  grab("container").style.height = "" + (h + 320) + "px";
-  grab("container").style.width = "" + (w + h*3/4) + "px";
+  grab("container").style.height = "" + (h + hsbar + hcbar + htbar + htab) + "px";
+  grab("container").style.width = "" + (w + wr) + "px";
 }
 
 
