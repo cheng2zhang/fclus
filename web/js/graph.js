@@ -59,7 +59,7 @@ Graph.prototype.linked = function(i, j)
 /* g = g2 */
 Graph.prototype.copy = function(g2)
 {
-  var i, j, n = g2.n;
+  var i, j, ic, n = g2.n;
 
   if ( this.n != n ) {
     throw new Error("cannot copy graphs of different sizes " + this.n + " vs " + n);
@@ -74,6 +74,9 @@ Graph.prototype.copy = function(g2)
   for ( i = 0; i < n; i++ ) {
     this.csize[i] = g2.csize[i];
     this.cid[i] = g2.cid[i];
+  }
+  for ( ic = 0; ic < this.nc; ic++ ) {
+    this.cseed[ic] = g2.cseed[ic];
   }
   return 0;
 }
@@ -91,9 +94,10 @@ Graph.prototype.clus = function(seed)
   max = 0;
   for ( ic = 0; ; ic++ ) {
     if ( ic === 0 && seed !== undefined && seed !== null ) {
+      // seed of the first cluster
       i = seed;
     } else {
-      // find the first free atom
+      // find the first free atom, whose cid is negative
       for ( i = 0; i < n; i++ )
         if ( this.cid[i] < 0 )
           break;
@@ -123,6 +127,13 @@ Graph.prototype.clus = function(seed)
     }
   }
   this.nc = ic;
+  for ( ic = 0; ic < this.nc; ic++ ) {
+    i = this.cseed[ic];
+    var ic2 = this.cid[i];
+    if ( ic2 !== ic ) {
+      console.log("ic", ic, "ic2", ic2, "seed", i);
+    }
+  }
 }
 
 
@@ -134,6 +145,21 @@ Graph.prototype.clus_print = function()
     s += "" + this.csize[i] + " ";
   }
   return s;
+}
+
+
+
+function checkgraph(g)
+{
+  console.log(g.nc, "clusters");
+  for ( var ic = 0; ic < g.nc; ic++ ) {
+    var i = lj.g.cseed[ic];
+    var ic2 = lj.g.cid[i];
+    if ( ic != ic2 ) {
+      console.log("ic", ic, "seed", i, "cid", ic2);
+      throw new Error("bad cluster");
+    }
+  }
 }
 
 

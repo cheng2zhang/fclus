@@ -9,6 +9,7 @@ clean:
 	rstrip.py -Rlv
 
 excludes = --exclude=".*" --exclude="*~" --exclude="bak" \
+	   --exclude="*.dat" --exclude="*.pos" \
 	   --exclude="tmp*" --exclude="_*"
 
 Dropbox: clean

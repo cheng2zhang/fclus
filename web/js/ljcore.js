@@ -592,7 +592,7 @@ function lj_wrapclus(lj, xin, xout, g)
 {
   var ic, i, j, n = lj.n, head, end;
   var l = lj.l, invl = 1 / l, dx = newarr(lj.dim);
-  var edges = [];
+  var mat = newarr2d(n, n);
 
   for ( i = 0; i < n; i++ ) {
     vcopy(xout[i], xin[i]);
@@ -635,7 +635,8 @@ function lj_wrapclus(lj, xin, xout, g)
           g.queue[ end++ ] = j;
           vpbc( vdiff(dx, xout[j], xout[i]), l, invl );
           vinc( vcopy(xout[j], xout[i]), dx );
-          edges.push( [i, j] );
+          mat[i][j] = 1;
+          mat[j][i] = 1;
         }
       }
     }
@@ -644,29 +645,31 @@ function lj_wrapclus(lj, xin, xout, g)
     }
   }
 
-  return edges;
+  return mat;
 }
 
 
 
 
-/* list edges */
-function lj_listedges(lj, x)
+/* get the clustering adjacency matrix */
+function lj_getclsmat(lj, x)
 {
   var i, j, n = lj.n;
-  var edges = [], dx = newarr(lj.dim), dr2, rm2 = lj.rcls * lj.rcls;
+  var dx = newarr(lj.dim), dr2, rm2 = lj.rcls * lj.rcls;
 
+  var mat = newarr2d(n, n);
   for ( i = 0; i < n; i++ ) {
     for ( j = i + 1; j < n; j++ ) {
       dr2 = vsqr( vdiff(dx, x[i], x[j]) );
       // if i and j are properly wrapped
       // we add a bond between them
       if ( dr2 < rm2 ) {
-        edges.push( [i, j] );
+        mat[i][j] = 1;
+        mat[j][i] = 1;
       }
     }
   }
-  return edges;
+  return mat;
 }
 
 

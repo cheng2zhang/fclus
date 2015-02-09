@@ -5,8 +5,17 @@
 
 
 
+function drawLineFancy(ctx, xi, yi, xj, yj)
+{
+  drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
+  drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
+  drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
+}
+
+
+
 /* draw all atoms in the box */
-function ljdraw2d(lj, target, xin, userscale, edges, colors)
+function ljdraw2d(lj, target, xin, userscale, adjmat, colors)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
@@ -47,18 +56,15 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
     }
   }
 
-  // draw lines that were used to group clusters
-  if ( edges ) {
-    for ( ic = 0; ic < edges.length; ic++ ) {
-      i = edges[ic][0];
-      j = edges[ic][1];
-      var xi = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
-      var yi = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+  // draw lines that are used to group clusters
+  for ( i = 0; i < lj.n; i++ ) {
+    var xi = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
+    var yi = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
+    for ( j = 0; j < lj.n; j++ ) {
+      if ( !adjmat[i][j] ) continue;
       var xj = Math.floor(  (xin[j][0] - lj.l * 0.5) * scale + width  * 0.5 );
       var yj = Math.floor( -(xin[j][1] - lj.l * 0.5) * scale + height * 0.5 );
-      drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
-      drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
-      drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
+      drawLineFancy(ctx, xi, yi, xj, yj);
     }
   }
 
@@ -79,7 +85,7 @@ function ljdraw2d(lj, target, xin, userscale, edges, colors)
       // add some shade around the root vertices
       paintBall(ctx, x, y, radius * 1.4, transpColor(color, 0.0), color, 0, 0, radius * 0.8);
     }
-    var spotcolor = "#e0e0e0";
+    var spotcolor = lightenColor(color, 0.3);
     paintBall(ctx, x, y, radius, color, spotcolor);
   }
 }
@@ -145,17 +151,17 @@ function sortbyz(x)
 function getzscale(r, zmin, zmax, ortho)
 {
   if ( ortho ) {
-    return 0.7;
+    return 0.8;
   } else {
     var zf = (r[2] - zmin) / (zmax - zmin);
-    return 0.7 + 0.3 * zf;
+    return 0.8 + 0.2 * zf;
   }
 }
 
 
 
 /* draw all atoms in the box */
-function ljdraw3d(lj, target, xin, userscale, edges, colors)
+function ljdraw3d(lj, target, xin, userscale, adjmat, colors)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
@@ -171,7 +177,7 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
   ctx.fillRect(0, 0, width, height);
 
   var ret, xyz, idmap, invmap, zmin, zmax;
-  var i, j, ic;
+  var i, j, ic, id, jd;
   var xi, yi, scli, xj, yj, sclj;
 
   // draw the box
@@ -217,33 +223,11 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
   zmax = xyz[lj.n - 1][2];
   zmin = xyz[0][2];
 
-  // draw lines that were used to group clusters
-  if ( edges ) {
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = '#808080';
-    for ( ic = 0; ic < edges.length; ic++ ) {
-      i = invmap[ edges[ic][0] ];
-      scli = scale * getzscale(xyz[i], zmin, zmax, ortho);
-      xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
-      yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
-
-      j = invmap[ edges[ic][1] ];
-      sclj = scale * getzscale(xyz[j], zmin, zmax, ortho);
-      xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
-      yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
-      drawLine(ctx, xi, yi, xj, yj, '#aaaaaa', 8);
-      drawLine(ctx, xi, yi, xj, yj, '#bbbbbb', 4);
-      drawLine(ctx, xi, yi, xj, yj, '#cccccc', 2);
-    }
-  }
-
   // determine which particles to circle around
-  var ccnt = newarr(lj.g.nc);
   var mark = newarr(lj.n);
   for ( i = 0; i < lj.n; i++ ) {
     ic = lj.g.cid[i];
-    mark[i] = ( ccnt[ic] < 1 );
-    ccnt[ic] = 1;
+    mark[i] = ( lj.g.cseed[ic] == i );
   }
 
   // draw each particle
@@ -269,10 +253,31 @@ function ljdraw3d(lj, target, xin, userscale, edges, colors)
       // add some shade around the root vertices
       paintBall(ctx, x, y, rz * 1.3, transpColor(color, 0.0), color, 0, 0, rz * 0.8);
     }
-    var spotcolor = "#e0e0e0";
     zscl = getzscale(xyz[i], zmin, zmax, false);
     var color2 = darkenColor(color, zscl);
+    var spotcolor = lightenColor(color2, 0.3);
     paintBall(ctx, x, y, rz, color2, spotcolor);
+
+    // draw lines that were used to group clusters
+    if ( adjmat ) {
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#808080';
+
+      id = idmap[i];
+      scli = scale * getzscale(xyz[i], zmin, zmax, ortho);
+      xi = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scli + width  * 0.5 );
+      yi = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scli + height * 0.5 );
+
+      for ( jd = 0; jd < lj.n; jd++ ) {
+        if ( !adjmat[id][jd] ) continue;
+        j = invmap[ jd ];
+        if ( xyz[j][2] < xyz[i][2] ) continue;
+        sclj = scale * getzscale(xyz[j], zmin, zmax, ortho);
+        xj = Math.floor(  (xyz[j][0] - lj.l * 0.5) * sclj + width  * 0.5 );
+        yj = Math.floor( -(xyz[j][1] - lj.l * 0.5) * sclj + height * 0.5 );
+        drawLineFancy(ctx, xi, yi, xj, yj);
+      }
+    }
   }
 }
 

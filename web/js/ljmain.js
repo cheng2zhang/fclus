@@ -54,7 +54,6 @@ var vclsplot = null;
 var userscale = 1.0;
 var adjustscale = 1.0;
 var xpaint = null; // coordinates used for painting
-var paintedges = null; // edges for visualization
 var randcolors = null; // random colors for each cluster
 var seedcolor = "#ff2010"; // color of the special cluster
 
@@ -362,25 +361,25 @@ function paint()
   if ( !lj ) return;
 
   var groupclus = grab("groupcluster").checked;
-  paintedges = null;
+  var paintmat = null; // adjacency matrix for visualization
   if ( groupclus ) {
     xpaint = lj.x2;
-    paintedges = lj_wrapclus(lj, lj.x, xpaint, lj.g2);
+    paintmat = lj_wrapclus(lj, lj.x, xpaint, lj.g2);
     // if we group particles according to clusters
     // some particles will flow out of the box
     // so we need a smaller scale
     adjustscale = 0.7;
   } else {
     xpaint = lj.x;
-    paintedges = lj_listedges(lj, lj.x); // list edges
+    paintmat = lj_getclsmat(lj, lj.x);
     adjustscale = 1.0;
   }
 
   var s = userscale * adjustscale;
   if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", xpaint, s, paintedges, randcolors);
+    ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors);
   } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", xpaint, s, paintedges, randcolors);
+    ljdraw3d(lj, "ljbox", xpaint, s, paintmat, randcolors);
   }
 }
 
