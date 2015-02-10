@@ -175,7 +175,6 @@ function getsinfo()
 function domd()
 {
   var istep, sinfo = fmtseq(go.iaa);
-  var rmsd;
 
   for ( istep = 0; istep < nstepspfmd; istep++ ) {
     go.vv(1.0, mddt);
@@ -186,7 +185,10 @@ function domd()
       hmctot += 1;
       hmcacc += go.dohmc(hmc, wl);
       go.ekin = md_vscramble(go.v, go.m, go.n, nvswaps);
+    } else {
+      go.rmsd = go.getRMSD(go.x);
     }
+
     wl.add( go.rmsd );
     wl.updatelnf();
   }
@@ -204,7 +206,6 @@ function domd()
 function domc()
 {
   var istep, sinfo = fmtseq(go.iaa);
-  var rmsd;
 
   for ( istep = 0; istep < nstepspfmc; istep++ ) {
     mctot += 1.0;
@@ -323,7 +324,8 @@ function updatevplot(wl)
 function paint()
 {
   if ( go ) {
-    cagodraw(go, "gobox", mousescale);
+    var ballscale = get_float("ballscale", 1.0);
+    cagodraw(go, "gobox", mousescale, ballscale);
   }
 }
 

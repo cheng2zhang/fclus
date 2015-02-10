@@ -48,16 +48,18 @@ CaGo.prototype.getRMSD2 = function(x, i, xi)
 CaGo.prototype.metrormsd = function(amp, bet)
 {
   var i = Math.floor(this.n * rand01());
-  var xi = [amp * (rand01() * 2 - 1),
-            amp * (rand01() * 2 - 1),
-            amp * (rand01() * 2 - 1)];
-  vinc(xi, this.x[i]);
-  var du = this.depot(this.x, i, xi), acc;
+  var xi = newarr(D);
+  for ( var d = 0; d < D; d++ ) {
+    xi[d] = this.x[i][d] + amp * (rand01() * 2 - 1);
+  }
+  var du = this.depot(this.x, i, xi);
 
   var rmsd0 = this.rmsd;
   var rmsd1 = this.getRMSD2(this.x, i, xi);
   var dv = wl.getv( rmsd1 ) - wl.getv( rmsd0 );
+
   var dutot = bet * du + dv;
+  var acc;
 
   if ( dutot < 0 ) {
     acc = 1;
@@ -68,6 +70,10 @@ CaGo.prototype.metrormsd = function(amp, bet)
   if ( acc ) {
     vcopy(this.x[i], xi);
     this.epot += du;
+    //if ( Math.abs(this.epot - this.force(this.x, this.x1)) > 1e-6 ) {
+    //  stopsimul();
+    //  throw new Error("e mismatch " + this.epot + " " + this.force(this.x, this.x1) + " " + du);
+    //}
     this.rmsd = rmsd1;
     return 1;
   } else {

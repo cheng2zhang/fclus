@@ -16,13 +16,13 @@
 typedef struct {
   cago_t *go;
   wl_t *wl;
-} cagormsd_t;
+} cagonc_t;
 
 
 
-__inline static cagormsd_t *cagormsd_open(cago_t *go, wl_t *wl)
+__inline static cagonc_t *cagonc_open(cago_t *go, wl_t *wl)
 {
-  cagormsd_t *r;
+  cagonc_t *r;
 
   xnew(r, 1);
   r->go = go;
@@ -32,23 +32,24 @@ __inline static cagormsd_t *cagormsd_open(cago_t *go, wl_t *wl)
 
 
 
-__inline static void cagormsd_close(cagormsd_t *r)
+__inline static void cagonc_close(cagonc_t *r)
 {
   free(r);
 }
 
 
 
-__inline static double cagormsd_getv(cagormsd_t *r, double x)
+__inline static double cagonc_getv(cagonc_t *r, int x)
 {
-  return wl_getvf(r->wl, x);
+  return wl_getvi(r->wl, x);
 }
 
 
 
-/* compute the RMSD with a moved particle */
-__inline static double cago_rmsd2(cago_t *go,
-  double (*x)[D], int i, double *xi)
+/* compute the number of contacts with a moved particle */
+__inline static int cago_ncontacts2(cago_t *go,
+  double (*x)[D], int i, double *xi, double gam,
+  double *Q, int *mat)
 {
   int j, n = go->n;
 
@@ -56,19 +57,20 @@ __inline static double cago_rmsd2(cago_t *go,
     vcopy(go->x1[j], x[j]);
   }
   vcopy(go->x1[i], xi);
-  return cago_rmsd(go, go->x1, NULL);
+  return cago_ncontacts(go, go->x1, gam, Q, mat);
 }
 
 
 
 /* Metropolis algorithm */
-__inline static int cagormsd_metro(cagormsd_t *r,
-    double amp, double bet, double *prmsd)
+__inline static int cagonc_metro(cagonc_t *r,
+    double amp, double bet, int *pnc)
 {
   cago_t *go = r->go;
   int i, acc;
   double xi[D], du, dutot;
-  double rmsd, urmsd, durmsd;
+  int nc;
+  double unc, dunc;
 
   i = (int) (go->n * rand01());
   xi[0] = amp * (rand01() * 2 - 1);
@@ -77,11 +79,11 @@ __inline static int cagormsd_metro(cagormsd_t *r,
   vinc(xi, go->x[i]);
   du = cago_depot(go, go->x, i, xi);
 
-  rmsd = cago_rmsd2(go, go->x, i, xi);
-  urmsd = cagormsd_getv(r, rmsd);
-  durmsd = urmsd - cagormsd_getv(r, *prmsd);
+  nc = cago_ncontacts2(go, go->x, i, xi, -1, NULL, NULL);
+  unc = cagonc_getv(r, nc);
+  dunc = unc - cagonc_getv(r, *pnc);
 
-  dutot = bet * du + durmsd;
+  dutot = bet * du + dunc;
   if ( dutot < 0 ) {
     acc = 1;
   } else {
@@ -91,8 +93,8 @@ __inline static int cagormsd_metro(cagormsd_t *r,
   if ( acc ) {
     vcopy(go->x[i], xi);
     go->epot += du;
-    *prmsd = rmsd;
-    //printf("%g, %g\n", rmsd, cago_rmsd(go, go->x, NULL));
+    *pnc = nc;
+    //printf("%d, %d\n", nc, cago_ncontacts(go, go->x, -1, NULL, NULL));
     //getchar();
     return 1;
   } else {
@@ -103,18 +105,17 @@ __inline static int cagormsd_metro(cagormsd_t *r,
 
 
 /* a step of HMC
- * `*rmsd` gives the current RMSD on return */
-__inline static int cagormsd_hmc(cagormsd_t *r, hmc_t *hmc, double *rmsd1)
+ * `*pnc` gives the current number of contact on return */
+__inline static int cagonc_hmc(cagonc_t *r, hmc_t *hmc, int *pnc)
 {
   cago_t *go = r->go;
   /* compute the current RMSD */
-  double rmsd = cago_rmsd(go, go->x, NULL);
+  int nc = cago_ncontacts(go, go->x, -1, NULL, NULL);
   int acc;
-  double fdat[2];
   double dv = 0;
 
-  dv  = cagormsd_getv(r, rmsd);
-  dv -= cagormsd_getv(r, hmc->fdat[0]);
+  dv  = cagonc_getv(r, nc);
+  dv -= cagonc_getv(r, hmc->idat[0]);
 
   if ( dv <= 0 ) {
     acc = 1;
@@ -123,14 +124,11 @@ __inline static int cagormsd_hmc(cagormsd_t *r, hmc_t *hmc, double *rmsd1)
     acc = ( rr < exp( -dv ) );
   }
   if ( acc ) {
-    fdat[0] = rmsd;
-    fdat[1] = go->epot;
-    hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
+    hmc_push(hmc, go->x, go->v, go->f, &nc, &go->epot);
   } else {
-    hmc_pop(hmc, go->x, go->v, go->f, NULL, fdat, 1);
-    go->epot = fdat[1];
+    hmc_pop(hmc, go->x, go->v, go->f, &nc, &go->epot, 1);
   }
-  *rmsd1 = fdat[0];
+  *pnc = nc;
   return acc;
 }
 

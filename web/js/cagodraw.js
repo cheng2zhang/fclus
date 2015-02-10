@@ -111,13 +111,17 @@ function getContactPoint(xi, xj, radius)
 
 
 // draw all atoms in the box
-function cagodraw(go, target, userscale)
+function cagodraw(go, target, userscale, ballscale)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
   var width = c.width;
   var height = c.height;
   var i, j, jb, k, ir, ic, ret;
+
+  if ( !ballscale ) {
+    ballscale = 1.0;
+  }
 
   // draw the background
   ctx.fillStyle = "#ffffff";
@@ -151,7 +155,7 @@ function cagodraw(go, target, userscale)
     var scli = scale * getzscale(xyz[i], zmin, zmax, ortho);
     var xi = Math.floor(  xyz[i][0] * scli + width  * 0.5 );
     var yi = Math.floor( -xyz[i][1] * scli + height * 0.5 );
-    var rad = aaradii[ iaa ];
+    var rad = aaradii[ iaa ] * ballscale;
     var rz = Math.floor( rad * scli );
     paintBall(ctx, xi, yi, rz, color, spotcolor);
 

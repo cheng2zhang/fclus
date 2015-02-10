@@ -152,8 +152,10 @@ function domd()
       hmctot += 1;
       hmcacc += lj.dohmc(hmc);
       lj.ekin = md_vscramble(lj.v, null, lj.n, nvswaps);
+    } else {
+      lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
     }
-    lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
+ 
     wl.add( lj.csize );
     wl.updatelnf();
   }
@@ -308,10 +310,12 @@ function paint()
   }
 
   var s = mousescale * adjustscale;
+  var ballscale = get_float("ballscale", 1.0);
+
   if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors);
+    ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
   } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", xpaint, s, paintmat, randcolors);
+    ljdraw3d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
   }
 }
 

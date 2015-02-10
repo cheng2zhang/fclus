@@ -6,7 +6,8 @@
 
 
 /* draw all atoms in the box */
-function ljdraw2d(lj, target, xin, userscale, adjmat, colors)
+function ljdraw2d(lj, target, xin, userscale, adjmat, colors,
+    ballscale)
 {
   var c = grab(target);
   var ctx = c.getContext("2d");
@@ -152,8 +153,13 @@ function getzscale(r, zmin, zmax, ortho)
 
 
 /* draw all atoms in the box */
-function ljdraw3d(lj, target, xin, userscale, adjmat, colors)
+function ljdraw3d(lj, target, xin, userscale, adjmat, colors,
+    ballscale)
 {
+  if ( !ballscale ) {
+    ballscale = 1.0;
+  }
+
   var c = grab(target);
   var ctx = c.getContext("2d");
   var width = c.width;
@@ -230,7 +236,7 @@ function ljdraw3d(lj, target, xin, userscale, adjmat, colors)
     var scl = scale * zscl;
     var x = Math.floor(  (xyz[i][0] - lj.l * 0.5) * scl + width  * 0.5 );
     var y = Math.floor( -(xyz[i][1] - lj.l * 0.5) * scl + height * 0.5 );
-    var rad = 0.5;
+    var rad = 0.5 * ballscale;
     var rz = Math.floor( rad * scl );
     ic = lj.g.cid[ idmap[i] ];
     var color = colors[ic];
