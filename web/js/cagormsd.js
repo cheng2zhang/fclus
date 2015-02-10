@@ -36,10 +36,10 @@ CaGo.prototype.dohmcrmsd = function(hmc, wl)
 CaGo.prototype.getRMSD2 = function(x, i, xi)
 {
   for ( var j = 0; j < this.n; j++ ) {
-    vcopy(go.x1[j], x[j]);
+    vcopy(this.x1[j], x[j]);
   }
-  vcopy(go.x1[i], xi);
-  return this.getRMSD(go.x1);
+  vcopy(this.x1[i], xi);
+  return this.getRMSD(this.x1);
 }
 
 

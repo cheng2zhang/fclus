@@ -26,7 +26,12 @@
 <div class="wrapper">
 
 <h2 class="center">
-  Sampling a flat histogram along the root-mean-squared deviation (RMSD)
+  Sampling a flat histogram
+  <!--
+  along the number of native contacts (NC)
+  or the root-mean-squared deviation (RMSD)
+  -->
+  for an <i>&alpha;</i>-carbon G&#333; model.
 </h2>
 
 
@@ -72,8 +77,8 @@
   <div id="tabsrow">
     <span class="tab" onclick="showtab('system-params')">System</span>
     <span class="tab" onclick="showtab('ff-params')">Force field</span>
-    <span class="tab" onclick="showtab('md-params')">MD/HMC</span>
     <span class="tab" onclick="showtab('mc-params')">MC</span>
+    <span class="tab" onclick="showtab('md-params')">MD/HMC</span>
     <span class="tab" onclick="showtab('wl-params')">Wang-Landau</span>
     <span class="tab" onclick="showtab('visual-params')">Visualization</span>
   </div>
@@ -176,11 +181,40 @@
 
   <br>
 
+  Identify two atoms as contacts if they are within
+  <input type="range" value="1.2"
+    min="1.0" max="3.0" step="0.01"
+    style="width: 140px; border: 1px solid #cccccc;"
+    id="ncgam" onchange="changeparams()">
+  times the native distance.
+  <br>
+
   Temperature,
   <span class="math"><i>T</i></span>:
   <input type="text" size="6" value="1.0" id="temperature"
     onchange="changeparams()">.
   &nbsp;
+
+  </div>
+
+
+
+  <div class="params-panel" id="mc-params">
+  <div class="panel-title">Monte Carlo (MC)</div>
+
+  Number of MC steps per second:
+  <input type="text" size="10" value="50000"
+    id="nstepspersecmc" onchange="changeparams()">.
+  <br>
+
+  MC move size:
+  <input type="text" size="6" value="0.2" id="mcamp"
+    onchange="changeparams()">.
+  <br>
+
+  <input type="checkbox" id="adjmcamp" checked>
+  Dynamically adjust the MC move size.
+  <br>
 
   </div>
 
@@ -216,27 +250,6 @@
 
 
 
-  <div class="params-panel" id="mc-params">
-  <div class="panel-title">Monte Carlo (MC)</div>
-
-  Number of MC steps per second:
-  <input type="text" size="10" value="50000"
-    id="nstepspersecmc" onchange="changeparams()">.
-  <br>
-
-  MC move size:
-  <input type="text" size="6" value="0.2" id="mcamp"
-    onchange="changeparams()">.
-  <br>
-
-  <input type="checkbox" id="adjmcamp" checked>
-  Dynamically adjust the MC move size.
-  <br>
-
-  </div>
-
-
-
   <div class="params-panel" id="wl-params">
   <div class="panel-title">Wang-Landau updating</div>
 
@@ -265,7 +278,9 @@
   The asymptotic <i>C</i> in
   <span class="math">ln <i>f</i> = <i>C</i>/<i>t</i></span>:
   <input type="text" size="6" value="1.0"
-    id="invt_c" onchange="changeparams()">.
+    id="invt_c_mc" onchange="changeparams()"> (MC).
+  <input type="text" size="6" value="10.0"
+    id="invt_c_md" onchange="changeparams()"> (MD).
   &nbsp;
   <br>
 
@@ -308,7 +323,8 @@
   <br>
 
   Draw a frame every
-  <select id="timer_interval" onchange="changeparams()">
+  <select id="timer_interval" onchange="changeparams()"
+    title="need to restart to take effect">
     <option value="50">50</option>
     <option value="100" selected>100</option>
     <option value="200">200</option>

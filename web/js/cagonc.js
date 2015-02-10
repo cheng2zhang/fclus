@@ -36,10 +36,10 @@ CaGo.prototype.dohmcnc = function(hmc, wl)
 CaGo.prototype.ncontacts2 = function(x, i, xi)
 {
   for ( var j = 0; j < this.n; j++ ) {
-    vcopy(go.x1[j], x[j]);
+    vcopy(this.x1[j], x[j]);
   }
-  vcopy(go.x1[i], xi);
-  return this.ncontacts(go.x1);
+  vcopy(this.x1[i], xi);
+  return this.ncontacts(this.x1);
 }
 
 

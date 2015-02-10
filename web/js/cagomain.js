@@ -23,6 +23,8 @@ var rc = 5.0;
 var contact_type = "Heavy";
 var nsexcl = 4;
 
+var ncgam = 1.2;
+
 var timer_interval = 100; // in milliseconds
 var gotimer = null;
 var simulmethod = "MD";
@@ -47,7 +49,8 @@ var mcacc = 0.0;
 var wl_lnf0 = 0.01;
 var wl_flatness = 0.3;
 var wl_frac = 0.5;
-var invt_c = 1.0;
+var invt_c_mc = 1.0;
+var invt_c_md = 10.0;
 
 var donc = true;
 
@@ -70,6 +73,7 @@ var xpaint = null; // coordinates used for painting
 var randcolors = null; // random colors for each cluster
 var seedcolor = "#ff2010"; // color of the special cluster
 
+var warmedup = false;
 
 
 var preset_pdb = {
@@ -113,6 +117,8 @@ function getparams()
   rc = get_float("rc", 5.0);
   contact_type = grab("contact_type").value;
 
+  ncgam = get_float("ncgam", 1.2);
+
   timer_interval = get_int("timer_interval");
 
   mddt = get_float("mddt", 0.002);
@@ -140,7 +146,8 @@ function getparams()
   wl_lnf0 = get_float("wl_lnfinit", 0.01);
   wl_flatness = get_float("wl_flatness", 0.3);
   wl_frac = get_float("wl_frac", 0.5);
-  invt_c = get_float("invt_c", 1.0);
+  invt_c_mc = get_float("invt_c_mc", 1.0);
+  invt_c_md = get_float("invt_c_md", 10.0);
 
   mousescale = get_float("goscale");
 }
@@ -178,7 +185,7 @@ function getsinfo()
   s += 'flatness: ' + roundto(flatness * 100, 2) + "%.<br>";
   s += '<span class="math"><i>U</i></span>: ' + roundto(go.epot, 3) + ".<br>";
   s += 'RMSD: ' + roundto(go.rmsd, 3) + "&#8491;.<br>";
-  s += 'Contacts: ' + roundto(go.nc, 2) + "/" + roundto(go.ncont, 2) + ".<br>";
+  s += 'Contacts: ' + roundto(go.nc, 0) + "/" + roundto(go.ncont, 0) + ".<br>";
   return s;
 }
 
@@ -213,9 +220,29 @@ function domd()
     }
 
     if ( donc ) {
-      wl.add( go.nc );
+      if ( warmedup ) {
+        if ( go.nc < ncmin || go.nc >= ncmax ) {
+          stopsimul();
+          throw new Error("bad NC: " + go.nc);
+        }
+        wl.add( go.nc );
+      } else {
+        if ( go.nc >= ncmin && go.nc < ncmax ) {
+          warmedup = true;
+        }
+      }
     } else {
-      wl.add( go.rmsd );
+      if ( warmedup ) {
+        if ( go.rmsd < rmsdmin || go.rmsd >= rmsdmax ) {
+          stopsimul();
+          throw new Error("bad RMSD: " + go.rmsd + " " + go.getRMSD(go.x));
+        }
+        wl.add( go.rmsd );
+      } else {
+        if ( go.rmsd >= rmsdmin && go.rmsd < rmsdmax ) {
+          warmedup = true;
+        }
+      }
     }
     wl.updatelnf();
   }
@@ -239,15 +266,30 @@ function domc()
     mctot += 1.0;
     if ( donc ) {
       mcacc += go.metronc(mcamp, 1.0 / tp);
-      wl.add( go.nc );
-      if ( go.nc < ncmin || go.nc >= ncmax ) {
-        console.log(go.nc);
-        //stopsimul();
-        //throw new Error("bad nc");
+      if ( warmedup ) {
+        if ( go.nc < ncmin || go.nc >= ncmax ) {
+          stopsimul();
+          throw new Error("bad NC: " + go.nc);
+        }
+        wl.add( go.nc );
+      } else {
+        if ( go.nc >= ncmin && go.nc < ncmax ) {
+          warmedup = true;
+        }
       }
     } else {
       mcacc += go.metrormsd(mcamp, 1.0 / tp);
       wl.add( go.rmsd );
+      if ( warmedup ) {
+        if ( go.rmsd < rmsdmin || go.rmsd >= rmsdmax ) {
+          stopsimul();
+          throw new Error("bad RMSD: " + go.rmsd);
+        }
+      } else {
+        if ( go.rmsd >= rmsdmin && go.rmsd < rmsdmax ) {
+          warmedup = true;
+        }
+      }
     }
 
     if ( wl.updatelnf() ) {
@@ -449,30 +491,36 @@ function startsimul()
 {
   stopsimul();
 
+  warmedup = false;
+
   changepdb();
   getparams();
 
   go = new CaGo(strpdb, kb, ka, kd1, kd3, nbe, nbc,
       rc, contact_type, nsexcl);
+  go.ncgam = ncgam;
   //grab("seq").innerHTML = fmtseq( go.iaa );
   go.initmd(false, 0.01, tp);
 
+  var invt_c;
   if ( simulmethod === "MD" ) {
     if ( nvswaps > 0 ) {
       go.dof = (go.n - 1) * D;
     }
+    invt_c = invt_c_md;
   } else {
     go.dof = go.n * D;
+    invt_c = invt_c_mc;
   }
 
   if ( donc ) {
     ncmin = Math.max( Math.floor( fncmin * go.ncont + 0.5 ), 0 );
     ncmax = Math.min( Math.floor( fncmax * go.ncont + 0.5 ), go.ncont ) + 1;
     if ( ncmin >= ncmax ) {
-      throw new Error("bad nc range", ncmin, ncmax);
+      throw new Error("bad NC range", ncmin, ncmax);
       return;
     }
-    //console.log(ncmin, ncmax);
+    console.log("NC range: ", ncmin, ncmax);
     wl = new WL(ncmin, ncmax, 1, false,
         wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   } else {
@@ -492,6 +540,8 @@ function startsimul()
   }
 
   installmouse("gobox", "goscale");
+  histplot = null;
+  vplot = null;
   gotimer = setInterval(
     function(){ pulse(); },
     timer_interval);

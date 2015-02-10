@@ -410,7 +410,7 @@ LJ.prototype.commit = function(i, xi, du, dvir, ucls)
 
 
 /* Metropolis algorithm
- * graph lj.g is updated */
+ * graph this.g is updated */
 LJ.prototype.metro = function(amp, bet)
 {
   var acc = 0;
@@ -421,9 +421,9 @@ LJ.prototype.metro = function(amp, bet)
   var du = ret[0];
   var dvir = ret[1];
 
-  lj.mkgraph2(lj.g2, i);
-  var ucls = lj_eclus(lj, lj.g2);
-  var ducls = ucls - lj_eclus(lj, lj.g);
+  this.mkgraph2(this.g2, i);
+  var ucls = lj_eclus(lj, this.g2);
+  var ducls = ucls - lj_eclus(this, this.g);
   var dutot = bet * du + ducls;
 
   if ( dutot < 0 ) {
