@@ -49,9 +49,16 @@ var wl_flatness = 0.3;
 var wl_frac = 0.5;
 var invt_c = 1.0;
 
+var donc = true;
+
 var rmsdmin = 1.0;
 var rmsdmax = 11.0;
 var rmsddel = 0.05;
+
+var fncmin = 0.0;
+var fncmax = 1.0;
+var ncmin;
+var ncmax;
 
 var changeseed = true;
 
@@ -121,9 +128,14 @@ function getparams()
   nstepspfmc = nstepspsmc * timer_interval / 1000;
   nstepsmc = 0;
 
+  donc = (grab("sampleQ").value === "NC");
+
   rmsdmin = get_float("rmsdmin", 1.0);
   rmsdmax = get_float("rmsdmax", 6.0);
   rmsddel = get_float("rmsddel", 0.1);
+
+  fncmin = get_float("fncmin", 0.0);
+  fncmax = get_float("fncmax", 1.0);
 
   wl_lnf0 = get_float("wl_lnfinit", 0.01);
   wl_flatness = get_float("wl_flatness", 0.3);
@@ -178,21 +190,37 @@ function domd()
 
   for ( istep = 0; istep < nstepspfmd; istep++ ) {
     go.vv(1.0, mddt);
-    go.vrescale(go.v, tp, thdt);
+    go.ekin = go.vrescale(go.v, tp, thdt);
 
     // use hybrid MC to sample a flat histogram
     if ( nsthmc > 0 && istep % nsthmc === 0 ) {
       hmctot += 1;
-      hmcacc += go.dohmc(hmc, wl);
+      if ( donc ) {
+        hmcacc += go.dohmcnc(hmc, wl);
+      } else {
+        hmcacc += go.dohmcrmsd(hmc, wl);
+      }
       go.ekin = md_vscramble(go.v, go.m, go.n, nvswaps);
+      //var ek2 = mk_ekin(go.v, go.m, go.n);
+      //if ( Math.abs(go.ekin - ek2) > 1e-4 ) { console.log(go.ekin, ek2); }
+
     } else {
-      go.rmsd = go.getRMSD(go.x);
+      if ( donc ) {
+        go.nc = go.ncontacts(go.x);
+      } else {
+        go.rmsd = go.getRMSD(go.x);
+      }
     }
 
-    wl.add( go.rmsd );
+    if ( donc ) {
+      wl.add( go.nc );
+    } else {
+      wl.add( go.rmsd );
+    }
     wl.updatelnf();
   }
   wl.trimv();
+  go.rmsd = go.getRMSD(go.x);
   go.nc = go.ncontacts(go.x);
   nstepsmd += nstepspfmd;
   sinfo += 'step ' + nstepsmd + ".<br>";
@@ -209,8 +237,18 @@ function domc()
 
   for ( istep = 0; istep < nstepspfmc; istep++ ) {
     mctot += 1.0;
-    mcacc += go.metrormsd(mcamp, 1.0 / tp);
-    wl.add( go.rmsd );
+    if ( donc ) {
+      mcacc += go.metronc(mcamp, 1.0 / tp);
+      wl.add( go.nc );
+      if ( go.nc < ncmin || go.nc >= ncmax ) {
+        console.log(go.nc);
+        //stopsimul();
+        //throw new Error("bad nc");
+      }
+    } else {
+      mcacc += go.metrormsd(mcamp, 1.0 / tp);
+      wl.add( go.rmsd );
+    }
 
     if ( wl.updatelnf() ) {
       // adjust the MC move size, to make the acceptance ratio close to 0.5
@@ -228,6 +266,7 @@ function domc()
     }
   }
   wl.trimv();
+  go.rmsd = go.getRMSD(go.x);
   go.nc = go.ncontacts(go.x);
   nstepsmc += nstepspfmc;
   sinfo += 'step ' + nstepsmc + ".<br>";
@@ -257,20 +296,31 @@ function normalize_hist(arr, n)
 /* update the histogram plot */
 function updatehistplot(wl)
 {
-  var i;
-  var dat = "RMSD,Histogram (overall),Histogram (this stage)\n";
+  var i, x;
+  var dat;
+
+  if ( donc ) {
+    dat = "NC";
+  } else {
+    dat = "RMSD";
+  }
+  dat += ",Histogram (overall),Histogram (this stage)\n";
 
   var chhs = normalize_hist(wl.hh, wl.n);
   var chs = normalize_hist(wl.h, wl.n);
   for ( i = 0; i < wl.n; i++ ) {
-    var x = wl.xmin + (i + 0.5) * wl.dx;
+    if ( donc ) {
+      x = wl.nmin + i;
+    } else {
+      x = wl.xmin + (i + 0.5) * wl.dx;
+    }
     dat += "" + x + "," + chhs[i] + ","+ chs[i] + "\n";
   }
   if ( histplot === null ) {
     var h = grab("gobox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
-      xlabel: '<small>RMSD</small>',
+      xlabel: '<small>' + (donc ? 'NC' : 'RMSD') + '</small>',
       ylabel: '<small>Histogram, <i>H</i></small>',
       includeZero: true,
       drawPoints: true,
@@ -292,18 +342,31 @@ function updatehistplot(wl)
 /* update the cluster potential plot */
 function updatevplot(wl)
 {
-  var i;
-  var dat = "RMSD,potential\n";
+  var i, x;
+  var dat;
+
+  if ( donc ) {
+    dat = "NC";
+  } else {
+    dat = "RMSD";
+  }
+  dat += ",potential\n";
+
   for ( i = 0; i < wl.n; i++ ) {
-    var x = wl.xmin + (i + 0.5) * wl.dx;
+    if ( donc ) {
+      x = wl.nmin + i;
+    } else {
+      x = wl.xmin + (i + 0.5) * wl.dx;
+    }
     dat += "" + x + "," + wl.v[i] + "\n";
   }
+
   if ( vplot === null ) {
     var h = grab("gobox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Adaptive potential',
-      xlabel: '<small>RMSD</small>',
+      xlabel: '<small>' + (donc ? 'NC' : 'RMSD') + '</small>',
       ylabel: '<small>Adaptive potential, <i>V</i></small>',
       includeZero: true,
       drawPoints: true,
@@ -389,17 +452,44 @@ function startsimul()
   changepdb();
   getparams();
 
-  wl = new WL(rmsdmin, rmsdmax, rmsddel, true,
-      wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
   go = new CaGo(strpdb, kb, ka, kd1, kd3, nbe, nbc,
       rc, contact_type, nsexcl);
   //grab("seq").innerHTML = fmtseq( go.iaa );
   go.initmd(false, 0.01, tp);
+
+  if ( simulmethod === "MD" ) {
+    if ( nvswaps > 0 ) {
+      go.dof = (go.n - 1) * D;
+    }
+  } else {
+    go.dof = go.n * D;
+  }
+
+  if ( donc ) {
+    ncmin = Math.max( Math.floor( fncmin * go.ncont + 0.5 ), 0 );
+    ncmax = Math.min( Math.floor( fncmax * go.ncont + 0.5 ), go.ncont ) + 1;
+    if ( ncmin >= ncmax ) {
+      throw new Error("bad nc range", ncmin, ncmax);
+      return;
+    }
+    //console.log(ncmin, ncmax);
+    wl = new WL(ncmin, ncmax, 1, false,
+        wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  } else {
+    wl = new WL(rmsdmin, rmsdmax, rmsddel, true,
+        wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  }
   go.rmsd = go.getRMSD(go.x);
+  go.nc = go.ncontacts(go.x);
   go.epot = go.force(go.x, go.f);
 
-  hmc = new HMC(go.n, 0, 2);
-  hmc.push(go.x, go.v, go.f, null, [go.rmsd, go.epot])
+  if ( donc ) {
+    hmc = new HMC(go.n, 1, 1);
+    hmc.push(go.x, go.v, go.f, [go.nc], [go.epot]);
+  } else {
+    hmc = new HMC(go.n, 0, 2);
+    hmc.push(go.x, go.v, go.f, null, [go.rmsd, go.epot]);
+  }
 
   installmouse("gobox", "goscale");
   gotimer = setInterval(
@@ -495,12 +585,12 @@ function resizecontainer(a)
   ctx.font = "24px Verdana";
   ctx.fillText("Click to start", w/2-40, h/2-10);
 
-  var hsbar = 20; // height of the global scaling bar
-  var hcbar = 30; // height of the control bar
-  var htbar = 20; // height of the tabs bar
+  var hsbar = 30; // height of the global scaling bar
+  var hcbar = 40; // height of the control bar
+  var htbar = 30; // height of the tabs bar
   var wr = h*3/4; // width of the plots
   var wtab = Math.min(560, w + wr); // width of the tabs
-  var htab = 300;
+  var htab = 320;
 
   grab("simulbox").style.width = "" + w + "px";
   grab("simulbox").style.height = "" + h + "px";

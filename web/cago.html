@@ -17,6 +17,7 @@
   <script type="text/javascript" src="./js/cagoutil.js"></script>
   <script type="text/javascript" src="./js/cagocore.js"></script>
   <script type="text/javascript" src="./js/cagormsd.js"></script>
+  <script type="text/javascript" src="./js/cagonc.js"></script>
   <script type="text/javascript" src="./js/cagodraw.js"></script>
   <script type="text/javascript" src="./js/cagomain.js"></script>
 </head>
@@ -94,13 +95,20 @@
     <option value="4MBN">Myoglobin, 4MBN</option>
     <option value="user">User</option>
   </select>
-  <textarea rows="11" id="strpdb" wrap="off"></textarea>
+  <textarea rows="10" id="strpdb" wrap="off"></textarea>
   <br>
 
   Simulation method
   <select id="simulmethod" onchange="changeparams()">
     <option value="MC" selected>Monte Carlo (MC)</option>
     <option value="MD">molecular dynamics (MD) with hybrid MC</option>
+  </select>
+  <br>
+
+  Sample along
+  <select id="sampleQ" onchange="changeparams()">
+    <option value="NC" selected>Number of contacts (NC)</option>
+    <option value="RMSD">Root-mean-squared deviation (RMSD)</option>
   </select>
   <br>
 
@@ -272,10 +280,21 @@
   <br>
 
   Bin size of RMSD:
-  <input type="text" size="6" value="0.05"
+  <input type="text" size="6" value="0.1"
     id="rmsddel" onchange="changeparams()">.
   &nbsp;
   <br>
+
+  Number of contacts range:
+  (<input type="text" size="6" value="0.0"
+    id="fncmin" onchange="changeparams()">,
+  &nbsp;
+
+  <input type="text" size="6" value="1.0"
+    id="fncmax" onchange="changeparams()">).
+  &nbsp;
+  <br>
+
   </div>
 
 

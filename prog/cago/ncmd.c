@@ -57,8 +57,8 @@ int main(void)
   }
   cago_initmd(go, 0, 0.01, tp);
 
-  ncmin = (int) (fncmin * go->ncont);
-  ncmax = (int) (fncmax * go->ncont);
+  ncmin = (int) (fncmin * go->ncont + 0.49999);
+  ncmax = (int) (fncmax * go->ncont + 0.49999) + 1;
 
   /* open a Wang-Landau object */
   wl = wl_openi(ncmin, ncmax,

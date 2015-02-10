@@ -6,13 +6,13 @@
 
 
 /* hybrid MC */
-CaGo.prototype.dohmcrmsd = function(hmc, wl)
+CaGo.prototype.dohmcnc = function(hmc, wl)
 {
   var acc;
-  var rmsd = this.getRMSD(this.x);
-  // hmc.farr[0] is the previous RMSD
-  var dv = wl.getv( rmsd ) - wl.getv( hmc.fdat[0] );
-  var iarr = null, farr = [ rmsd, this.epot ];
+  var nc = this.ncontacts(this.x);
+  // hmc.iarr[0] is the previous nc
+  var dv = wl.getv( nc ) - wl.getv( hmc.idat[0] );
+  var iarr = [ nc ], farr = [ this.epot ];
 
   if ( dv <= 0 ) {
     acc = 1;
@@ -24,28 +24,28 @@ CaGo.prototype.dohmcrmsd = function(hmc, wl)
     hmc.push(this.x, this.v, this.f, iarr, farr);
   } else {
     hmc.pop(this.x, this.v, this.f, iarr, farr, true);
-    this.epot = farr[1];
+    this.epot = farr[0];
   }
-  this.rmsd = farr[0];
+  this.nc = iarr[0];
   return acc;
 };
 
 
 
-/* compute the RMSD with a trial move */
-CaGo.prototype.getRMSD2 = function(x, i, xi)
+/* compute the number of contacts with a trial move */
+CaGo.prototype.ncontacts2 = function(x, i, xi)
 {
   for ( var j = 0; j < this.n; j++ ) {
     vcopy(go.x1[j], x[j]);
   }
   vcopy(go.x1[i], xi);
-  return this.getRMSD(go.x1);
+  return this.ncontacts(go.x1);
 }
 
 
 
 /* Metropolis algorithm with an RMSD bias */
-CaGo.prototype.metrormsd = function(amp, bet)
+CaGo.prototype.metronc = function(amp, bet)
 {
   var i = Math.floor(this.n * rand01());
   var xi = newarr(D);
@@ -54,9 +54,9 @@ CaGo.prototype.metrormsd = function(amp, bet)
   }
   var du = this.depot(this.x, i, xi);
 
-  var rmsd0 = this.rmsd;
-  var rmsd1 = this.getRMSD2(this.x, i, xi);
-  var dv = wl.getv( rmsd1 ) - wl.getv( rmsd0 );
+  var nc0 = this.nc;
+  var nc1 = this.ncontacts2(this.x, i, xi);
+  var dv = wl.getv( nc1 ) - wl.getv( nc0 );
 
   var dutot = bet * du + dv;
   var acc;
@@ -70,11 +70,7 @@ CaGo.prototype.metrormsd = function(amp, bet)
   if ( acc ) {
     vcopy(this.x[i], xi);
     this.epot += du;
-    //if ( Math.abs(this.epot - this.force(this.x, this.x1)) > 1e-6 ) {
-    //  stopsimul();
-    //  throw new Error("e mismatch " + this.epot + " " + this.force(this.x, this.x1) + " " + du);
-    //}
-    this.rmsd = rmsd1;
+    this.nc = nc1;
     return 1;
   } else {
     return 0;

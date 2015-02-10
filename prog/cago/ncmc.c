@@ -19,8 +19,8 @@ double amp = 0.2;
 double nsteps = 1e10;
 double nstrep = 1000000;
 
-double fncmin = 0.2;
-double fncmax = 0.9;
+double fncmin = 0.0;
+double fncmax = 1.0;
 int ncmin;
 int ncmax;
 
@@ -56,8 +56,8 @@ int main(void)
   cago_initmd(go, 0, 0.01, tp);
   go->dof = go->n * D;
 
-  ncmin = (int) (fncmin * go->ncont);
-  ncmax = (int) (fncmax * go->ncont);
+  ncmin = (int) (fncmin * go->ncont + 0.49999);
+  ncmax = (int) (fncmax * go->ncont + 0.49999) + 1;
 
   /* open a Wang-Landau object */
   wl = wl_openi(ncmin, ncmax,

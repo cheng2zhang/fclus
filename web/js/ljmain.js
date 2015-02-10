@@ -155,7 +155,7 @@ function domd()
     } else {
       lj.csize = lj.g.csize[ lj.g.cid[ lj.cseed ] ];
     }
- 
+
     wl.add( lj.csize );
     wl.updatelnf();
   }
@@ -484,9 +484,9 @@ function resizecontainer(a)
   ctx.font = "24px Verdana";
   ctx.fillText("Click to start", w/2-40, h/2-10);
 
-  var hsbar = 20; // height of the global scaling bar
-  var hcbar = 30; // height of the control bar
-  var htbar = 20; // height of the tabs bar
+  var hsbar = 30; // height of the global scaling bar
+  var hcbar = 40; // height of the control bar
+  var htbar = 30; // height of the tabs bar
   var wr = h*3/4; // width of the plots
   var wtab = w; // width of the tabs
   var htab = 240;

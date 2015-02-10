@@ -29,10 +29,10 @@ __inline static hmc_t *hmc_open(int n, int ni, int nf)
   xnew(h->v, n);
   xnew(h->f, n);
   h->ni = ni;
-  h->nf = nf;
   if ( ni > 0 ) {
     xnew(h->idat, ni);
   }
+  h->nf = nf;
   if ( nf > 0 ) {
     xnew(h->fdat, nf);
   }
