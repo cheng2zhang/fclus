@@ -1,0 +1,162 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+
+
+\newcommand{\vct}[1]{\mathbf{#1}}
+\newcommand{\vx}{\vct{x}}
+\newcommand{\vv}{\vct{v}}
+\newcommand{\Q}{\mathcal{Q}}
+
+
+
+\begin{document}
+
+
+
+\section{Method}
+
+\subsection{Hybrid Monte Carlo (HMC)}
+
+
+
+The hybrid Monte Carlo (HMC)
+is a technique to incorporate Metropolis acceptance
+into a molecular dynamics (MD) simulation.
+%
+Here, we use it to sample a flat distribution
+along an arbitrary quantity $Q$.
+%
+The method
+does not require $Q$ to be differentiable,
+which makes it applicable to
+a complex reaction coordinate.
+
+Consider a canonical ensemble,
+the unbiased distribution
+is given by
+\begin{align}
+  \rho_0(Q)
+=
+  Z^{-1} \int \delta[Q - \Q(\vx)] \, e^{-\beta U(\vx)} \, d\vx,
+\end{align}
+where,
+$\beta = 1/(k_B T)$ is the inverse temperature,
+$U(\vx)$ is potential energy function,
+$Z = \int e^{-\beta U(\vx)} \, d\vx$ is the partition function,
+and $\delta(\dots)$ is $\delta$-function.
+%
+One can readily verify that this distribution is properly normalized as
+\[
+  \int \rho_0(Q) \, dQ = 1.
+\]
+%
+If we run a regular MC or MD simulation in the canonical ensemble,
+the distribution of $Q$ is given by $\rho_0(Q)$.
+
+Let us now consider the sampling of a biased distribution
+\begin{equation}
+  \rho(Q) \propto \rho_0(Q) \, e^{-w(Q)}.
+\label{eq:rhoQbiased}
+\end{equation}
+This can be accomplished by HMC by repeating the following steps
+\begin{enumerate}
+  \item Perform $k$ MD steps with a stochastic thermostat,
+        and let the system evolute
+        from the state $(\vx, \vv)$ to $(\vx', \vv')$.
+        We set $k = 1$ in this study.
+
+  \item Compute $\Delta w \equiv w[\Q(\vx')] - w[\Q(\vx)]$,
+        and generate a uniform random number $r$ between $0$ and $1$.
+
+  \item If $r < \min\{e^{-\Delta w}, 1\}$, do nothing,
+        that is, remain in the state $(\vx', \vv')$.
+        Otherwise, change the current state to $(\vx, -\vv)$
+        (notice the reversal of velocity).
+\end{enumerate}
+
+
+
+
+One can show that above algorithm satisfies detailed balance,
+and gives the desired distribution Eq. \eqref{eq:rhoQbiased}.
+%
+Its efficiency, however, depends on the randomness of the thermostat.
+%
+One can apply an additional step at the end of the above algorithm
+to increase the randomness.
+%
+For example, we can randomly swap two the velocity of two atoms:
+\[
+  (\vv_i, \vv_j)
+ \rightarrow
+  \left(
+     \sqrt{ \frac{ m_j } {m_i}  } \vv_j,
+     \sqrt{ \frac{ m_i } {m_j}  } \vv_i
+  \right).
+\]
+Note that if such a swap is used,
+the degree of freedom of system should be changed as well:
+if the masses are uniform,
+only the three linear but not the angular momenta are conserved;
+if the masses are not uniform,
+no global momentum is conserved.
+
+
+
+\subsection{Sampling a flat distribution}
+
+
+
+We now pursue a special case of Eq. \eqref{eq:rhoQbiased},
+that is, a flat distribution of $Q$.
+\[
+  \rho(Q) = \mbox{constant},
+\]
+which requires $w(Q) = \ln \rho_0(Q) + \mbox{constant}$.
+
+
+To do so, we used the Wang-Landau algorithm.
+%
+We first step up a few bins along $Q$:
+$(Q_i, Q_{i+1})$,
+and start from a zero bias potential
+$w_i \equiv 0$.
+%
+Every time the system visits bin $i$,
+we increase the bias potential there as
+\begin{equation}
+w_i \rightarrow w_i + \ln f.
+\label{eq:wlupdate}
+\end{equation}
+
+Equation \eqref{eq:wlupdate} encourages
+the system to move out of bin $i$.
+%
+Using such an updating scheme,
+one can sample a flat distribution along $Q$.
+%
+The error of $w(Q)$, however, increases with
+the updating factor $\ln f$.
+%
+Thus, once a relative flat histogram is achieved
+by a certain $\ln f$, we reduce the updating factor
+by half
+\begin{equation}
+  \ln f \rightarrow \ln f / 2.
+\label{eq:lnfupdate}
+\end{equation}
+Asymptotically, it was shown that
+Eq. \eqref{eq:lnfupdate} reduces $\ln f$ too quickly,
+and a better formula to ensure convergence is
+\begin{equation}
+  \ln f = C / t,
+\end{equation}
+where $t$ is the number of simulation steps per bin,
+and $C$ is an empirical constant
+(which is often set to unity in MC simulations,
+and according to our experience, should be larger for HMC).
+
+
+
+\end{document}
