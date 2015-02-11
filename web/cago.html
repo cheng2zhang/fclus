@@ -88,7 +88,7 @@
   <div class="params-panel" id="system-params">
   <div class="panel-title">System</div>
 
-  PDB file
+  PDB file (select &ldquo;User&rdquo; to use your own PDB)
   <select id="pdbpreset" onchange="changeparams()">
     <option value="empty">Empty</option>
     <option value="1LE1">Trpzip2, 1LE1</option>
@@ -100,7 +100,10 @@
     <option value="4MBN">Myoglobin, 4MBN</option>
     <option value="user">User</option>
   </select>
-  <textarea rows="10" id="strpdb" wrap="off"></textarea>
+  <!-- for a modern browser we use "oninput" to detect instant changes
+       otherwise, we use "onchange" to detect changes -->
+  <textarea rows="10" id="strpdb" wrap="off"
+    oninput="strpdbchanged()" onchange="strpdbchanged()"></textarea>
   <br>
 
   Simulation method

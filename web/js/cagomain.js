@@ -102,6 +102,13 @@ window.onload = changepdb;
 
 
 
+function strpdbchanged()
+{
+  grab("pdbpreset").value = "user";
+}
+
+
+
 function getparams()
 {
   strpdb = grab("strpdb").value;
@@ -181,11 +188,12 @@ function getsinfo()
 {
   var s = "";
   var flatness = wl.getflatness();
-  s += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + ".<br>";
-  s += 'flatness: ' + roundto(flatness * 100, 2) + "%.<br>";
-  s += '<span class="math"><i>U</i></span>: ' + roundto(go.epot, 3) + ".<br>";
-  s += 'RMSD: ' + roundto(go.rmsd, 3) + "&#8491;.<br>";
-  s += 'Contacts: ' + roundto(go.nc, 0) + "/" + roundto(go.ncont, 0) + ".<br>";
+  s += 'WL stage: ' + wl.stage + '.<br>';
+  s += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + '.<br>';
+  s += 'flatness: ' + roundto(flatness * 100, 2) + '%.<br>';
+  s += '<span class="math"><i>U</i></span>: ' + roundto(go.epot, 3) + '.<br>';
+  s += 'RMSD: ' + roundto(go.rmsd, 3) + '&#8491;.<br>';
+  s += 'Contacts: ' + go.nc + '/' + go.ncont + '.<br>';
   return s;
 }
 

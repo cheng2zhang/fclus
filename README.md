@@ -1,4 +1,4 @@
-# Sampling a flat histogram of the cluster size #
+# Sampling a flat histogram of the cluster size, RMSD, etc. #
 
 ## Directory ##
 

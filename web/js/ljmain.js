@@ -110,11 +110,11 @@ function changescale()
 function getsinfo()
 {
   var s = "", clist = "";
-
   var flatness = wl.getflatness();
-  s += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + ".<br>";
-  s += 'flatness: ' + roundto(flatness * 100, 2) + "%.<br>";
-  s += 'seed: ' + lj.cseed + ".<br>";
+  s += 'WL stage ' + wl.stage + '.<br>';
+  s += '<span class="math">ln <i>f</i> </span>: ' + wl.lnf.toExponential(3) + '.<br>';
+  s += 'flatness: ' + roundto(flatness * 100, 2) + '%.<br>';
+  s += 'seed: ' + lj.cseed + '.<br>';
   s += 'clusters: ';
   for ( var ic = 0; ic < lj.g.nc; ic++ ) {
     clist += "" + lj.g.csize[ic];
@@ -161,7 +161,7 @@ function domd()
   }
   wl.trimv();
   nstepsmd += nstepspfmd;
-  sinfo += 'step ' + nstepsmd + ", ";
+  sinfo += "step " + nstepsmd + ".<br>";
   sinfo += "hmcacc: " + roundto(100.0 * hmcacc / hmctot, 2) + "%.<br>";
   sinfo += getsinfo();
   return sinfo;
@@ -200,7 +200,7 @@ function domc()
   }
   wl.trimv();
   nstepsmc += nstepspfmc;
-  sinfo += "step: " + nstepsmc + ", ";
+  sinfo += "step: " + nstepsmc + ".<br>";
   sinfo += "acc: " + roundto(100.0 * mcacc / mctot, 2) + "%.<br>";
   sinfo += getsinfo();
   return sinfo;
@@ -488,7 +488,7 @@ function resizecontainer(a)
   var hcbar = 40; // height of the control bar
   var htbar = 30; // height of the tabs bar
   var wr = h*3/4; // width of the plots
-  var wtab = w; // width of the tabs
+  var wtab = 560; // width of the tabs
   var htab = 280;
 
   grab("simulbox").style.width = "" + w + "px";
@@ -514,12 +514,13 @@ function resizecontainer(a)
   for ( i = 0; i < c.length; i++ ) {
     if ( c[i].className === "params-panel" ) {
       c[i].style.top = "" + (h + hsbar + hcbar + htbar) + "px";
-      c[i].style.width = "" + (w - 20) + "px";
+      c[i].style.width = "" + (wtab - 20) + "px";
       c[i].style.height = "" + htab + "px";
     }
   }
   grab("sinfo").style.top = "" + (h + hsbar + hcbar + htbar) + "px";
-  grab("sinfo").style.left = "" + (w + 10) + "px";
+  grab("sinfo").style.left = "" + (wtab + 10) + "px";
+  grab("sinfo").style.width = "" + (w + wr - wtab - 20) + "px";
   grab("container").style.height = "" + (h + hsbar + hcbar + htbar + htab) + "px";
   grab("container").style.width = "" + (w + wr) + "px";
 }
