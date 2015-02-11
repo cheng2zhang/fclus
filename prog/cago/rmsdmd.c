@@ -3,8 +3,8 @@
 
 
 
-//const char *fnpdb = "pdb/1VII.pdb";
-const char *fnpdb = "pdb/1L2Y.pdb";
+const char *fnpdb = "pdb/1VII.pdb";
+//const char *fnpdb = "pdb/1L2Y.pdb";
 double kb = 200.0;
 double ka = 40.0;
 double kd1 = 1.0;
@@ -20,17 +20,17 @@ long nsteps = 10000000000L;
 long nstrep = 100000;
 
 double rmsdmin = 1.0;
-//double rmsdmax = 11.0;
-double rmsdmax = 6.0;
-double rmsddel = 0.05; /* should be small enough */
+double rmsdmax = 11.0;
+//double rmsdmax = 6.0;
+double rmsddel = 0.1; /* should be small enough */
 
 const char *fnpos = "go.pos";
 const char *fnvrmsd = "vrmsd.dat";
 
-double wl_lnf0 = 4e-4;
+double wl_lnf0 = 1e-4;
 double wl_flatness = 0.3;
 double wl_frac = 0.5;
-double invt_c = 10.0;
+double invt_c = 5.0;
 
 int nstblk = 10;
 int nsthmc = 1;

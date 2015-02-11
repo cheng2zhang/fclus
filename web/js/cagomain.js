@@ -247,7 +247,7 @@ function domd()
     wl.updatelnf();
   }
   wl.trimv();
-  go.rmsd = go.getRMSD(go.x);
+  go.rmsd = go.getRMSD(go.x, go.x1);
   go.nc = go.ncontacts(go.x);
   nstepsmd += nstepspfmd;
   sinfo += 'step ' + nstepsmd + ".<br>";
@@ -308,7 +308,7 @@ function domc()
     }
   }
   wl.trimv();
-  go.rmsd = go.getRMSD(go.x);
+  go.rmsd = go.getRMSD(go.x, go.x1);
   go.nc = go.ncontacts(go.x);
   nstepsmc += nstepspfmc;
   sinfo += 'step ' + nstepsmc + ".<br>";
@@ -430,7 +430,13 @@ function paint()
 {
   if ( go ) {
     var ballscale = get_float("ballscale", 1.0);
-    cagodraw(go, "gobox", mousescale, ballscale);
+    var drawref = grab("drawref").checked;
+    if ( drawref ) { // draw the reference structure
+      cagodraw(go, go.xref, "gobox", mousescale, ballscale, false, true);
+    }
+    // we draw go.x1 instead of go.x, because the former
+    // has been fit against the native structure
+    cagodraw(go, go.x1, "gobox", mousescale, ballscale, drawref, false);
   }
 }
 
@@ -639,8 +645,8 @@ function resizecontainer(a)
   var hcbar = 40; // height of the control bar
   var htbar = 30; // height of the tabs bar
   var wr = h*3/4; // width of the plots
-  var wtab = Math.min(560, w + wr); // width of the tabs
-  var htab = 320;
+  var wtab = Math.min(600, w + wr); // width of the tabs
+  var htab = 360;
 
   grab("simulbox").style.width = "" + w + "px";
   grab("simulbox").style.height = "" + h + "px";

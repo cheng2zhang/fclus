@@ -489,7 +489,7 @@ function resizecontainer(a)
   var htbar = 30; // height of the tabs bar
   var wr = h*3/4; // width of the plots
   var wtab = w; // width of the tabs
-  var htab = 240;
+  var htab = 280;
 
   grab("simulbox").style.width = "" + w + "px";
   grab("simulbox").style.height = "" + h + "px";
