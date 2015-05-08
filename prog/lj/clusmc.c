@@ -1,58 +1,42 @@
 /* Monte Carlo simulation that samples a flat histogram along the cluster size
  * Wang-Landau algorithm is used */
+#include "ljmodel.h"
 #include "ljcls.h"
 
 
 
-int n = 108;
-double rho = 0.25;
-double tp = 1.32;
-double rcdef = 1e9;
-double amp = 0.2;
-double rcls = 1.6;
-
-int nstblk = 10;
-double nsteps = 1e10;
-double nstrep = 100000;
-
-const char *fnpos = "lj.pos";
-const char *fnvcls = "vcls.dat";
-
-double wl_lnf0 = 0.001;
-double wl_flatness = 0.3;
-double wl_frac = 0.5;
-double invt_c = 1.0;
-
-double tot = 0, acc = 0;
-
-
-
-int main(void)
+int main(int argc, char **argv)
 {
+  ljmodel_t m[1];
   lj_t *lj;
   ljcls_t *c;
   wl_t *wl;
   int csize, it;
   double t;
+  double tot = 0, acc = 0;
+
+  ljmodel_default(m);
+  ljmodel_doargs(m, argc, argv);
 
   /* open a Lennard-Jones object */
-  lj = lj_open(n, rho, rcdef);
+  lj = lj_open(m->n, m->rho, m->rcdef);
 
   /* open a Wang-Landau object */
-  wl = wl_openi(1, n + 1, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
-  c = ljcls_open(lj, rcls, wl->v - 1);
+  wl = wl_openi(1, m->n + 1,
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+  c = ljcls_open(lj, m->rcls, wl->v - 1);
 
   /* compute the potential energy */
   lj_energy(lj);
   /* build a graph */
   ljcls_mkgraph(c, c->g);
 
-  for ( t = nstblk; t <= nsteps; t += nstblk ) {
-    for ( it = 0; it < nstblk; it++ ) {
+  for ( t = m->nstblk; t <= m->nsteps; t += m->nstblk ) {
+    for ( it = 0; it < m->nstblk; it++ ) {
       /* a step of Metropolis algorithm
        * graph is implicitly computed */
       tot += 1;
-      acc += ljcls_metro(c, amp, 1/tp);
+      acc += ljcls_metro(c, m->mcamp, m->beta);
 
       /* try to change the seed particle */
       ljcls_changeseed(c, c->g);
@@ -65,13 +49,13 @@ int main(void)
 
     if ( wl_updatelnf(wl) ) {
       /* update the MC amplitude */
-      update_mcamp(&amp, 0.5, &acc, &tot);
+      update_mcamp(&m->mcamp, 0.5, &acc, &tot);
     }
 
-    if ( fmod(t, nstrep) < 0.1 ) {
+    if ( fmod(t, m->nstrep) < 0.1 ) {
       double flatness = wl_getflatness(wl);
-      ljcls_writepos(c, lj->x, lj->v, fnpos, 1);
-      wl_save(wl, fnvcls);
+      ljcls_writepos(c, lj->x, lj->v, m->fnpos, 1);
+      wl_save(wl, m->fnvcls);
       fprintf(stderr, "t %g, acc %.2f%% ep %g, seed %d, csize %d, flatness %g%%, lnf %g ",
           t, 100 * acc / tot, lj->epot,
           c->cseed, csize,
@@ -83,7 +67,6 @@ int main(void)
   lj_close(lj);
   ljcls_close(c);
   wl_close(wl);
-  fprintf(stderr, "rho %g, tp %g\n", rho, tp);
   return 0;
 }
 
