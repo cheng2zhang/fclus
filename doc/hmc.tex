@@ -5,6 +5,7 @@
 
 \newcommand{\vct}[1]{\mathbf{#1}}
 \newcommand{\vx}{\vct{x}}
+\newcommand{\vr}{\vct{r}}
 \newcommand{\vv}{\vct{v}}
 \newcommand{\Q}{\mathcal{Q}}
 
@@ -38,12 +39,12 @@ is given by
 \begin{align}
   \rho_0(Q)
 =
-  Z^{-1} \int \delta[Q - \Q(\vx)] \, e^{-\beta U(\vx)} \, d\vx,
+  Z^{-1} \int \delta[Q - \Q(\vr)] \, e^{-\beta U(\vr)} \, d\vr,
 \end{align}
 where,
 $\beta = 1/(k_B T)$ is the inverse temperature,
-$U(\vx)$ is potential energy function,
-$Z = \int e^{-\beta U(\vx)} \, d\vx$ is the partition function,
+$U(\vr)$ is potential energy function,
+$Z = \int e^{-\beta U(\vr)} \, d\vr$ is the partition function,
 and $\delta(\dots)$ is $\delta$-function.
 %
 One can readily verify that this distribution is properly normalized as
@@ -63,15 +64,15 @@ This can be accomplished by HMC by repeating the following steps
 \begin{enumerate}
   \item Perform $k$ MD steps with a stochastic thermostat,
         and let the system evolute
-        from the state $(\vx, \vv)$ to $(\vx', \vv')$.
+        from the state $(\vr, \vv)$ to $(\vr', \vv')$.
         We set $k = 1$ in this study.
 
-  \item Compute $\Delta w \equiv w[\Q(\vx')] - w[\Q(\vx)]$,
+  \item Compute $\Delta w \equiv w[\Q(\vr')] - w[\Q(\vr)]$,
         and generate a uniform random number $r$ between $0$ and $1$.
 
   \item If $r < \min\{e^{-\Delta w}, 1\}$, do nothing,
-        that is, remain in the state $(\vx', \vv')$.
-        Otherwise, change the current state to $(\vx, -\vv)$
+        that is, remain in the state $(\vr', \vv')$.
+        Otherwise, change the current state to $(\vr, -\vv)$
         (notice the reversal of velocity).
 \end{enumerate}
 
