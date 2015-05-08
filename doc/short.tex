@@ -1,0 +1,206 @@
+\documentclass{article}
+\usepackage{amsmath}
+
+
+
+\newcommand{\vct}[1]{\mathbf{#1}}
+\newcommand{\vx}{\vct{x}}
+\newcommand{\vr}{\vct{r}}
+\newcommand{\vv}{\vct{v}}
+\newcommand{\Q}{\mathcal{Q}}
+
+
+
+\begin{document}
+
+
+
+% Aggregation problem.
+%
+In a multiple-component liquid mixture,
+a homogeneously dispersed solute-like substance
+can aggregate and form larger clusters
+under certain temperature and concentration.
+%
+A challenge is to predict if this would occur
+for a given condition.
+
+
+
+% Free energy calculation.
+%
+The problem can be tackled
+from the free energy perspective,
+%
+in which one computes
+the amount of free energy gained or lost
+in forming an aggregate from the dispersed state.
+%
+More generally,
+a free energy calculation
+aims at computing the free energy difference
+between two well-characterized states $A$ and $B$,
+which, in our case,
+are the dispersed and aggregated states, respectively.
+
+
+% Umbrella sampling.
+%
+A standard technique for free energy calculation is
+umbrella sampling.
+%
+For molecular systems,
+a molecular dynamics (MD) implementation
+is usually more popular than
+a Monte Carlo (MC) one,
+and we shall focus on the former below.
+%
+First,
+we need to define
+from the molecular coordinates, $\vr$,
+a reaction coordinate, $Q(\vr)$,
+which assumes different values
+at states $A$ and $B$.
+%
+The free energy $F(q)$
+at given value of $q = Q(\vr)$
+is given by
+%
+\begin{equation}
+e^{-\beta F(q)}
+=
+Z^{-1}
+\int
+  e^{-\beta U_0(\vr)} \,
+  \delta[Q(\vr) - q] \,
+  d\vr,
+\label{eq:freeenergydef}
+\end{equation}
+%
+where,
+$U_0(\vr)$
+is the potential energy function,
+and
+$Z \equiv \int e^{-\beta U_0(\vr)} d\vr$.
+%
+In umbrella sampling,
+we modify the potential energy as
+%
+\begin{equation}
+U(\vr)
+=
+U_0(\vr)
++
+V[Q(\vr)],
+\end{equation}
+%
+with the bias potential
+$V[Q(\vr)]$
+depending on coordinates $\vr$
+only through the reaction coordinate.
+%
+The bias potential
+is updated throughout the simulation
+to achieve a flat distribution along $Q$.
+%
+When this is accomplished,
+one can show from Eq. \eqref{eq:freeenergydef}
+that $V(q)$ can differ from $-F(q)$
+by a constant shift only.
+
+
+
+% Difficulty of umbrella sampling
+% for a non-analytical order parameter.
+%
+However, the above scheme, when implemented in MD,
+suffers from an obvious limitation.
+%
+The reaction coordinate, $Q$,
+has to be a analytical function of the coordinates
+in order to produce the force.
+%
+This restriction is inconvenient
+for studying aggregation,
+for some intuitive reaction coordinates
+involving, e.g., the cluster size
+are clearly not analytical.
+
+
+
+% The method: free energy calculation along a non-analytical
+% order parameter using molecular dynamics
+%
+Here we give a simple remedy
+to enable free energy calculation
+for a non-analytical reaction coordinate.
+%
+The idea is to use
+the well-known technique of hybrid Monte Carlo (HMC)
+to effect the influence of the bias potential $V[Q(\vr)]$.
+%
+Since HMC requires only energy but not the force,
+the analyticity requirement is lifted.
+
+
+
+% Detailed description of the method
+%
+In the simplest implementation, 
+we repeat the following compound step until simulation ends.
+%
+Each compound step consists of three small steps:
+%
+\begin{enumerate}
+  \item Execute $k$ MD steps with a stochastic thermostat,
+        and let the system evolute
+        from the state $(\vr, \vv)$ to $(\vr', \vv')$.
+
+  \item Compute $\Delta V \equiv V[Q(\vr')] - V[Q(\vr)]$,
+        and generate a uniform random number $r$ between $0$ and $1$.
+
+  \item If $r < \min\{e^{-\beta \Delta V}, 1\}$,
+        accept the new state $(\vr', \vv')$.
+        Otherwise, change the current state to $(\vr, -\vv)$
+        (notice the reversal of velocity).
+\end{enumerate}
+
+
+
+% On-the-fly update of the bias potential
+%
+The bias potential can be updated on-the-fly
+using standard techniques.
+%
+The implementation using the Wang-Landau algorithm
+is described below.
+%
+We first discretize the potential on a few bins along $Q$,
+with the bias potential $V$ assuming a constant value $V_i$
+within each bin $i$.
+%
+The initial $V_i$ can be uniformly zero.
+%
+At the end of each compound step,
+we locate the bin $i$ containing the current $Q(\vr)$
+and update the potential there as
+%
+\begin{equation}
+V_i \rightarrow V_i + \ln f,
+\end{equation}
+%
+where $\ln f$ is the updating magnitude.
+%
+No matter the magnitude of $\ln f$,
+this updating scheme eventually leads to a flat distribution along $Q$,
+although the accuracy of $V_i$ depends on $\ln f$.
+%
+Thus, the magnitude $\ln f$ should be reduced gradually.
+
+
+% Example
+
+
+
+\end{document}
+
