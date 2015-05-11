@@ -62,6 +62,7 @@ static int graph_linked(const graph_t *g, int i, int j)
 }
 
 
+
 __inline static int graph_copy(graph_t *g, const graph_t *g2)
 {
   int i, n = g2->n;

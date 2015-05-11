@@ -1,45 +1,45 @@
 /* Monte Carlo simulation that samples a flat histogram along the cluster size
  * Wang-Landau algorithm is used */
-#include "ljmodel.h"
-#include "ljcls.h"
+#include "ljmixmodel.h"
+#include "ljmixcls.h"
 
 
 
 int main(int argc, char **argv)
 {
-  ljmodel_t m[1];
-  lj_t *lj;
-  ljcls_t *c;
+  ljmixmodel_t m[1];
+  ljmix_t *lj;
+  ljmixcls_t *c;
   wl_t *wl;
   int csize, it;
   double t;
   double tot = 0, acc = 0;
 
-  ljmodel_default(m);
-  ljmodel_doargs(m, argc, argv);
+  ljmixmodel_default(m);
+  ljmixmodel_doargs(m, argc, argv);
 
   /* open a Lennard-Jones object */
-  lj = lj_open(m->n, m->rho, m->rcdef);
+  lj = ljmix_open(m->ns, m->np, m->sig, m->rho, m->rcdef);
 
   /* open a Wang-Landau object */
-  wl = wl_openi(1, m->n,
+  wl = wl_openi(1, m->np[0],
       m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
-  c = ljcls_open(lj, m->rcls, wl->v - 1);
+  c = ljmixcls_open(lj, m->rcls, wl->v - 1);
 
   /* compute the potential energy */
-  lj_energy(lj);
+  ljmix_energy(lj);
   /* build a graph */
-  ljcls_mkgraph(c, c->g);
+  ljmixcls_mkgraph(c, c->g);
 
   for ( t = m->nstblk; t <= m->nsteps; t += m->nstblk ) {
     for ( it = 0; it < m->nstblk; it++ ) {
       /* a step of Metropolis algorithm
        * graph is implicitly computed */
       tot += 1;
-      acc += ljcls_metro(c, m->mcamp, m->beta);
+      acc += ljmixcls_metro(c, m->mcamp, m->beta);
 
       /* try to change the seed particle */
-      ljcls_changeseed(c, c->g);
+      ljmixcls_changeseed(c, c->g);
 
       csize = graph_getcsize(c->g, c->cseed);
       /* add the cluster size to the histogram
@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 
     if ( fmod(t, m->nstrep) < 0.1 ) {
       double flatness = wl_getflatness(wl);
-      ljcls_writepos(c, lj->x, lj->v, m->fnpos, 1);
+      ljmixcls_writepos(c, lj->x, lj->v, m->fnpos, 1);
       wl_save(wl, m->fnvcls);
       fprintf(stderr, "t %g, acc %.2f%% ep %g, seed %d, csize %d, flatness %g%%, lnf %g ",
           t, 100 * acc / tot, lj->epot,
@@ -64,8 +64,8 @@ int main(int argc, char **argv)
     }
   }
   //printf("epot: %g, %g\n", lj->epot, lj_energy_low(lj, lj->x, lj->r2ij, NULL, NULL, NULL));
-  lj_close(lj);
-  ljcls_close(c);
+  ljmix_close(lj);
+  ljmixcls_close(c);
   wl_close(wl);
   return 0;
 }

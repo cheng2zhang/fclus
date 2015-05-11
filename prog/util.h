@@ -125,4 +125,12 @@ __inline static int strncmpfuzzy(const char *s, const char *t, int n)
 
 
 
+/* check if `s' starts with `t', using fuzzy comparison */
+__inline static int strstartswith(const char *s, const char *t)
+{
+  return strncmpfuzzy(s, t, strlen(t)) == 0;
+}
+
+
+
 #endif

@@ -1,5 +1,5 @@
-#ifndef LJMODEL_H__
-#define LJMODEL_H__
+#ifndef LJMIXMODEL_H__
+#define LJMIXMODEL_H__
 
 
 
@@ -16,10 +16,15 @@
 
 
 
+#define NSMAX 2
+
+
 
 typedef struct {
-  int n; /* number of particles */
-  double rho;
+  int ns; /* number of species */
+  int np[NSMAX]; /* number of particles */
+  double sig[NSMAX]; /* diameter */
+  double rho; /* overall density */
   double temp;
   double beta;
   double rcdef; /* preferred radius cutoff */
@@ -43,16 +48,20 @@ typedef struct {
   double invt_c;
   int changeseed;
   int nvswaps;
-} ljmodel_t;
+} ljmixmodel_t;
 
 
 
 /* set default values of the parameters */
-__inline static void ljmodel_default(ljmodel_t *m)
+__inline static void ljmixmodel_default(ljmixmodel_t *m)
 {
   memset(m, 0, sizeof(*m));
-  m->n = 108;
-  m->rho = 0.25;
+  m->ns = 2;
+  m->np[0] = 54;
+  m->np[1] = 54;
+  m->sig[0] = 1.0;
+  m->sig[1] = 0.5;
+  m->rho = 0.2;
   m->temp = 2;
   m->beta = 0.5;
   m->rcdef = 1e9;
@@ -67,7 +76,7 @@ __inline static void ljmodel_default(ljmodel_t *m)
   m->verbose = 0;
   m->prog = NULL;
   m->fncfg = NULL;
-  m->fnpos = "lj.pos";
+  m->fnpos = "ljmix.pos";
   m->fnvcls = "vcls.dat";
   m->fnrep = NULL;
   m->wl_lnf0 = 4e-4;
@@ -81,13 +90,15 @@ __inline static void ljmodel_default(ljmodel_t *m)
 
 
 /* print help message and die */
-__inline static void ljmodel_help(const ljmodel_t *m)
+__inline static void ljmixmodel_help(const ljmixmodel_t *m)
 {
-  fprintf(stderr, "Lennard-Jones fluid\n");
+  fprintf(stderr, "Lennard-Jones mixture\n");
   fprintf(stderr, "Usage:\n");
   fprintf(stderr, "  %s [Options] [input.cfg]\n\n", m->prog);
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "  -n:            set the number of particles, default %d\n", m->n);
+  fprintf(stderr, "  --ns:          set the number of species, default %d\n", m->ns);
+  fprintf(stderr, "  --npX=N:       set the number of particles of species X, starting with 1\n");
+  fprintf(stderr, "  --sigX=N:      set the radius of species X, starting with 1\n");
   fprintf(stderr, "  -r, --rho=:    set the (maximal) density, default %g\n", m->rho);
   fprintf(stderr, "  -T:            set the temperautre, default %g\n", m->temp);
   fprintf(stderr, "  --rc=:         set the default cutoff, default %g\n", m->rcdef);
@@ -117,19 +128,47 @@ __inline static void ljmodel_help(const ljmodel_t *m)
 
 
 /* compute dependent variables */
-__inline static void ljmodel_compute(ljmodel_t *m)
+__inline static void ljmixmodel_compute(ljmixmodel_t *m)
 {
   m->beta = 1 / m->temp;
 }
 
 
 
+/* return the index of an array index */
+static int ljmixmodel_getidx(char *s, int n)
+{
+  char *p = strchr(s, '(');
+  int i;
+
+  if ( n <= 0 ) {
+    fprintf(stderr, "Error: getidx has array size %d of %s, have you set `ns'?\n", n, s);
+    exit(1);
+  }
+  if ( p == NULL ) {
+    p = strchr(s, '[');
+  }
+  if ( p == NULL ) {
+    fprintf(stderr, "Error: getidx cannot find the index of [%s]\n", s);
+    exit(1);
+  }
+  /* the input index starts from 1, so we subtract 1 */
+  i = atoi(p + 1) - 1;
+  if ( i >= n ) {
+    fprintf(stderr, "Error: getidx has bad index for %s, i %d > %d\n", s, i + 1, n);
+    exit(1);
+  }
+  return i;
+}
+
+
+
 /* load settings from the configuration file `fn' */
-__inline static int ljmodel_load(ljmodel_t *m, const char *fn)
+__inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
 {
   FILE *fp;
   char buf[800], *p, *key, *val;
-  int inpar;
+  int i, inpar;
 
   if ( (fp = fopen(fn, "r")) == NULL ) {
     fprintf(stderr, "cannot load %s\n", fn);
@@ -161,10 +200,18 @@ __inline static int ljmodel_load(ljmodel_t *m, const char *fn)
     val = p;
     for ( ; *p; p++ ) *p = (char) tolower(*p);
 
-    if ( strcmpfuzzy(key, "n") ) {
-      m->n = atoi(val);
-    } else if ( strcmpfuzzy(key, "rho") ) {
-      m->rho = atof(val);
+    if ( strcmpfuzzy(key, "ns") ) {
+      m->ns = atoi(val);
+      if ( m->ns > NSMAX ) {
+        fprintf(stderr, "too many species %d > %d\n", m->ns, NSMAX);
+        exit(1);
+      }
+    } else if ( strstartswith(key, "np(") ) {
+      i = ljmixmodel_getidx(key, m->ns);
+      m->np[i] = atoi(val);
+    } else if ( strstartswith(key, "sig(") ) {
+      i = ljmixmodel_getidx(key, m->ns);
+      m->sig[i] = atof(val);
     } else if ( strcmpfuzzy(key, "T") == 0
              || strcmpfuzzy(key, "temp") == 0 ) {
       m->temp = atof(val);
@@ -213,7 +260,7 @@ __inline static int ljmodel_load(ljmodel_t *m, const char *fn)
   }
 
   fclose(fp);
-  ljmodel_compute(m);
+  ljmixmodel_compute(m);
 
   return 0;
 }
@@ -221,13 +268,13 @@ __inline static int ljmodel_load(ljmodel_t *m, const char *fn)
 
 
 /* handle command line arguments */
-__inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
+__inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
 {
-  int i, j, ch;
+  int i, j, k, ch;
   char *p, *q;
 
   /* reset */
-  ljmodel_default(m);
+  ljmixmodel_default(m);
 
   /* set the program name */
   m->prog = argv[0];
@@ -236,9 +283,9 @@ __inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
     /* it's an argument */
     if ( argv[i][0] != '-' ) {
       m->fncfg = argv[i];
-      if ( ljmodel_load(m, m->fncfg) != 0 ) {
+      if ( ljmixmodel_load(m, m->fncfg) != 0 ) {
         fprintf(stderr, "failed to load %s\n", m->fncfg);
-        ljmodel_help(m);
+        ljmixmodel_help(m);
       }
       continue;
     }
@@ -255,7 +302,17 @@ __inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
         q = NULL;
       }
 
-      if ( strcmp(p, "rho") == 0 ) {
+      if ( strcmp(p, "ns") == 0 ) {
+        m->ns = atoi(q);
+      } else if ( strstartswith(p, "np") ) {
+        /* the index starts with 1, so subtract 1 */
+        k = atoi(p + 2) - 1;
+        m->np[k] = atoi(q);
+      } else if ( strstartswith(p, "sig") ) {
+        /* the index starts with 1, so subtract 1 */
+        k = atoi(p + 3) - 1;
+        m->sig[k] = atof(q);
+      } else if ( strcmp(p, "rho") == 0 ) {
         m->rho = atof(q);
       } else if ( strncmp(p, "temp", 4) == 0 ) {
         m->temp = atof(q);
@@ -298,10 +355,10 @@ __inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
       } else if ( strcmp(p, "nvswaps") == 0 ) {
         m->nvswaps = atoi(q);
       } else if ( strcmp(p, "help") == 0 ) {
-        ljmodel_help(m);
+        ljmixmodel_help(m);
       } else {
         fprintf(stderr, "unknown option %s\n", argv[i]);
-        ljmodel_help(m);
+        ljmixmodel_help(m);
       }
 
       continue;
@@ -326,12 +383,10 @@ __inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
           q = argv[i];
         } else {
           fprintf(stderr, "-%c requires an argument!\n", ch);
-          ljmodel_help(m);
+          ljmixmodel_help(m);
         }
 
-        if ( ch == 'n' ) { /* override the number of particles */
-          m->n = atoi(q);
-        } else if ( ch == 'r' ) { /* override the density */
+        if ( ch == 'r' ) { /* override the density */
           m->rho = atof(q);
         } else if ( ch == 'T' ) { /* override the temperature */
           m->temp = atof(q);
@@ -342,15 +397,15 @@ __inline static void ljmodel_doargs(ljmodel_t *m, int argc, char **argv)
       } else if ( ch == 'v' ) {
         m->verbose++;
       } else if ( ch == 'h' ) {
-        ljmodel_help(m);
+        ljmixmodel_help(m);
       } else {
         fprintf(stderr, "unknown option %s, j %d, ch %c\n", argv[i], j, ch);
-        ljmodel_help(m);
+        ljmixmodel_help(m);
       }
     }
   }
 
-  ljmodel_compute(m);
+  ljmixmodel_compute(m);
 }
 
 

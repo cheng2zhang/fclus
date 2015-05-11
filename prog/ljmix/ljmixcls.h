@@ -1,5 +1,5 @@
-#ifndef LJCLS_H__
-#define LJCLS_H__
+#ifndef LJMIXCLS_H__
+#define LJMIXCLS_H__
 
 
 
@@ -7,7 +7,7 @@
 
 
 
-#include "ljcore.h"
+#include "ljmixcore.h"
 #include "graph.h"
 #include "hmc.h"
 #include "wl.h"
@@ -15,29 +15,29 @@
 
 
 typedef struct {
-  lj_t *lj;
+  ljmix_t *lj;
 
   graph_t *g, *g2;
   double rcls; /* cluster cutoff */
   const double *vcls; /* bias potential */
   int cseed; /* seed of cluster */
   double (*x2)[D];
-} ljcls_t;
+} ljmixcls_t;
 
 
 
 
-__inline static ljcls_t *ljcls_open(lj_t *lj,
+__inline static ljmixcls_t *ljmixcls_open(ljmix_t *lj,
     double rcls, const double *vcls)
 {
-  ljcls_t *c;
-  int n = lj->n;
+  ljmixcls_t *c;
+  int np = lj->np[0];
 
   xnew(c, 1);
   c->lj = lj;
 
-  c->g = graph_open(n);
-  c->g2 = graph_open(n);
+  c->g = graph_open(np);
+  c->g2 = graph_open(np);
   c->rcls = rcls;
   c->vcls = vcls;
   c->cseed = 0;
@@ -47,7 +47,7 @@ __inline static ljcls_t *ljcls_open(lj_t *lj,
 
 
 
-__inline static void ljcls_close(ljcls_t *c)
+__inline static void ljmixcls_close(ljmixcls_t *c)
 {
   graph_close(c->g);
   graph_close(c->g2);
@@ -57,44 +57,48 @@ __inline static void ljcls_close(ljcls_t *c)
 
 
 
-#define ljcls_mkgraph(c, g) ljcls_mkgraph_low(c->lj, g, c->rcls)
+#define ljmixcls_mkgraph(c, g) ljmixcls_mkgraph_low(c->lj, g, c->rcls)
 
 /* build a graph and do clustering */
-static void ljcls_mkgraph_low(lj_t *lj, graph_t *g, double rm)
+static void ljmixcls_mkgraph_low(ljmix_t *lj, graph_t *g, double rm)
 {
-  int i, j, n = lj->n;
+  int i, j, np = lj->np[0];
   double rm2 = rm * rm;
 
   graph_empty(g);
-  for ( i = 0; i < n; i++ )
-    for ( j = i + 1; j < n; j++ )
-      if ( lj->r2ij[i*n + j] < rm2 )
+  for ( i = 0; i < np; i++ ) {
+    for ( j = i + 1; j < np; j++ ) {
+      if ( lj->r2ij[i*np + j] < rm2 ) {
         graph_link(g, i, j);
+      }
+    }
+  }
   graph_clus(g);
 }
 
 
 
-#define ljcls_mkgraph2(c, g, k) ljcls_mkgraph2_low(c->lj, g, k, c->rcls)
+#define ljmixcls_mkgraph2(c, g, k) ljmixcls_mkgraph2_low(c->lj, g, k, c->rcls)
 
 /* build a graph with the distances from k computed r2i */
-static void ljcls_mkgraph2_low(lj_t *lj, graph_t *g, int k, double rm)
+static void ljmixcls_mkgraph2_low(ljmix_t *lj, graph_t *g, int k, double rm)
 {
-  int i, j, n = lj->n;
+  int i, j, np = lj->np[0];
   double r2, rm2 = rm * rm;
 
   graph_empty(g);
-  for ( i = 0; i < n; i++ ) {
-    for ( j = i + 1; j < n; j++ ) {
+  for ( i = 0; i < np; i++ ) {
+    for ( j = i + 1; j < np; j++ ) {
       if ( i == k ) {
         r2 = lj->r2i[j];
       } else if ( j == k ) {
         r2 = lj->r2i[i];
       } else {
-        r2 = lj->r2ij[i*n + j];
+        r2 = lj->r2ij[i*np + j];
       }
-      if ( r2 < rm2 )
+      if ( r2 < rm2 ) {
         graph_link(g, i, j);
+      }
     }
   }
   graph_clus(g);
@@ -103,8 +107,8 @@ static void ljcls_mkgraph2_low(lj_t *lj, graph_t *g, int k, double rm)
 
 
 /* compute the cluster energy
- * call ljcls_mkgraph() first */
-__inline static double ljcls_eclus(const ljcls_t *c, const graph_t *g)
+ * call ljmixcls_mkgraph() first */
+__inline static double ljmixcls_eclus(const ljmixcls_t *c, const graph_t *g)
 {
   return c->vcls ? c->vcls[ graph_getcsize(g, c->cseed) ] : 0.0;
 }
@@ -112,23 +116,23 @@ __inline static double ljcls_eclus(const ljcls_t *c, const graph_t *g)
 
 
 /* Metropolis algorithm */
-__inline static int ljcls_metro(ljcls_t *c, double amp, double bet)
+__inline static int ljmixcls_metro(ljmixcls_t *c, double amp, double bet)
 {
-  lj_t *lj = c->lj;
+  ljmix_t *lj = c->lj;
   int i, acc = 0;
   double xi[D], r, du, dutot, dvir = 0;
   double ucls, ducls = 0;
 
-  i = lj_randmv(lj, xi, amp);
-  du = lj_depot(lj, i, xi, &dvir);
+  i = ljmix_randmv(lj, xi, amp);
+  du = ljmix_depot(lj, i, xi, &dvir);
 
-  ljcls_mkgraph2(c, c->g2, i);
+  ljmixcls_mkgraph2(c, c->g2, i);
 
   /* compute the clustering energy */
-  ucls = ljcls_eclus(c, c->g2);
+  ucls = ljmixcls_eclus(c, c->g2);
   /* since the clustering potential might have been changed
    * we have to recompute the old clustering energy */
-  ducls = ucls - ljcls_eclus(c, c->g);
+  ducls = ucls - ljmixcls_eclus(c, c->g);
 
   dutot = bet * du + ducls;
   if ( dutot < 0 ) {
@@ -138,7 +142,7 @@ __inline static int ljcls_metro(ljcls_t *c, double amp, double bet)
     acc = ( r < exp( -dutot ) );
   }
   if ( acc ) {
-    lj_commit(lj, i, xi, du, dvir);
+    ljmix_commit(lj, i, xi, du, dvir);
     graph_copy(c->g, c->g2);
     return 1;
   }
@@ -148,12 +152,12 @@ __inline static int ljcls_metro(ljcls_t *c, double amp, double bet)
 
 
 /* attempt to change the seed for clustering */
-__inline static int ljcls_changeseed(ljcls_t *c, const graph_t *g)
+__inline static int ljmixcls_changeseed(ljmixcls_t *c, const graph_t *g)
 {
-  lj_t *lj = c->lj;
-  int i, sz0, sz1, n = lj->n, acc = 0;
+  ljmix_t *lj = c->lj;
+  int i, sz0, sz1, np = lj->np[0], acc = 0;
 
-  i = (c->cseed + 1 + (int) (rand01() * (n - 1))) % n;
+  i = (c->cseed + 1 + (int) (rand01() * (np - 1))) % np;
   sz0 = graph_getcsize(g, c->cseed);
   sz1 = graph_getcsize(g, i);
   if ( sz0 == sz1 || c->vcls == NULL ) {
@@ -177,9 +181,9 @@ __inline static int ljcls_changeseed(ljcls_t *c, const graph_t *g)
 
 /* a step of HMC
  * `*csize1` gives the current cluster size on return */
-__inline static int ljcls_hmc(ljcls_t *c, hmc_t *hmc, int *csize1)
+__inline static int ljmixcls_hmc(ljmixcls_t *c, hmc_t *hmc, int *csize1)
 {
-  lj_t *lj = c->lj;
+  ljmix_t *lj = c->lj;
   /* compute the current cluster size */
   int csize = graph_getcsize(c->g, c->cseed);
   int acc, idat[2] = { csize, c->cseed };
@@ -213,23 +217,23 @@ __inline static int ljcls_hmc(ljcls_t *c, hmc_t *hmc, int *csize1)
 
 /* wrap coordinates such that particles
  * in the same cluster stay close */
-__inline static int ljcls_wrapclus(ljcls_t *c,
+__inline static int ljmixcls_wrapclus(ljmixcls_t *c,
     double (*xin)[D], double (*xout)[D], graph_t *g)
 {
-  int ic, i, j, n = c->lj->n, head, end;
+  int ic, i, j, n = c->lj->n, np = c->lj->np[0], head, end;
   double l = c->lj->l, invl = 1 / l, dx[D];
 
-  ljcls_mkgraph(c, g);
+  ljmixcls_mkgraph(c, g);
   for ( i = 0; i < n; i++ ) {
     vwrap( vcopy(xout[i], xin[i]), l );
   }
 
   for ( ic = 0; ic < g->nc; ic++ ) {
     /* find the seed of this cluster */
-    for ( i = 0; i < n; i++ )
+    for ( i = 0; i < np; i++ )
       if ( g->cid[i] == ic )
         break;
-    if ( i >= n ) {
+    if ( i >= np ) {
       fprintf(stderr, "no particle belongs to cluster %d\n", ic);
       return -1;
     }
@@ -240,12 +244,12 @@ __inline static int ljcls_wrapclus(ljcls_t *c,
     for ( ; head < end; head++ ) {
       i = g->queue[head];
       /* add neighbors of i into the queue */
-      for ( j = 0; j < n; j++ ) {
+      for ( j = 0; j < np; j++ ) {
         if ( graph_linked(g, i, j) && g->cid[j] >= 0 ) {
           g->cid[j] = -1;
           g->queue[ end++ ] = j;
           /* align j with i */
-          lj_vpbc(vdiff(dx, xout[j], xout[i]), l, invl);
+          ljmix_vpbc(vdiff(dx, xout[j], xout[i]), l, invl);
           vinc( vcopy(xout[j], xout[i]), dx );
         }
       }
@@ -259,27 +263,27 @@ __inline static int ljcls_wrapclus(ljcls_t *c,
 
 
 
-__inline static int ljcls_writepos(ljcls_t *c,
+__inline static int ljmixcls_writepos(ljmixcls_t *c,
     double (*x)[D], double (*v)[D],
     const char *fn, int wrap)
 {
-  lj_t *lj = c->lj;
+  ljmix_t *lj = c->lj;
 
   if ( wrap ) {
-    ljcls_wrapclus(c, x, c->x2, c->g2);
+    ljmixcls_wrapclus(c, x, c->x2, c->g2);
   } else {
-    lj_wrapbox(lj, x, c->x2);
+    ljmix_wrapbox(lj, x, c->x2);
   }
 
-  return lj_writepos(lj, c->x2, v, fn);
+  return ljmix_writepos(lj, c->x2, v, fn);
 }
 
 
 
 /* randomly swap the velocities of k pairs of particles */
-#define lj_vscramble(lj, v, k) md_vscramble(v, NULL, lj->n, k)
+#define ljmix_vscramble(lj, v, k) md_vscramble(v, NULL, lj->n, k)
 
 
 
-#endif /* LJCLS_H__ */
+#endif /* LJMIXCLS_H__ */
 

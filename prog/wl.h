@@ -82,7 +82,7 @@ __inline static wl_t *wl_openi(int nmin, int nmax,
     double c, unsigned flags)
 {
   wl_t *wl;
-  int n = nmax - nmin;
+  int n = nmax - nmin + 1;
 
   wl = wl_open0(n, lnf0, flatness, frac, c, flags);
   wl->nmin = nmin;
