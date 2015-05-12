@@ -224,6 +224,8 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
     } else if ( strstartswith(key, "eps(") ) {
       i = ljmixmodel_getidx(key, m->ns);
       m->eps[i] = atof(val);
+    } else if ( strcmpfuzzy(key, "rho") == 0 ) {
+      m->rho = atof(val);
     } else if ( strcmpfuzzy(key, "T") == 0
              || strcmpfuzzy(key, "temp") == 0 ) {
       m->temp = atof(val);

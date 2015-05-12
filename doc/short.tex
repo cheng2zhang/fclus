@@ -1,5 +1,7 @@
-\documentclass{article}
+%\documentclass{article}
+\documentclass[aip,jcp,preprint,superscriptaddress]{revtex4-1}
 \usepackage{amsmath}
+\usepackage{graphicx}
 
 
 
@@ -18,7 +20,7 @@
 % Aggregation problem.
 %
 In a multiple-component liquid mixture,
-a homogeneously dispersed solute-like substance
+a homogeneously dispersed solute or colloid
 can aggregate and form larger clusters
 under certain temperature and concentration.
 %
@@ -198,7 +200,79 @@ although the accuracy of $V_i$ depends on $\ln f$.
 Thus, the magnitude $\ln f$ should be reduced gradually.
 
 
+
 % Example
+%
+As a proof of principle,
+the above algorithm was tested on a Lennard-Jones mixture.
+%
+The system contains two species,
+with $N_1 = 27$ and $N_2 = 81$ particles.
+%
+The pair potential of species $a$ and $b$ is given by
+%
+\[
+  u_{ab}(r)
+=
+  4 \, \epsilon_{ab} \,
+  \left[
+    \left(
+      \frac{ \sigma_{ab} } { r }
+    \right)^{12}
+    -
+    \left(
+      \frac{ \sigma_{ab} } { r }
+    \right)^{6}
+  \right],
+\]
+%
+where,
+$\sigma_{ab} = (\sigma_a + \sigma_b)/2$,
+%
+and
+$\epsilon_{ab} = \sqrt{\epsilon_a \, \epsilon_b}$.
+%
+Here
+$\sigma_1 = 1.0$,
+$\sigma_2 = 0.5$,
+and
+$\epsilon_1 = \epsilon_2 = 1.0$.
+
+
+
+In this system,
+the reaction coordinate is the cluster size
+of a random particle of species $1$.
+%
+The clustering algorithm is the following:
+if the distance of any two particles is less than $1.6$,
+they belong to the same cluster.
+%
+All particles of species $1$
+are partitioned to clusters in this way.
+%
+The potential of mean force along the cluster size
+gives the free energy of growing a cluster of a certain size.
+%
+In Fig. \ref{fig:ljmix1},
+we show that the potential of mean force
+depends on the overall density $\rho = (N_1 + N_2)/V$.
+%
+At a low density $\rho = 0.4$,
+the cluster size is small predominately,
+while larger clusters start to occur at $\rho = 0.5$.
+
+
+\begin{figure}[h]
+  \makebox[\linewidth][c]{
+    \includegraphics[angle=0, width=0.9\linewidth]{fig/ljmix1.pdf}
+  }
+  \caption{
+    \label{fig:ljmix1}
+    Potential of mean force along the cluster size
+    in a Lennard-Jones mixture.
+  }
+\end{figure}
 
 
 
