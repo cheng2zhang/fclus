@@ -10,11 +10,15 @@ var lj = null;
 var wl = null;
 var hmc = null;
 
-var nu = 54;
-var sigu =1.00;
-var nv = 54;
+var nu = 27;
+var sigu = 1.0;
+var epsu = 1.0;
+
+var nv = 81;
 var sigv = 0.5;
-var rho = 0.25;
+var epsv = 1.0;
+
+var rho = 0.5;
 var tp = 1.5;
 var rcdef = 1000.0;
 var rcls = 1.6;
@@ -59,16 +63,19 @@ var seedcolor = "#ff2010"; // color of the special cluster
 
 function getparams()
 {
-  nu = get_int("nu", 54);
+  nu = get_int("nu", 27);
   sigu = get_float("sigu", 1.0);
-  nv = get_int("nv", 54);
-  sigv = get_float("sigv", 0.5);
+  epsu = get_float("epsu", 1.0);
 
-  var dim = get_int("dimension", 2);
+  nv = get_int("nv", 81);
+  sigv = get_float("sigv", 0.5);
+  epsv = get_float("epsu", 1.0);
+
+  var dim = get_int("dimension", 3);
   if ( dim === 2 || dim === 3 ) {
     D = dim;
   }
-  rho = get_float("density", 0.2);
+  rho = get_float("density", 0.5);
   tp = get_float("temperature", 1.5);
   rcdef = get_float("rcutoff", 1000.0);
   rcls = get_float("rcluster", 1.6);
@@ -394,7 +401,7 @@ function startsimul()
   stopsimul();
   getparams();
   wl = new WL(1, nu, 1, false, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
-  lj = new LJMix([nu, nv], [sigu, sigv], D, rho, rcdef, rcls, wl.v);
+  lj = new LJMix([nu, nv], [sigu, sigv], [epsu, epsv], D, rho, rcdef, rcls, wl.v);
   lj.force();
   lj.mkgraph(lj.g);
   hmc = new HMC(lj.n, 1, 1);

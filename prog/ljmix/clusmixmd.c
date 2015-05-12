@@ -5,14 +5,6 @@
 
 
 
-static void ljmixmodel_default_md(ljmixmodel_t *m)
-{
-  ljmixmodel_default(m);
-  m->wl_lnf0 = 4e-4;
-}
-
-
-
 int main(int argc, char **argv)
 {
   ljmixmodel_t m[1];
@@ -24,11 +16,11 @@ int main(int argc, char **argv)
   double t;
   double hmcacc = 0, hmctot = DBL_MIN;
 
-  ljmixmodel_default_md(m);
+  ljmixmodel_default(m);
   ljmixmodel_doargs(m, argc, argv);
 
   /* make a Lennard-Jones object */
-  lj = ljmix_open(m->ns, m->np, m->sig, m->rho, m->rcdef);
+  lj = ljmix_open(m->ns, m->np, m->sig, m->eps, m->rho, m->rcdef);
 
   /* make a Wang-Landau object */
   wl = wl_openi(1, m->np[0],

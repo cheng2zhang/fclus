@@ -72,19 +72,20 @@ function ljmix_initfcc(lj)
 function ljmix_gettail2d(lj, rho, n)
 {
   var is, js, ns = lj.ns;
-  var rd, irc, irc3, irc6, sig, utail, ptail;
+  var rd, irc, irc3, irc6, sig, eps, utail, ptail;
 
   rd = lj.rc * lj.rc;
   utail = 0;
   ptail = 0;
   for ( is = 0; is < ns; is++ ) {
     for ( js = 0; js < ns; js++ ) {
-      sig = (lj.sig[is] + lj.sig[js]) / 2;
+      sig = lj.sigij[is][js];
+      eps = lj.epsij[is][js];
       irc = sig / lj.rc;
       irc3 = irc * irc * irc;
       irc6 = irc3 * irc3;
-      utail += Math.PI*lj.rho[is]*lj.rho[js]*(0.4*irc6 - 1)*irc6*rd;
-      ptail += Math.PI*lj.rho[is]*lj.rho[js]*(2.4*irc6 - 3)*irc6*rd;
+      utail += Math.PI*eps*lj.rho[is]*lj.rho[js]*(0.4*irc6 - 1)*irc6*rd;
+      ptail += Math.PI*eps*lj.rho[is]*lj.rho[js]*(2.4*irc6 - 3)*irc6*rd;
     }
   }
   return [utail, ptail];
@@ -96,19 +97,20 @@ function ljmix_gettail2d(lj, rho, n)
 function ljmix_gettail3d(lj, rho, n)
 {
   var is, js, ns = lj.ns;
-  var rd, irc, irc3, irc6, sig, utail, ptail;
+  var rd, irc, irc3, irc6, sig, eps, utail, ptail;
 
   rd = lj.rc * lj.rc * lj.rc;
   utail = 0;
   ptail = 0;
   for ( is = 0; is < ns; is++ ) {
     for ( js = 0; js < ns; js++ ) {
-      sig = (lj.sig[is] + lj.sig[js]) / 2;
+      sig = lj.sigij[is][js];
+      eps = lj.epsij[is][js];
       irc = sig / lj.rc;
       irc3 = irc * irc * irc;
       irc6 = irc3 * irc3;
-      utail +=  8*Math.PI*lj.rho[is]*lj.rho[js]/9*(irc6 - 3.0)*irc6*rd;
-      ptail += 32*Math.PI*lj.rho[is]*lj.rho[js]/9*(irc6 - 1.5)*irc6*rd;
+      utail +=  8*Math.PI*eps*lj.rho[is]*lj.rho[js]/9*(irc6 - 3.0)*irc6*rd;
+      ptail += 32*Math.PI*eps*lj.rho[is]*lj.rho[js]/9*(irc6 - 1.5)*irc6*rd;
     }
   }
   return [utail, ptail];
@@ -147,14 +149,15 @@ function ljmix_setvol(lj, vol)
 
 
 
-function LJMix(np, sig, dim, rho, rcdef, rcls, vcls)
+function LJMix(np, sig, eps, dim, rho, rcdef, rcls, vcls)
 {
-  var i, j, t, n, is, d;
+  var i, j, t, n, is, js, d;
   var vol;
 
   this.ns = np.length;
   this.np = np;
   this.sig = sig;
+  this.eps = eps;
 
   // compute the total number of particles
   n = 0;
@@ -168,6 +171,16 @@ function LJMix(np, sig, dim, rho, rcdef, rcls, vcls)
   this.rho = newarr( this.ns );
   for ( is = 0; is < this.ns; is++ ) {
     this.rho[is] = this.np[is] / vol;
+  }
+
+  // compute the pairwise LJ parameters
+  this.sigij = newarr2d(this.ns, this.ns);
+  this.epsij = newarr2d(this.ns, this.ns);
+  for ( is = 0; is < this.ns; is++ ) {
+    for ( js = 0; js < this.ns; js++ ) {
+      this.sigij[is][js] = (this.sig[is] + this.sig[js]) / 2;
+      this.epsij[is][js] = Math.sqrt( this.eps[is] * this.eps[js] );
+    }
   }
 
   // assign the types
@@ -319,26 +332,31 @@ function ljmix_eclus(lj, g)
 LJMix.prototype.energy_low = function(x, r2ij)
 {
   var dx = newarr(this.dim), dr2, dr6, ep, vir, rc2 = this.rc2;
-  var l = this.l, invl = 1 / l;
-  var i, j, npr = 0, n = this.n;
+  var l = this.l, invl = 1 / l, sig, eps;
+  var i, j, itp, jtp, npr = 0, n = this.n;
 
   ep = vir = 0;
   for ( i = 0; i < n - 1; i++ ) {
+    itp = this.type[i];
     for ( j = i + 1; j < n; j++ ) {
+      jtp = this.type[j];
       dr2 = ljmix_pbcdist2(dx, x[i], x[j], l, invl);
       r2ij[i][j] = dr2;
       r2ij[j][i] = dr2;
-      if ( dr2 < rc2 ) {
-        dr2 = 1 / dr2;
-        dr6 = dr2 * dr2 * dr2;
-        vir += dr6 * (48 * dr6 - 24); // f.r
-        ep += 4 * dr6 * (dr6 - 1);
-        npr++;
+      if ( dr2 >= rc2 ) {
+        continue;
       }
+
+      sig = this.sigij[itp][jtp];
+      eps = this.epsij[itp][jtp];
+      dr2 = (sig * sig) / dr2;
+      dr6 = dr2 * dr2 * dr2;
+      vir += eps * dr6 * (48 * dr6 - 24); // f.r
+      ep += eps * 4 * dr6 * (dr6 - 1);
+      npr++;
     }
   }
-  return [ep + this.epot_tail, ep,
-    vir];
+  return [ep + this.epot_tail, ep, vir];
 };
 
 
@@ -348,7 +366,7 @@ LJMix.prototype.energy = function()
   ret = this.energy_low(this.x, this.r2ij);
   this.epot = ret[0];
   this.ep0  = ret[1];
-  this.vir  = ret[3];
+  this.vir  = ret[2];
   return this.epot;
 };
 
@@ -359,35 +377,38 @@ LJMix.prototype.force_low = function(x, f, r2ij)
 {
   var dx = newarr(this.dim), fi = newarr(this.dim);
   var dr2, dr6, fs, ep, vir, rc2 = this.rc2;
-  var l = this.l, invl = 1/l;
-  var i, j, npr = 0, n = this.n;
+  var l = this.l, invl = 1/l, sig, eps;
+  var i, j, itp, jtp, npr = 0, n = this.n;
 
   for (i = 0; i < n; i++) {
     vzero(f[i]);
   }
   for (ep = vir = 0, i = 0; i < n - 1; i++) {
+    itp = this.type[i];
     vzero(fi);
     for (j = i + 1; j < n; j++) {
       dr2 = ljmix_pbcdist2(dx, x[i], x[j], l, invl);
       r2ij[i][j] = dr2;
       r2ij[j][i] = dr2;
-      if ( dr2 < rc2) {
-        dr2 = 1 / dr2;
-        dr6 = dr2 * dr2 * dr2;
-        fs = dr6 * (48 * dr6 - 24); // f.r
-        vir += fs; // f.r
-        fs *= dr2; // f.r / r^2
-        vsinc(fi, dx, fs);
-        vsinc(f[j], dx, -fs);
-        ep += 4 * dr6 * (dr6 - 1);
-        npr++;
+      if ( dr2 >= rc2 ) {
+        continue;
       }
+      jtp = this.type[j];
+      sig = this.sigij[itp][jtp];
+      eps = this.epsij[itp][jtp];
+      dr2 = (sig * sig) / dr2;
+      dr6 = dr2 * dr2 * dr2;
+      fs = eps * dr6 * (48 * dr6 - 24); // f.r
+      vir += fs; // f.r
+      fs *= dr2; // f.r / r^2
+      vsinc(fi, dx, fs);
+      vsinc(f[j], dx, -fs);
+      ep += eps * 4 * dr6 * (dr6 - 1);
+      npr++;
     }
     vinc(f[i], fi);
   }
-  return [ep + this.epot_tail, ep,
-    ep - npr * this.epot_shift, // shifted energy
-    vir];
+  return [ep + this.epot_tail, ep, vir];
 };
 
 
@@ -397,7 +418,7 @@ LJMix.prototype.force = function()
   var ret = this.force_low(this.x, this.f, this.r2ij);
   this.epot = ret[0];
   this.ep0  = ret[1];
-  this.vir  = ret[3];
+  this.vir  = ret[2];
   return this.epot;
 };
 
@@ -474,13 +495,13 @@ LJMix.prototype.randmv = function(xi, amp)
 
 
 /* compute pair energy */
-function ljmix_pair(dr2, sig, rc2)
+function ljmix_pair(dr2, sig, eps, rc2)
 {
   if (dr2 < rc2) {
     var invr2 = (sig * sig) / dr2;
     var invr6 = invr2 * invr2 * invr2;
-    var vir = invr6 * (48 * invr6 - 24); // f.r
-    var u  = 4 * invr6 * (invr6 - 1);
+    var vir = eps * invr6 * (48 * invr6 - 24); // f.r
+    var u  = eps * 4 * invr6 * (invr6 - 1);
     return [true, u, vir];
   } else {
     return [false, 0.0, 0.0];
@@ -492,25 +513,28 @@ function ljmix_pair(dr2, sig, rc2)
 /* return the energy change from displacing x[i] to xi */
 LJMix.prototype.depot = function(i, xi)
 {
-  var j, n = this.n;
+  var j, itp, jtp, n = this.n;
   var l = this.l, invl = 1/l, rc2 = this.rc2, u, vir, ret;
-  var dx = newarr(this.dim), r2, sig;
+  var dx = newarr(this.dim), r2, sig, eps;
 
   u = 0.0;
   vir = 0.0;
+  itp = this.type[i];
   for ( j = 0; j < n; j++ ) { // pair
     if ( j === i ) {
       continue;
     }
     r2 = ( i < j ) ? this.r2ij[i][j] : this.r2ij[j][i];
-    sig = ( this.sig[ this.type[i] ] + this.sig[ this.type[j] ] ) / 2;
-    ret = ljmix_pair(r2, sig, rc2);
+    jtp = this.type[j];
+    sig = this.sigij[ itp ][ jtp ];
+    eps = this.epsij[ itp ][ jtp ];
+    ret = ljmix_pair(r2, sig, eps, rc2);
     if ( ret[0] ) {
       u -= ret[1];
       vir -= ret[2];
     }
     r2 = ljmix_pbcdist2(dx, xi, this.x[j], l, invl);
-    ret = ljmix_pair(r2, sig, rc2);
+    ret = ljmix_pair(r2, sig, eps, rc2);
     if ( ret[0] ) {
       u += ret[1];
       vir += ret[2];

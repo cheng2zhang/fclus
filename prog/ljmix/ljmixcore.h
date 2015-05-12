@@ -24,6 +24,9 @@ typedef struct {
   int ns; /* number of species */
   int np[NSMAX]; /* number of particles */
   double sig[NSMAX]; /* diameter */
+  double eps[NSMAX]; /* energy unit */
+  double sigij[NSMAX][NSMAX];
+  double epsij[NSMAX][NSMAX];
   double rho[NSMAX]; /* density, to be computed */
   int *type;
   double l, vol;
@@ -183,10 +186,11 @@ static void ljmix_setvol(ljmix_t *lj, double vol)
 
 /* open an LJ system */
 static ljmix_t *ljmix_open(int ns,
-    int *np, double *sig, double rho, double rcdef)
+    int *np, double *sig, double *eps,
+    double rho, double rcdef)
 {
   ljmix_t *lj;
-  int i, j, t, n, is, d;
+  int i, j, t, n, is, js, d;
   double vol;
 
   xnew(lj, 1);
@@ -196,6 +200,7 @@ static ljmix_t *ljmix_open(int ns,
   for ( n = 0, is = 0; is < ns; is++ ) {
     lj->np[is] = np[is];
     lj->sig[is] = sig[is];
+    lj->eps[is] = eps[is];
     n += np[is];
   }
   lj->n = n;
@@ -204,6 +209,14 @@ static ljmix_t *ljmix_open(int ns,
   vol = n / rho;
   for ( is = 0; is < ns; is++ ) {
     lj->rho[is] = lj->np[is] / vol;
+  }
+
+  /* compute the pairwise LJ parameters */
+  for ( is = 0; is < ns; is++ ) {
+    for ( js = 0; js < ns; js++ ) {
+      lj->sigij[is][js] = (lj->sig[is] + lj->sig[js]) / 2;
+      lj->epsij[is][js] = sqrt( lj->eps[is] * lj->eps[js] );
+    }
   }
 
   /* assign the types */
@@ -298,7 +311,7 @@ __inline static double ljmix_energy_low(ljmix_t *lj,
     double *r2ij, double *virial, double *ep0)
 {
   double dx[D], dr2, ir2, ir6, ep, vir, rc2 = lj->rc2;
-  double l = lj->l, invl = 1/l, sig;
+  double l = lj->l, invl = 1/l, sig, eps;
   int i, j, itp, jtp, npr = 0, n = lj->n;
 
   ep = vir = 0;
@@ -314,11 +327,12 @@ __inline static double ljmix_energy_low(ljmix_t *lj,
       if ( dr2 >= rc2 ) {
         continue;
       }
-      sig = ( lj->sig[itp] + lj->sig[jtp] ) / 2;
+      sig = lj->sigij[itp][jtp];
+      eps = lj->epsij[itp][jtp];
       ir2 = (sig * sig) / dr2;
       ir6 = ir2 * ir2 * ir2;
-      vir += ir6 * (48 * ir6 - 24); /* f.r */
-      ep += 4 * ir6 * (ir6 - 1);
+      vir += eps * ir6 * (48 * ir6 - 24); /* f.r */
+      ep += eps * 4 * ir6 * (ir6 - 1);
       npr++;
     }
   }
@@ -344,7 +358,7 @@ __inline static double ljmix_force_low(ljmix_t *lj,
     double *r2ij, double *virial, double *ep0)
 {
   double dx[D], fi[D], dr2, ir2, ir6, fs, ep, vir, rc2 = lj->rc2;
-  double l = lj->l, invl = 1/l, sig;
+  double l = lj->l, invl = 1/l, sig, eps;
   int i, j, itp, jtp, npr = 0, n = lj->n;
 
   for (i = 0; i < n; i++) {
@@ -363,15 +377,16 @@ __inline static double ljmix_force_low(ljmix_t *lj,
         r2ij[j*n + i] = dr2;
       }
       if ( dr2 >= rc2 ) continue;
-      sig = ( lj->sig[itp] + lj->sig[jtp] ) / 2;
+      sig = lj->sigij[itp][jtp];
+      eps = lj->epsij[itp][jtp];
       ir2 = (sig * sig) / dr2;
       ir6 = ir2 * ir2 * ir2;
-      fs = ir6 * (48 * ir6 - 24); /* f.r */
+      fs = eps * ir6 * (48 * ir6 - 24); /* f.r */
       vir += fs; /* f.r */
       fs /= dr2; /* f.r / r^2 */
       vsinc(fi, dx, fs);
       vsinc(f[j], dx, -fs);
-      ep += 4 * ir6 * (ir6 - 1);
+      ep += eps * 4 * ir6 * (ir6 - 1);
       npr++;
     }
     vinc(f[i], fi);
@@ -463,14 +478,15 @@ static int ljmix_randmv(ljmix_t *lj, double *xi, double amp)
 
 
 /* compute pair energy */
-__inline static int ljmix_pair(double dr2, double sig,
+__inline static int ljmix_pair(double dr2,
+    double sig, double eps,
     double rc2, double *u, double *vir)
 {
   if ( dr2 < rc2 ) {
     double invr2 = (sig * sig) / dr2;
     double invr6 = invr2 * invr2 * invr2;
-    *vir = invr6 * (48 * invr6 - 24); /* f.r */
-    *u  = 4 * invr6 * (invr6 - 1);
+    *vir = eps * invr6 * (48 * invr6 - 24); /* f.r */
+    *u  = eps * 4 * invr6 * (invr6 - 1);
     return 1;
   } else {
     *vir = 0;
@@ -484,22 +500,25 @@ __inline static int ljmix_pair(double dr2, double sig,
 /* return the energy change from displacing x[i] to xi */
 __inline static double ljmix_depot(ljmix_t *lj, int i, double *xi, double *vir)
 {
-  int j, n = lj->n;
+  int j, itp, jtp, n = lj->n;
   double l = lj->l, invl = 1/l, rc2 = lj->rc2, u, du, dvir;
-  double dx[D], r2, sig;
+  double dx[D], r2, sig, eps;
 
   u = 0.0;
   *vir = 0.0;
+  itp = lj->type[i];
   for ( j = 0; j < n; j++ ) { /* pair */
     if ( j == i ) continue;
+    jtp = lj->type[j];
     r2 = lj->r2ij[i*n + j];
-    sig = ( lj->sig[ lj->type[i] ] + lj->sig[ lj->type[j] ] ) / 2;
-    if ( ljmix_pair(r2, sig, rc2, &du, &dvir) ) {
+    sig = lj->sigij[itp][jtp];
+    eps = lj->epsij[itp][jtp];
+    if ( ljmix_pair(r2, sig, eps, rc2, &du, &dvir) ) {
       u -= du;
       *vir -= dvir;
     }
     r2 = ljmix_pbcdist2(dx, xi, lj->x[j], l, invl);
-    if ( ljmix_pair(r2, sig, rc2, &du, &dvir) ) {
+    if ( ljmix_pair(r2, sig, eps, rc2, &du, &dvir) ) {
       u += du;
       *vir += dvir;
     }

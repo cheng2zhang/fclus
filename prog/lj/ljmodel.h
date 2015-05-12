@@ -52,7 +52,11 @@ __inline static void ljmodel_default(ljmodel_t *m)
 {
   memset(m, 0, sizeof(*m));
   m->n = 108;
+#if D == 2
+  m->rho = 0.35;
+#else
   m->rho = 0.25;
+#endif
   m->temp = 2;
   m->beta = 0.5;
   m->rcdef = 1e9;

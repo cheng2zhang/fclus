@@ -12,6 +12,7 @@
 
 
 #include "util.h"
+#include "vct.h"
 
 
 
@@ -24,6 +25,7 @@ typedef struct {
   int ns; /* number of species */
   int np[NSMAX]; /* number of particles */
   double sig[NSMAX]; /* diameter */
+  double eps[NSMAX]; /* energy unit */
   double rho; /* overall density */
   double temp;
   double beta;
@@ -57,12 +59,18 @@ __inline static void ljmixmodel_default(ljmixmodel_t *m)
 {
   memset(m, 0, sizeof(*m));
   m->ns = 2;
-  m->np[0] = 54;
-  m->np[1] = 54;
+  m->np[0] = 27;
+  m->np[1] = 81;
   m->sig[0] = 1.0;
   m->sig[1] = 0.5;
-  m->rho = 0.2;
-  m->temp = 2;
+  m->eps[0] = 1.0;
+  m->eps[1] = 1.0;
+#if D == 2
+  m->rho = 1.3;
+#else
+  m->rho = 0.5;
+#endif
+  m->temp = 2.0;
   m->beta = 0.5;
   m->rcdef = 1e9;
   m->rcls = 1.6;
@@ -98,7 +106,8 @@ __inline static void ljmixmodel_help(const ljmixmodel_t *m)
   fprintf(stderr, "Options:\n");
   fprintf(stderr, "  --ns:          set the number of species, default %d\n", m->ns);
   fprintf(stderr, "  --npX=N:       set the number of particles of species X, starting with 1\n");
-  fprintf(stderr, "  --sigX=N:      set the radius of species X, starting with 1\n");
+  fprintf(stderr, "  --sigX=N:      set the radius of species X, index starting with 1\n");
+  fprintf(stderr, "  --epsX=N:      set the energy unit of species X, index starting with 1\n");
   fprintf(stderr, "  -r, --rho=:    set the (maximal) density, default %g\n", m->rho);
   fprintf(stderr, "  -T:            set the temperautre, default %g\n", m->temp);
   fprintf(stderr, "  --rc=:         set the default cutoff, default %g\n", m->rcdef);
@@ -212,6 +221,9 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
     } else if ( strstartswith(key, "sig(") ) {
       i = ljmixmodel_getidx(key, m->ns);
       m->sig[i] = atof(val);
+    } else if ( strstartswith(key, "eps(") ) {
+      i = ljmixmodel_getidx(key, m->ns);
+      m->eps[i] = atof(val);
     } else if ( strcmpfuzzy(key, "T") == 0
              || strcmpfuzzy(key, "temp") == 0 ) {
       m->temp = atof(val);
@@ -312,6 +324,10 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
         /* the index starts with 1, so subtract 1 */
         k = atoi(p + 3) - 1;
         m->sig[k] = atof(q);
+      } else if ( strstartswith(p, "eps") ) {
+        /* the index starts with 1, so subtract 1 */
+        k = atoi(p + 3) - 1;
+        m->eps[k] = atof(q);
       } else if ( strcmp(p, "rho") == 0 ) {
         m->rho = atof(q);
       } else if ( strncmp(p, "temp", 4) == 0 ) {

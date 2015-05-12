@@ -70,23 +70,21 @@ function ljdraw2d(lj, target, xin, userscale, adjmat, colors,
   for ( i = 0; i < lj.n; i++ ) {
     var x = Math.floor(  (xin[i][0] - lj.l * 0.5) * scale + width  * 0.5 );
     var y = Math.floor( -(xin[i][1] - lj.l * 0.5) * scale + height * 0.5 );
-    var color;
+    var color = defcolor;
 
     if ( i < lj.np[0] ) {
       ic = lj.g.cid[i];
       color = colors[ic];
+      if ( ic === 0 ) {
+        color = seedcolor;
+      }
     } else {
-      color = defcolor;
-    }
-    if ( ic === 0 ) {
-      color = seedcolor;
+      ic = null;
     }
 
-    var radius;
+    var radius = radius0 * lj.sig[ lj.type[i] ];
 
-    radius *= radius0 * lj.sig[ lj.type[i] ];
-
-    if ( i === lj.g.cseed[ic] ) {
+    if ( ic !== null && i === lj.g.cseed[ic] ) {
       // circle around the first particle of the cluster
       //drawBall(ctx, x, y, radius, color,     5); // outer outline
       //drawBall(ctx, x, y, radius, "#f0f0f0", 2); // inner outline
@@ -272,12 +270,13 @@ function ljdraw3d(lj, target, xin, userscale, adjmat, colors,
     rad *= lj.sig[ lj.type[ idmap[i] ] ];
     var rz = Math.floor( rad * scl );
     var color = defcolor;
+
     if ( idmap[i] < lj.np[0] ) {
       ic = lj.g.cid[ idmap[i] ];
       color = colors[ic];
-    }
-    if ( ic === 0 ) {
-      color = seedcolor;
+      if ( ic === 0 ) {
+        color = seedcolor;
+      }
     }
     if ( mark[ idmap[i] ] ) {
       // circle around the first particle of the cluster

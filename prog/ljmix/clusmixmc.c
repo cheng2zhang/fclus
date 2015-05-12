@@ -19,7 +19,7 @@ int main(int argc, char **argv)
   ljmixmodel_doargs(m, argc, argv);
 
   /* open a Lennard-Jones object */
-  lj = ljmix_open(m->ns, m->np, m->sig, m->rho, m->rcdef);
+  lj = ljmix_open(m->ns, m->np, m->sig, m->eps, m->rho, m->rcdef);
 
   /* open a Wang-Landau object */
   wl = wl_openi(1, m->np[0],

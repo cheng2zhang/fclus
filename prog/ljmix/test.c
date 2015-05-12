@@ -32,7 +32,7 @@ int main(int argc, char **argv)
   ljmixmodel_doargs(m, argc, argv);
   printf("ns %d, np %d %d, sig %g %g\n", m->ns, m->np[0], m->np[1], m->sig[0], m->sig[1]);
 
-  lj = ljmix_open(m->ns, m->np, m->sig, m->rho, m->rcdef);
+  lj = ljmix_open(m->ns, m->np, m->sig, m->eps, m->rho, m->rcdef);
   ljmix_testforce(lj);
   ljmix_close(lj);
   return 0;
