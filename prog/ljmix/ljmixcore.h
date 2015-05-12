@@ -77,21 +77,23 @@ static void ljmix_initfcc(ljmix_t *lj)
 static double ljmix_gettail(ljmix_t *lj, double *pptail)
 {
   int is, js, ns = lj->ns;
-  double irc, irc3, irc6, utail, ptail;
+  double rd, irc, irc3, irc6, sig, utail, ptail;
 
-  irc = 1/lj->rc;
-  irc3 = irc * irc * irc;
-  irc6 = irc3 * irc3;
+  rd = lj->rc * lj->rc;
   utail = 0;
   ptail = 0;
   for ( is = 0; is < ns; is++ ) {
     for ( js = 0; js < ns; js++ ) {
-      utail += M_PI*lj->rho[i]*lj->rho[j]*(0.4*irc6 - 1)*irc3*irc;
-      ptail += M_PI*lj->rho[i]*lj->rho[j]*(2.4*irc6 - 3)*irc3*irc;
+      sig = (lj->sig[is] + lj->sig[js]) / 2;
+      irc = sig / lj->rc;
+      irc3 = irc * irc * irc;
+      irc6 = irc3 * irc3;
+      utail += M_PI*lj->rho[is]*lj->rho[js]*(0.4*irc6 - 1)*irc6*rd;
+      ptail += M_PI*lj->rho[is]*lj->rho[js]*(2.4*irc6 - 3)*irc6*rd;
     }
   }
   if ( pptail != NULL ) {
-    **pptail = ptail;
+    *pptail = ptail;
   }
   utail *= lj->vol;
   return utail;
@@ -134,17 +136,19 @@ static void ljmix_initfcc(ljmix_t *lj)
 static double ljmix_gettail(ljmix_t *lj, double *pptail)
 {
   int is, js, ns = lj->ns;
-  double irc, irc3, irc6, utail, ptail;
+  double rd, irc, irc3, irc6, sig, utail, ptail;
 
-  irc = 1/lj->rc;
-  irc3 = irc * irc * irc;
-  irc6 = irc3 * irc3;
+  rd = lj->rc * lj->rc * lj->rc;
   utail = 0;
   ptail = 0;
   for ( is = 0; is < ns; is++ ) {
     for ( js = 0; js < ns; js++ ) {
-      utail += 8*M_PI*lj->rho[is]*lj->rho[js]/9*(irc6 - 3)*irc3;
-      ptail += 32*M_PI*lj->rho[is]*lj->rho[js]/9*(irc6 - 1.5)*irc3;
+      sig = (lj->sig[is] + lj->sig[js]) / 2;
+      irc = sig / lj->rc;
+      irc3 = irc * irc * irc;
+      irc6 = irc3 * irc3;
+      utail +=  8*M_PI*lj->rho[is]*lj->rho[js]/9*(irc6 - 3.0)*irc6*rd;
+      ptail += 32*M_PI*lj->rho[is]*lj->rho[js]/9*(irc6 - 1.5)*irc6*rd;
     }
   }
   if ( pptail != NULL ) {
@@ -195,6 +199,8 @@ static ljmix_t *ljmix_open(int ns,
     n += np[is];
   }
   lj->n = n;
+
+  /* compute the densities */
   vol = n / rho;
   for ( is = 0; is < ns; is++ ) {
     lj->rho[is] = lj->np[is] / vol;
@@ -461,10 +467,10 @@ __inline static int ljmix_pair(double dr2, double sig,
     double rc2, double *u, double *vir)
 {
   if ( dr2 < rc2 ) {
-    double invr2 = sig * sig / dr2;
+    double invr2 = (sig * sig) / dr2;
     double invr6 = invr2 * invr2 * invr2;
     *vir = invr6 * (48 * invr6 - 24); /* f.r */
-    *u  = 4.f * invr6 * (invr6 - 1);
+    *u  = 4 * invr6 * (invr6 - 1);
     return 1;
   } else {
     *vir = 0;

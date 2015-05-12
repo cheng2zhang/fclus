@@ -20,7 +20,7 @@ function WL(xmin, xmax, dx, isf, lnf0, flatness, frac, c, flags)
     n = Math.floor((xmax - xmin) / dx + 0.5);
     this.nmin = 0;
   } else {
-    n = xmax - xmin;
+    n = xmax - xmin + 1;
     this.nmin = xmin;
   }
   this.n = n;

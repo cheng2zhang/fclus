@@ -33,10 +33,9 @@ function mutvol3d(ri, rj, dij)
 
 
 /* find the envelope radius */
-function lj_getrenv(lj, g)
+function ljmix_getrenv(lj, g)
 {
-  var i, j, n = lj.n, ic, jc;
-  var dr2, dr2min;
+  var i, n = lj.n;
 
   // NOTE: currently, we'll use the uniform radius for all balls
   // for simplicity.
@@ -49,16 +48,16 @@ function lj_getrenv(lj, g)
 
 
 // compute the cluster volume
-function lj_clusvol(lj, g)
+function ljmix_clusvol(lj, g)
 {
-  var ic, i, j, n = lj.n;
+  var ic, i, j, n = lj.n, np = lj.np[0];
   var vol = 0, ri, rj, dij;
 
-  lj_getrenv(lj, g);
+  ljmix_getrenv(lj, g);
   lj.clsvol = newarr(g.nc);
 
   for ( ic = 0; ic < g.nc; ic++ ) {
-    for ( i = 0; i < n; i++ ) {
+    for ( i = 0; i < np; i++ ) {
       if ( g.cid[i] !== ic ) {
         continue;
       }
@@ -69,7 +68,7 @@ function lj_clusvol(lj, g)
         vol += 4 * Math.PI / 3 * ri * ri * ri;
       }
       // compute the mutual exclusion volume
-      for ( j = i + 1; j < n; j++ ) {
+      for ( j = i + 1; j < np; j++ ) {
         var rj = lj.renv[j];
         var dij = Math.sqrt( lj.r2ij[i][j] );
         if ( dij >= ri + rj

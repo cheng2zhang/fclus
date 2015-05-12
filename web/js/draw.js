@@ -127,6 +127,9 @@ function rgb2str(r, g, b)
 /* get the red, green and blue components of a color string */
 function parseRGB(color)
 {
+  if ( color == undefined ) {
+    console.log("");
+  }
   if ( color.substr(0, 3) === "rgb" ) {
     var i0 = color.indexOf("(") + 1;
     var i1 = color.lastIndexOf(")");

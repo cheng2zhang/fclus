@@ -10,8 +10,11 @@ var lj = null;
 var wl = null;
 var hmc = null;
 
-var n = 55;
-var rho = 0.7;
+var nu = 54;
+var sigu =1.00;
+var nv = 54;
+var sigv = 0.5;
+var rho = 0.25;
 var tp = 1.5;
 var rcdef = 1000.0;
 var rcls = 1.6;
@@ -56,12 +59,16 @@ var seedcolor = "#ff2010"; // color of the special cluster
 
 function getparams()
 {
-  n = get_int("n", 55);
+  nu = get_int("nu", 54);
+  sigu = get_float("sigu", 1.0);
+  nv = get_int("nv", 54);
+  sigv = get_float("sigv", 0.5);
+
   var dim = get_int("dimension", 2);
   if ( dim === 2 || dim === 3 ) {
     D = dim;
   }
-  rho = get_float("density", 0.7);
+  rho = get_float("density", 0.2);
   tp = get_float("temperature", 1.5);
   rcdef = get_float("rcutoff", 1000.0);
   rcls = get_float("rcluster", 1.6);
@@ -88,10 +95,10 @@ function getparams()
 
   changeseed = grab("changeseed").checked;
 
-  mousescale = get_float("ljscale");
+  mousescale = get_float("ljmixscale");
 
-  randcolors = newarr(n + 1);
-  for ( var ic = 0; ic <= n; ic++ ) {
+  randcolors = newarr(nu + 1);
+  for ( var ic = 0; ic <= nu; ic++ ) {
     randcolors[ic] = randHueColor(40, 120);
   }
 }
@@ -100,7 +107,7 @@ function getparams()
 
 function changescale()
 {
-  mousescale = get_float("ljscale");
+  mousescale = get_float("ljmixscale");
   paint();
 }
 
@@ -235,7 +242,7 @@ function updatehistplot(wl)
   for ( i = 0; i < wl.n; i++ )
     dat += "" + (i+1) + "," + chhs[i] + "," + chs[i] + "\n";
   if ( histplot === null ) {
-    var h = grab("ljbox").height / 2 - 5;
+    var h = grab("ljmixbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Histogram of cluster size',
@@ -266,7 +273,7 @@ function updatevplot(wl)
   for ( i = 0; i < wl.n; i++ )
     dat += "" + (i+1) + "," + wl.v[i] + "\n";
   if ( vplot === null ) {
-    var h = grab("ljbox").height / 2 - 5;
+    var h = grab("ljmixbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Adaptive potential',
@@ -298,14 +305,14 @@ function paint()
   var paintmat = null; // adjacency matrix for visualization
   if ( groupclus ) {
     xpaint = lj.x2;
-    paintmat = lj_wrapclus(lj, lj.x, xpaint, lj.g2);
+    paintmat = ljmix_wrapclus(lj, lj.x, xpaint, lj.g2);
     // if we group particles according to clusters
     // some particles will flow out of the box
     // so we need a smaller scale
     adjustscale = 0.7;
   } else {
     xpaint = lj.x;
-    paintmat = lj_getclsmat(lj, lj.x);
+    paintmat = ljmix_getclsmat(lj, lj.x);
     adjustscale = 1.0;
   }
 
@@ -313,9 +320,9 @@ function paint()
   var ballscale = get_float("ballscale", 1.0);
 
   if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
+    ljdraw2d(lj, "ljmixbox", xpaint, s, paintmat, randcolors, ballscale);
   } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
+    ljdraw3d(lj, "ljmixbox", xpaint, s, paintmat, randcolors, ballscale);
   }
 }
 
@@ -337,7 +344,7 @@ function pulse()
   } else if ( simulmethod === "MC" ) {
     sinfo = domc();
   }
-  lj_clusvol(lj, lj.g);
+  ljmix_clusvol(lj, lj.g);
   sinfo += "cluster volume: " + roundto(lj.clsvol[0], 2) + "/" + roundto(lj.vol, 2) + "\n";
   grab("sinfo").innerHTML = sinfo;
 
@@ -386,14 +393,14 @@ function startsimul()
 {
   stopsimul();
   getparams();
-  wl = new WL(1, n, 1, false, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
-  lj = new LJ(n, D, rho, rcdef, rcls, wl.v);
+  wl = new WL(1, nu, 1, false, wl_lnf0, wl_flatness, wl_frac, invt_c, 0);
+  lj = new LJMix([nu, nv], [sigu, sigv], D, rho, rcdef, rcls, wl.v);
   lj.force();
   lj.mkgraph(lj.g);
   hmc = new HMC(lj.n, 1, 1);
   hmc.push(lj.x, lj.v, lj.f,
       [ lj.g.csize[ lj.g.cid[ lj.cseed ] ] ], [lj.epot]);
-  installmouse("ljbox", "ljscale");
+  installmouse("ljmixbox", "ljmixscale");
   ljtimer = setInterval(
     function(){ pulse(); },
     timer_interval);
@@ -469,7 +476,7 @@ function showtab(who)
 
 function resizecontainer(a)
 {
-  var canvas = grab("ljbox");
+  var canvas = grab("ljmixbox");
   var ctx = canvas.getContext("2d");
   var w, h;
   if ( a === null || a === undefined ) {
@@ -495,7 +502,7 @@ function resizecontainer(a)
   grab("simulbox").style.height = "" + h + "px";
   grab("simulbox").style.top = "" + hsbar + "px";
   grab("controlbox").style.top = "" + (h + hsbar) + "px";
-  grab("ljscale").style.width = "" + (w - 100) + "px";
+  grab("ljmixscale").style.width = "" + (w - 100) + "px";
   histplot = null;
   grab("histplot").style.left = "" + w + "px";
   grab("histplot").style.width = "" + wr + "px";
