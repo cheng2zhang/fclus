@@ -1,5 +1,5 @@
 %\documentclass{article}
-\documentclass[aip,jcp,preprint,superscriptaddress]{revtex4-1}
+\documentclass[notitlepage, preprint,superscriptaddress]{revtex4-1}
 \usepackage{amsmath}
 \usepackage{graphicx}
 
@@ -7,13 +7,18 @@
 
 \newcommand{\vct}[1]{\mathbf{#1}}
 \newcommand{\vx}{\vct{x}}
-\newcommand{\vr}{\vct{r}}
+%\newcommand{\vr}{\vct{r}}
 \newcommand{\vv}{\vct{v}}
 \newcommand{\Q}{\mathcal{Q}}
 
 
 
 \begin{document}
+
+
+
+\title{Free energy calculation along a non-analytical order parameter in molecular dynamics}
+\maketitle
 
 
 
@@ -59,13 +64,13 @@ and we shall focus on the former below.
 %
 First,
 we need to define
-from the molecular coordinates, $\vr$,
-a reaction coordinate, $Q(\vr)$,
+from the molecular coordinates, $\vct r$,
+a reaction coordinate, $Q(\vct r)$,
 which assumes different values
 at states $A$ and $B$.
 %
 The free energy $F(q)$
-at given value of $q = Q(\vr)$
+at given value of $q = Q(\vct{r})$
 is given by
 %
 \begin{equation}
@@ -73,32 +78,32 @@ e^{-\beta F(q)}
 =
 Z^{-1}
 \int
-  e^{-\beta U_0(\vr)} \,
-  \delta[Q(\vr) - q] \,
-  d\vr,
+  e^{-\beta U_0(\vct{r})} \,
+  \delta[Q(\vct{r}) - q] \,
+  d\vct{r},
 \label{eq:freeenergydef}
 \end{equation}
 %
 where,
-$U_0(\vr)$
+$U_0(\vct{r})$
 is the potential energy function,
 and
-$Z \equiv \int e^{-\beta U_0(\vr)} d\vr$.
+$Z \equiv \int e^{-\beta U_0(\vct{r})} d\vct{r}$.
 %
 In umbrella sampling,
 we modify the potential energy as
 %
 \begin{equation}
-U(\vr)
+U(\vct{r})
 =
-U_0(\vr)
+U_0(\vct{r})
 +
-V[Q(\vr)],
+V[Q(\vct{r})],
 \end{equation}
 %
 with the bias potential
-$V[Q(\vr)]$
-depending on coordinates $\vr$
+$V[Q(\vct{r})]$
+depending on coordinates $\vct{r}$
 only through the reaction coordinate.
 %
 The bias potential
@@ -139,10 +144,10 @@ for a non-analytical reaction coordinate.
 %
 The idea is to use
 the well-known technique of hybrid Monte Carlo (HMC)
-to effect the influence of the bias potential $V[Q(\vr)]$.
+to effect the influence of the bias potential $V[Q(\vct{r})]$.
 %
 Since HMC requires only energy but not the force,
-the analyticity requirement is lifted.
+the requirement of analyticity is lifted.
 
 
 
@@ -154,16 +159,17 @@ we repeat the following compound step until simulation ends.
 Each compound step consists of three small steps:
 %
 \begin{enumerate}
-  \item Execute $k$ MD steps with a stochastic thermostat,
+  \item Execute $k$ MD step(s) with a stochastic thermostat,
         and let the system evolute
-        from the state $(\vr, \vv)$ to $(\vr', \vv')$.
+        from the state $(\vct{r}, \vv)$ to $(\vct{r}', \vv')$.
+        Here, $k = 1$ for simplicity.
 
-  \item Compute $\Delta V \equiv V[Q(\vr')] - V[Q(\vr)]$,
+  \item Compute $\Delta V \equiv V[Q(\vct{r}')] - V[Q(\vct{r})]$,
         and generate a uniform random number $r$ between $0$ and $1$.
 
   \item If $r < \min\{e^{-\beta \Delta V}, 1\}$,
-        accept the new state $(\vr', \vv')$.
-        Otherwise, change the current state to $(\vr, -\vv)$
+        accept the new state $(\vct{r}', \vv')$.
+        Otherwise, change the current state to $(\vct{r}, -\vv)$
         (notice the reversal of velocity).
 \end{enumerate}
 
@@ -174,17 +180,18 @@ Each compound step consists of three small steps:
 The bias potential can be updated on-the-fly
 using standard techniques.
 %
-The implementation using the Wang-Landau algorithm
+The implementation using the Wang-Landau algorithm\cite{
+wang2001, *wang2001pre}
 is described below.
 %
-We first discretize the potential on a few bins along $Q$,
+We first set up a few bins along $Q$,
 with the bias potential $V$ assuming a constant value $V_i$
 within each bin $i$.
 %
 The initial $V_i$ can be uniformly zero.
 %
 At the end of each compound step,
-we locate the bin $i$ containing the current $Q(\vr)$
+we locate the bin $i$ containing the current $Q(\vct{r})$
 and update the potential there as
 %
 \begin{equation}
@@ -197,7 +204,8 @@ No matter the magnitude of $\ln f$,
 this updating scheme eventually leads to a flat distribution along $Q$,
 although the accuracy of $V_i$ depends on $\ln f$.
 %
-Thus, the magnitude $\ln f$ should be reduced gradually.
+Thus, the magnitude $\ln f$ should be reduced gradually\cite{
+wang2001, *wang2001pre, belardinelli2007, *belardinelli2008}.
 
 
 
@@ -276,5 +284,6 @@ while larger clusters start to occur at $\rho = 0.5$.
 
 
 
+\bibliography{simul}
 \end{document}
 
