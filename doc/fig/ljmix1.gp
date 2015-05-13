@@ -25,10 +25,10 @@ set style line 2  lw 2.0 lt 2 lc rgb color2  pt 8   ps 2.0
 
 
 set xlabel "Cluster size" offset 0, 0.9
-set ylabel "Potential of mean force" offset 1.0, 0
-set key left bottom Left reverse spacing 2.0 font "Times, 24"
+set ylabel "Potential of mean force, -{/Symbol-Oblique b}{/Times-Italic V}" offset 1.0, 0
+set key left bottom Left reverse spacing 2.0 font "Times, 24" at 2, -4
 
-plot [1:27][-4.2:] \
+plot [0:27][-4.2:] \
   "../../data/ljmix/sample1/vcls.dat" u 1:(-$2) w l ls 1 t "{/Symbol-Oblique r} = 0.5", \
   "../../data/ljmix/sample2/vcls.dat" u 1:(-$2) w l ls 2 t "{/Symbol-Oblique r} = 0.4"
 
