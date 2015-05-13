@@ -1,5 +1,5 @@
-#ifndef LJMIXMODEL_H__
-#define LJMIXMODEL_H__
+#ifndef CAGOMODEL_H__
+#define CAGOMODEL_H__
 
 
 
@@ -12,82 +12,87 @@
 
 
 #include "util.h"
-#include "vct.h"
 
 
-
-
-#define NSMAX 2
 
 
 
 typedef struct {
-  int ns; /* number of species */
-  int np[NSMAX]; /* number of particles */
-  double sig[NSMAX]; /* diameter */
-  double eps[NSMAX]; /* energy unit */
-  double rho; /* overall density */
+  const char *fnpdb;
+  double kb;
+  double ka;
+  double kd1;
+  double kd3;
+  double nbe;
+  double nbc;
   double temp;
   double beta;
-  double rcdef; /* preferred radius cutoff */
-  double rcls; /* clustering distance cutoff */
+  double rc; /* contact distance cutoff */
   double mcamp; /* MC amplitude */
   double mddt; /* MD time step */
   double thdt; /* thermostat step size */
   int nstblk;
   int nsthmc;
+  int nvswap;
   double nsteps;
   double nstrep;
   int verbose;
   const char *prog;
   const char *fncfg;
   const char *fnpos;
-  const char *fnvcls;
+  const char *fnvnc;
+  const char *fnvrmsd;
   const char *fnrep;
+  double fncmin; /* minimal fraction of number of contacts */
+  double fncmax; /* maximal fraction of number of contacts */
+  double rmsdmin;
+  double rmsdmax;
+  double rmsddel;
   double wl_lnf0;
   double wl_flatness;
   double wl_frac;
   double invt_c;
   int changeseed;
   int nvswaps;
-} ljmixmodel_t;
+} cagomodel_t;
 
 
 
 /* set default values of the parameters */
-__inline static void ljmixmodel_default(ljmixmodel_t *m)
+__inline static void cagomodel_default(cagomodel_t *m)
 {
   memset(m, 0, sizeof(*m));
-  m->ns = 2;
-  m->np[0] = 27;
-  m->np[1] = 81;
-  m->sig[0] = 1.0;
-  m->sig[1] = 0.5;
-  m->eps[0] = 1.0;
-  m->eps[1] = 1.0;
-#if D == 2
-  m->rho = 1.3;
-#else
-  m->rho = 0.5;
-#endif
-  m->temp = 2.0;
-  m->beta = 0.5;
-  m->rcdef = 1e9;
-  m->rcls = 1.6;
+  m->fnpdb = "pdb/1L2Y.pdb";
+  m->kb = 200.0;
+  m->ka = 40.0;
+  m->kd1 = 1.0;
+  m->kd3 = 0.5;
+  m->nbe = 1.0;
+  m->nbc = 4.0;
+  m->rc = 6.0;
+  m->temp = 1.02;
+  m->beta = 1/m->temp;
   m->mcamp = 0.2;
   m->mddt = 0.002;
   m->thdt = 0.1;
   m->nstblk = 10;
   m->nsthmc = 1;
+  m->nvswap = 1;
   m->nsteps = 1e10;
-  m->nstrep = 10000;
+  m->nstrep = 1000000;
   m->verbose = 0;
   m->prog = NULL;
   m->fncfg = NULL;
-  m->fnpos = "ljmix.pos";
-  m->fnvcls = "vcls.dat";
+  m->fnpos = "lj.pos";
+  m->fnvnc = "vnc.dat";
+  m->fnvrmsd = "vrmsd.dat";
   m->fnrep = NULL;
-  m->wl_lnf0 = 4e-4;
+  m->fncmin = 0.0;
+  m->fncmax = 1.0;
+  m->rmsdmin = 1.0;
+  m->rmsdmax = 6.0;
+  m->rmsddel = 0.05;
+  m->wl_lnf0 = 1e-4;
   m->wl_flatness = 0.3;
   m->wl_frac = 0.5;
   m->invt_c = 1.0;
@@ -98,20 +103,15 @@ __inline static void ljmixmodel_default(ljmixmodel_t *m)
 
 
 /* print help message and die */
-__inline static void ljmixmodel_help(const ljmixmodel_t *m)
+__inline static void cagomodel_help(const cagomodel_t *m)
 {
-  fprintf(stderr, "Lennard-Jones mixture\n");
+  fprintf(stderr, "Alpha-carbon Go model\n");
   fprintf(stderr, "Usage:\n");
   fprintf(stderr, "  %s [Options] [input.cfg]\n\n", m->prog);
   fprintf(stderr, "Options:\n");
-  fprintf(stderr, "  --ns:          set the number of species, default %d\n", m->ns);
-  fprintf(stderr, "  --npX=N:       set the number of particles of species X, starting with 1\n");
-  fprintf(stderr, "  --sigX=N:      set the radius of species X, index starting with 1\n");
-  fprintf(stderr, "  --epsX=N:      set the energy unit of species X, index starting with 1\n");
-  fprintf(stderr, "  -r, --rho=:    set the (maximal) density, default %g\n", m->rho);
+  fprintf(stderr, "  -i, --pdb=     set the input protein databank PDB, default %s\n", m->fnpdb);
   fprintf(stderr, "  -T:            set the temperautre, default %g\n", m->temp);
-  fprintf(stderr, "  --rc=:         set the default cutoff, default %g\n", m->rcdef);
-  fprintf(stderr, "  --rcls=:       set the clustering distance cutoff, default %g\n", m->rcls);
+  fprintf(stderr, "  --rc=:         set the contact distance cutoff, default %g\n", m->rc);
   fprintf(stderr, "  -A, --mcamp=:  set the MC amplitude, default %g\n", m->mcamp);
   fprintf(stderr, "  --dt=:         set the MD time step, default %g\n", m->mddt);
   fprintf(stderr, "  --thdt=:       set the thermostat time step, default %g\n", m->thdt);
@@ -121,7 +121,8 @@ __inline static void ljmixmodel_help(const ljmixmodel_t *m)
   fprintf(stderr, "  --nstrep=:     set the number of steps for reporting, default %g\n", m->nstrep);
   fprintf(stderr, "  --cfg=:        set the configuration file, default: %s\n", m->fncfg);
   fprintf(stderr, "  --pos=:        set the output coordinates file, default: %s\n", m->fnpos);
-  fprintf(stderr, "  --vcls=:       set the output file for the bias potential, default: %s\n", m->fnvcls);
+  fprintf(stderr, "  --vnc=:        set the output file for the NC bias potential, default: %s\n", m->fnvnc);
+  fprintf(stderr, "  --vrmsd=:      set the output file for the RMSD bias potential, default: %s\n", m->fnvrmsd);
   fprintf(stderr, "  --rep=:        set the output report file, default: %s\n", m->fnrep);
   fprintf(stderr, "  --lnf0=:       set the initial lnf, default: %g\n", m->wl_lnf0);
   fprintf(stderr, "  --flatness=:   set the histogram flatness for lnf, default: %g\n", m->wl_flatness);
@@ -137,47 +138,19 @@ __inline static void ljmixmodel_help(const ljmixmodel_t *m)
 
 
 /* compute dependent variables */
-__inline static void ljmixmodel_compute(ljmixmodel_t *m)
+__inline static void cagomodel_compute(cagomodel_t *m)
 {
   m->beta = 1 / m->temp;
 }
 
 
 
-/* return the index of an array index */
-static int ljmixmodel_getidx(char *s, int n)
-{
-  char *p = strchr(s, '(');
-  int i;
-
-  if ( n <= 0 ) {
-    fprintf(stderr, "Error: getidx has array size %d of %s, have you set `ns'?\n", n, s);
-    exit(1);
-  }
-  if ( p == NULL ) {
-    p = strchr(s, '[');
-  }
-  if ( p == NULL ) {
-    fprintf(stderr, "Error: getidx cannot find the index of [%s]\n", s);
-    exit(1);
-  }
-  /* the input index starts from 1, so we subtract 1 */
-  i = atoi(p + 1) - 1;
-  if ( i >= n ) {
-    fprintf(stderr, "Error: getidx has bad index for %s, i %d > %d\n", s, i + 1, n);
-    exit(1);
-  }
-  return i;
-}
-
-
-
 /* load settings from the configuration file `fn' */
-__inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
+__inline static int cagomodel_load(cagomodel_t *m, const char *fn)
 {
   FILE *fp;
   char buf[800], *p, *key, *val;
-  int i, inpar;
+  int inpar;
 
   if ( (fp = fopen(fn, "r")) == NULL ) {
     fprintf(stderr, "cannot load %s\n", fn);
@@ -209,30 +182,25 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
     val = p;
     for ( ; *p; p++ ) *p = (char) tolower(*p);
 
-    if ( strcmpfuzzy(key, "ns") ) {
-      m->ns = atoi(val);
-      if ( m->ns > NSMAX ) {
-        fprintf(stderr, "too many species %d > %d\n", m->ns, NSMAX);
-        exit(1);
-      }
-    } else if ( strstartswith(key, "np(") ) {
-      i = ljmixmodel_getidx(key, m->ns);
-      m->np[i] = atoi(val);
-    } else if ( strstartswith(key, "sig(") ) {
-      i = ljmixmodel_getidx(key, m->ns);
-      m->sig[i] = atof(val);
-    } else if ( strstartswith(key, "eps(") ) {
-      i = ljmixmodel_getidx(key, m->ns);
-      m->eps[i] = atof(val);
-    } else if ( strcmpfuzzy(key, "rho") == 0 ) {
-      m->rho = atof(val);
+    if ( strcmpfuzzy(key, "pdb") ) {
+      m->fnpdb = val;
+    } else if ( strcmpfuzzy(key, "kb") == 0 ) {
+      m->kb = atof(val);
+    } else if ( strcmpfuzzy(key, "ka") == 0 ) {
+      m->ka = atof(val);
+    } else if ( strcmpfuzzy(key, "kd1") == 0 ) {
+      m->kd1 = atof(val);
+    } else if ( strcmpfuzzy(key, "kd3") == 0 ) {
+      m->kd3 = atof(val);
+    } else if ( strcmpfuzzy(key, "nbe") == 0 ) {
+      m->nbe = atof(val);
+    } else if ( strcmpfuzzy(key, "nbc") == 0 ) {
+      m->nbc = atof(val);
+    } else if ( strcmpfuzzy(key, "rc") == 0 ) {
+      m->rc = atof(val);
     } else if ( strcmpfuzzy(key, "T") == 0
              || strcmpfuzzy(key, "temp") == 0 ) {
       m->temp = atof(val);
-    } else if ( strcmpfuzzy(key, "rc") == 0 ) {
-      m->rcdef = atof(val);
-    } else if ( strcmpfuzzy(key, "rcls") == 0 ) {
-      m->rcls = atof(val);
     } else if ( strcmpfuzzy(key, "mcamp") == 0 ) {
       m->mcamp = atof(val);
     } else if ( strcmpfuzzy(key, "mddt") == 0 ) {
@@ -250,8 +218,10 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
       m->nstrep = atof(val);
     } else if ( strcmpfuzzy(key, "fnpos") == 0 ) {
       m->fnpos = val;
-    } else if ( strcmpfuzzy(key, "fnvcls") == 0 ) {
-      m->fnvcls = val;
+    } else if ( strcmpfuzzy(key, "fnvnc") == 0 ) {
+      m->fnvnc = val;
+    } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
+      m->fnvrmsd = val;
     } else if ( strcmpfuzzy(key, "fnrep") == 0 ) {
       m->fnrep = val;
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
@@ -274,7 +244,7 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
   }
 
   fclose(fp);
-  ljmixmodel_compute(m);
+  cagomodel_compute(m);
 
   return 0;
 }
@@ -282,13 +252,13 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
 
 
 /* handle command line arguments */
-__inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
+__inline static void cagomodel_doargs(cagomodel_t *m, int argc, char **argv)
 {
-  int i, j, k, ch;
+  int i, j, ch;
   char *p, *q;
 
   /* reset */
-  ljmixmodel_default(m);
+  cagomodel_default(m);
 
   /* set the program name */
   m->prog = argv[0];
@@ -297,9 +267,9 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
     /* it's an argument */
     if ( argv[i][0] != '-' ) {
       m->fncfg = argv[i];
-      if ( ljmixmodel_load(m, m->fncfg) != 0 ) {
+      if ( cagomodel_load(m, m->fncfg) != 0 ) {
         fprintf(stderr, "failed to load %s\n", m->fncfg);
-        ljmixmodel_help(m);
+        cagomodel_help(m);
       }
       continue;
     }
@@ -316,28 +286,12 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
         q = NULL;
       }
 
-      if ( strcmp(p, "ns") == 0 ) {
-        m->ns = atoi(q);
-      } else if ( strstartswith(p, "np") ) {
-        /* the index starts with 1, so subtract 1 */
-        k = atoi(p + 2) - 1;
-        m->np[k] = atoi(q);
-      } else if ( strstartswith(p, "sig") ) {
-        /* the index starts with 1, so subtract 1 */
-        k = atoi(p + 3) - 1;
-        m->sig[k] = atof(q);
-      } else if ( strstartswith(p, "eps") ) {
-        /* the index starts with 1, so subtract 1 */
-        k = atoi(p + 3) - 1;
-        m->eps[k] = atof(q);
-      } else if ( strcmp(p, "rho") == 0 ) {
-        m->rho = atof(q);
+      if ( strcmpfuzzy(p, "pdb") == 0 ) {
+        m->fnpdb = q;
       } else if ( strncmp(p, "temp", 4) == 0 ) {
         m->temp = atof(q);
       } else if ( strcmp(p, "rc") == 0 ) {
-        m->rcdef = atof(q);
-      } else if ( strcmp(p, "rcls") == 0 ) {
-        m->rcls = atof(q);
+        m->rc = atof(q);
       } else if ( strcmp(p, "mcamp") == 0 ) {
         m->mcamp = atof(q);
       } else if ( strcmp(p, "mddt") == 0 ) {
@@ -356,8 +310,10 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
         m->fncfg = q;
       } else if ( strcmp(p, "pos") == 0 ) {
         m->fnpos = q;
-      } else if ( strcmp(p, "vcls") == 0 ) {
-        m->fnvcls = q;
+      } else if ( strcmp(p, "vnc") == 0 ) {
+        m->fnvnc = q;
+      } else if ( strcmp(p, "vrmsd") == 0 ) {
+        m->fnvrmsd = q;
       } else if ( strcmp(p, "rep") == 0 ) {
         m->fnrep = q;
       } else if ( strcmp(p, "lnf0") == 0 ) {
@@ -373,10 +329,10 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
       } else if ( strcmp(p, "nvswaps") == 0 ) {
         m->nvswaps = atoi(q);
       } else if ( strcmp(p, "help") == 0 ) {
-        ljmixmodel_help(m);
+        cagomodel_help(m);
       } else {
         fprintf(stderr, "unknown option %s\n", argv[i]);
-        ljmixmodel_help(m);
+        cagomodel_help(m);
       }
 
       continue;
@@ -386,7 +342,7 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
      * loop over characters in the options
      * in this way, `-vo' is understood as `-v -o' */
     for ( j = 1; (ch = argv[i][j]) != '\0'; j++ ) {
-      if ( strchr("rTA", ch) != NULL ) {
+      if ( strchr("iTA", ch) != NULL ) {
         /* handle options that require an argument */
         q = p = argv[i] + j + 1;
         if ( *p != '\0' ) {
@@ -401,11 +357,11 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
           q = argv[i];
         } else {
           fprintf(stderr, "-%c requires an argument!\n", ch);
-          ljmixmodel_help(m);
+          cagomodel_help(m);
         }
 
-        if ( ch == 'r' ) { /* override the density */
-          m->rho = atof(q);
+        if ( ch == 'i' ) { /* override the input PDB */
+          m->fnpdb = q;
         } else if ( ch == 'T' ) { /* override the temperature */
           m->temp = atof(q);
         } else if ( ch == 'A' ) { /* override the MC amplitude */
@@ -415,19 +371,19 @@ __inline static void ljmixmodel_doargs(ljmixmodel_t *m, int argc, char **argv)
       } else if ( ch == 'v' ) {
         m->verbose++;
       } else if ( ch == 'h' ) {
-        ljmixmodel_help(m);
+        cagomodel_help(m);
       } else {
         fprintf(stderr, "unknown option %s, j %d, ch %c\n", argv[i], j, ch);
-        ljmixmodel_help(m);
+        cagomodel_help(m);
       }
     }
   }
 
-  ljmixmodel_compute(m);
+  cagomodel_compute(m);
 }
 
 
 
 
 
-#endif /* LJMODEL_H__ */
+#endif /* CAGOMODEL_H__ */
