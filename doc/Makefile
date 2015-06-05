@@ -18,6 +18,9 @@ $(latexpdfs): %.pdf: %.tex $(bibfiles) $(pdffigs) Makefile
 	pdflatex $<
 	pdflatex $<
 
+$(pdffigs): $(epsfigs) $(figgps)
+	make -C fig
+
 clean:
 	$(RM) -rf *.log *.aux *.blg *Notes.bib *.bbl *~
 	rstrip.py -Rlv
