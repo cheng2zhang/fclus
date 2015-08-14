@@ -4,40 +4,12 @@
 
 
 
-int main(int argc, char **argv)
+
+/* use molecular dynamics to warm-up the system
+ * till the RMSD reaches m->rmsdmin */
+static void warmup_md_rmsd(cago_t *go, cagomodel_t *m)
 {
-  cagomodel_t m[1];
-  cago_t *go;
-  cagormsd_t *r;
-  wl_t *wl;
-  hmc_t *hmc;
-  double t;
-  double fdat[2], rmsd = 0;
-  double hmcacc = 0, hmctot = DBL_MIN;
-
-  cagomodel_default(m);
-  m->invt_c = 5.0;
-  m->nstrep = 100000;
-  cagomodel_doargs(m, argc, argv);
-
-  /* open a Go model */
-  if ( (go = cago_open(m->fnpdb, m->kb, m->ka, m->kd1, m->kd3, m->nbe, m->nbc, m->rc,
-                       PDB_CONTACT_HEAVY, 4)) == NULL ) {
-    fprintf(stderr, "cannot initialize Go model from %s\n", m->fnpdb);
-    return -1;
-  }
-  cago_initmd(go, 0, 0.01, m->temp);
-
-  /* open a Wang-Landau object */
-  wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
-      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
-  r = cagormsd_open(go, wl);
-
-  /* change the degrees of freedom, with velocity swaps
-   * the angular momenta are no longer conserved */
-  if ( m->nvswaps > 0 ) {
-    go->dof = (go->n - 1) * D;
-  }
+  double t, rmsd = 0;
 
   /* warm up the system such that RMSD > rmsdmin */
   for ( t = 1; rmsd < m->rmsdmin; t++ ) {
@@ -47,14 +19,19 @@ int main(int argc, char **argv)
   }
   fprintf(stderr, "warm-up t %g, RMSD %g, ncont %d/%d\n",
       t, rmsd, cago_ncontacts(go, go->x, 1.2, NULL, NULL), go->ncont);
+}
 
-  /* make a hybrid Monte-Carlo object
-   * and two extra floating-point numbers:
-   * RMSD and potential energy */
-  hmc = hmc_open(go->n, 0, 2);
-  fdat[0] = rmsd;
-  fdat[1] = go->epot;
-  hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
+
+
+/* explicit HMC */
+static int run_hmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
+{
+  hmc_t *hmc;
+  double t, rmsd;
+  double hmcacc = 0, hmctot = DBL_MIN;
+
+  /* make a hybrid Monte-Carlo object */
+  hmc = cago_hmc_rmsd_init(go);
 
   for ( t = 1; t <= m->nsteps; t++ ) {
     cago_vv(go, 1.0, m->mddt);
@@ -63,7 +40,7 @@ int main(int argc, char **argv)
     /* use hybrid MC to sample a flat histogram along the cluster size */
     if ( fmod(t, m->nsthmc) < 0.1 ) {
       hmctot += 1;
-      hmcacc += cagormsd_hmc(r, hmc, &rmsd);
+      hmcacc += cago_hmc_rmsd(go, wl, hmc, &rmsd);
       go->ekin = cago_vscramble(go, go->v, m->nvswaps);
     } else {
       rmsd = cago_rmsd(go, go->x, NULL);
@@ -86,9 +63,48 @@ int main(int argc, char **argv)
     }
   }
 
-  cago_close(go);
-  cagormsd_close(r);
-  wl_close(wl);
   hmc_close(hmc);
+
+  return 0;
+}
+
+
+
+int main(int argc, char **argv)
+{
+  cagomodel_t m[1];
+  cago_t *go;
+  wl_t *wl;
+
+  cagomodel_default(m);
+  m->invt_c = 5.0;
+  m->nstrep = 100000;
+  cagomodel_doargs(m, argc, argv);
+
+  /* open a Go model */
+  if ( (go = cago_open(m->fnpdb, m->kb, m->ka, m->kd1, m->kd3, m->nbe, m->nbc, m->rc,
+                       PDB_CONTACT_HEAVY, 4)) == NULL ) {
+    fprintf(stderr, "cannot initialize Go model from %s\n", m->fnpdb);
+    return -1;
+  }
+  cago_initmd(go, 0, 0.01, m->temp);
+
+  /* open a Wang-Landau object */
+  wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+
+  /* change the degrees of freedom, with velocity swaps
+   * the angular momenta are no longer conserved */
+  if ( m->nvswaps > 0 ) {
+    go->dof = (go->n - 1) * D;
+  }
+
+  /* warm-up the system */
+  warmup_md_rmsd(go, m);
+
+  run_hmc_rmsd(go, wl, m);
+
+  cago_close(go);
+  wl_close(wl);
   return 0;
 }

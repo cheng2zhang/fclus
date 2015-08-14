@@ -4,31 +4,10 @@
 
 
 
-int main(int argc, char **argv)
+static void warmup_mc_rmsd(cago_t *go, cagomodel_t *m)
 {
-  cagomodel_t m[1];
-  cago_t *go;
-  cagormsd_t *r;
-  wl_t *wl;
   int it;
-  double t, rmsd = 0, tot = 0, acc = 0;
-
-  cagomodel_default(m);
-  cagomodel_doargs(m, argc, argv);
-
-  /* open a Go model */
-  if ( (go = cago_open(m->fnpdb, m->kb, m->ka, m->kd1, m->kd3, m->nbe, m->nbc, m->rc,
-                       PDB_CONTACT_HEAVY, 4)) == NULL ) {
-    fprintf(stderr, "cannot initialize Go model from %s\n", m->fnpdb);
-    return -1;
-  }
-  cago_initmd(go, 0, 0.01, m->temp);
-  go->dof = go->n * D;
-
-  /* open a Wang-Landau object */
-  wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
-      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
-  r = cagormsd_open(go, wl);
+  double t, rmsd = 0;
 
   /* warm up the system such that RMSD > rmsdmin */
   for ( t = m->nstblk; rmsd < m->rmsdmin; t += m->nstblk ) {
@@ -39,12 +18,20 @@ int main(int argc, char **argv)
   }
   fprintf(stderr, "warm-up t %g, RMSD %g, ncont %d/%d\n",
       t, rmsd, cago_ncontacts(go, go->x, 1.2, NULL, NULL), go->ncont);
+}
+
+
+
+static int run_metro_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
+{
+  int it;
+  double t, rmsd = 0, tot = 0, acc = 0;
 
   for ( t = m->nstblk; t <= m->nsteps; t += m->nstblk ) {
     for ( it = 0; it < m->nstblk; it++ ) {
       /* a step of Metropolis alogrithm */
       tot += 1;
-      acc += cagormsd_metro(r, m->mcamp, 1/m->temp, &rmsd);
+      acc += cago_metro_rmsd(go, wl, m->mcamp, 1/m->temp, &rmsd);
 
       wl_addf(wl, rmsd);
     }
@@ -66,8 +53,38 @@ int main(int argc, char **argv)
     }
   }
 
+  return 0;
+}
+
+
+
+int main(int argc, char **argv)
+{
+  cagomodel_t m[1];
+  cago_t *go;
+  wl_t *wl;
+
+  cagomodel_default(m);
+  cagomodel_doargs(m, argc, argv);
+
+  /* open a Go model */
+  if ( (go = cago_open(m->fnpdb, m->kb, m->ka, m->kd1, m->kd3, m->nbe, m->nbc, m->rc,
+                       PDB_CONTACT_HEAVY, 4)) == NULL ) {
+    fprintf(stderr, "cannot initialize Go model from %s\n", m->fnpdb);
+    return -1;
+  }
+  cago_initmd(go, 0, 0.01, m->temp);
+  go->dof = go->n * D;
+
+  /* open a Wang-Landau object */
+  wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+
+  warmup_mc_rmsd(go, m);
+
+  run_metro_rmsd(go, wl, m);
+
   cago_close(go);
-  cagormsd_close(r);
   wl_close(wl);
   return 0;
 }

@@ -13,39 +13,6 @@
 
 
 
-typedef struct {
-  cago_t *go;
-  wl_t *wl;
-} cagormsd_t;
-
-
-
-__inline static cagormsd_t *cagormsd_open(cago_t *go, wl_t *wl)
-{
-  cagormsd_t *r;
-
-  xnew(r, 1);
-  r->go = go;
-  r->wl = wl;
-  return r;
-}
-
-
-
-__inline static void cagormsd_close(cagormsd_t *r)
-{
-  free(r);
-}
-
-
-
-__inline static double cagormsd_getv(cagormsd_t *r, double x)
-{
-  return wl_getvf(r->wl, x);
-}
-
-
-
 /* compute the RMSD with a moved particle */
 __inline static double cago_rmsd2(cago_t *go,
   double (*x)[D], int i, double *xi)
@@ -61,11 +28,10 @@ __inline static double cago_rmsd2(cago_t *go,
 
 
 
-/* Metropolis algorithm */
-__inline static int cagormsd_metro(cagormsd_t *r,
+/* Metropolis algorithm (Monte Carlo) */
+__inline static int cago_metro_rmsd(cago_t *go, wl_t *wl,
     double amp, double bet, double *prmsd)
 {
-  cago_t *go = r->go;
   int i, acc;
   double xi[D], du, dutot;
   double rmsd, urmsd, durmsd;
@@ -78,8 +44,8 @@ __inline static int cagormsd_metro(cagormsd_t *r,
   du = cago_depot(go, go->x, i, xi);
 
   rmsd = cago_rmsd2(go, go->x, i, xi);
-  urmsd = cagormsd_getv(r, rmsd);
-  durmsd = urmsd - cagormsd_getv(r, *prmsd);
+  urmsd = wl_getvf(wl, rmsd);
+  durmsd = urmsd - wl_getvf(wl, *prmsd);
 
   dutot = bet * du + durmsd;
   if ( dutot < 0 ) {
@@ -102,31 +68,57 @@ __inline static int cagormsd_metro(cagormsd_t *r,
 
 
 
+/* initialize an HMC object for RMSD */
+__inline hmc_t *cago_hmc_rmsd_init(cago_t *go)
+{
+  hmc_t *hmc;
+  double fdat[2];
+
+  /* make a hybrid Monte-Carlo object
+   * and two extra floating-point numbers:
+   * RMSD and potential energy */
+  hmc = hmc_open(go->n, 0, 2);
+  fdat[0] = cago_rmsd(go, go->x, NULL);
+  fdat[1] = go->epot;
+  /* push the initial state */
+  hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
+
+  return hmc;
+}
+
+
+
 /* a step of HMC
  * `*rmsd` gives the current RMSD on return */
-__inline static int cagormsd_hmc(cagormsd_t *r, hmc_t *hmc, double *rmsd1)
+__inline static int cago_hmc_rmsd(cago_t *go, wl_t *wl,
+    hmc_t *hmc, double *rmsd1)
 {
-  cago_t *go = r->go;
   /* compute the current RMSD */
   double rmsd = cago_rmsd(go, go->x, NULL);
   int acc;
   double fdat[2];
   double dv = 0;
 
-  dv  = cagormsd_getv(r, rmsd);
-  dv -= cagormsd_getv(r, hmc->fdat[0]);
+  /* get the potential of the new (current) rmsd */
+  dv  = wl_getvf(wl, rmsd);
+  /* get the potential of the old (stock) rmsd */
+  dv -= wl_getvf(wl, hmc->fdat[0]);
 
+  /* decide whether to accept the new rmsd */
   if ( dv <= 0 ) {
     acc = 1;
   } else {
     double rr = rand01();
     acc = ( rr < exp( -dv ) );
   }
+
   if ( acc ) {
+    /* accept the new rmsd, deposit the new state */
     fdat[0] = rmsd;
     fdat[1] = go->epot;
     hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
   } else {
+    /* recover the old state */
     hmc_pop(hmc, go->x, go->v, go->f, NULL, fdat, 1);
     go->epot = fdat[1];
   }
