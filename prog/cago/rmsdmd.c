@@ -70,6 +70,38 @@ static int run_hmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
 
 
 
+/* implicit HMC */
+static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
+{
+  hmc_t *hmc;
+  double t, rmsd = 0;
+  double hmcacc = 0, hmctot = DBL_MIN;
+  double *fdat;
+
+  /* make a hybrid Monte-Carlo object */
+  hmc = cago_ihmc_rmsd_init(go, &fdat);
+
+  for ( t = 1; t <= m->nsteps; t++ ) {
+    rmsd = cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
+        wl, 1/m->temp, hmc, fdat);
+    go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
+
+    if ( fmod(t, m->nstrep) < 0.1 ) {
+      double flatness = wl_getflatness(wl);
+      cago_writepos(go, go->x, go->v, m->fnpos);
+      wl_save(wl, m->fnvrmsd);
+      printf("%g: ep %g, rmsd %g, hmcacc %.2f%%, flatness %.2f%%, lnf %g\n",
+          t, go->epot, rmsd,
+          100.0 * hmcacc / hmctot, 100.0 * flatness, wl->lnf);
+    }
+  }
+
+  hmc_close(hmc);
+  return 0;
+}
+
+
+
 int main(int argc, char **argv)
 {
   cagomodel_t m[1];
@@ -102,7 +134,11 @@ int main(int argc, char **argv)
   /* warm-up the system */
   warmup_md_rmsd(go, m);
 
-  run_hmc_rmsd(go, wl, m);
+  if ( m->implicithmc ) {
+    run_ihmc_rmsd(go, wl, m);
+  } else {
+    run_hmc_rmsd(go, wl, m);
+  }
 
   cago_close(go);
   wl_close(wl);

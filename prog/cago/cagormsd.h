@@ -133,5 +133,127 @@ __inline static int cago_hmc_rmsd(cago_t *go, wl_t *wl,
 
 
 
+
+
+/* initialize an HMC object for implicit RMSD */
+__inline hmc_t *cago_ihmc_rmsd_init(cago_t *go, double **pfdat)
+{
+  hmc_t *hmc;
+  double *fdat;
+  int cnt = 2 + go->n * D;
+
+  /* make a hybrid Monte-Carlo object
+   * and n*D + 2 extra floating-point numbers:
+   * RMSD, potential energy, and the fit structure */
+  hmc = hmc_open(go->n, 0, cnt);
+
+  xnew(fdat, cnt);
+  fdat[0] = cago_rmsd(go, go->x, go->x1);
+  fdat[1] = go->epot;
+  memcpy(fdat + 2, go->x1, go->n * D * sizeof(double));
+  *pfdat = fdat;
+
+  /* push the initial state */
+  hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
+
+  return hmc;
+}
+
+
+
+/* compute the RMSD of two structures */
+__inline static double cago_rmsd_raw(cago_t *go,
+    double (*x)[D], double (*xf)[D])
+{
+  int i, n = go->n;
+  double wtot = 0, dev = 0, dx[D], dx2;
+
+  for ( i = 0; i < n; i++ ) {
+    wtot += go->m[i];
+    vdiff(dx, x[i], xf[i]);
+    dx2 = vsqr(dx);
+    dev += go->m[i] * dx2;
+  }
+
+  return sqrt( dev / wtot );
+}
+
+
+
+/* velocity Verlet with RMSD bias */
+__inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
+    double (*xf)[D], wl_t *wl, double kT,
+    hmc_t *hmc, double *fdat)
+{
+  int i, n = go->n, acc;
+  double dth = 0.5 * dt * fs;
+  double rmsd, rmsd0, dv, dvdx;
+
+  for ( i = 0; i < n; i++ ) { /* VV part 1 */
+    vsinc(go->v[i], go->f[i], dth / go->m[i] );
+    vsinc(go->x[i], go->v[i], dt);
+  }
+
+  /* compute the normal force */
+  go->epot = cago_force(go, go->x, go->f);
+
+  /* compute the force from the bias potential */
+  /* 1. align the structure */
+  rmsd = cago_rmsd(go, go->x, xf);
+
+  /* 2. compute the RMSD from the old reference */
+  rmsd0 = cago_rmsd_raw(go, go->x, (vct *)(hmc->fdat + 2));
+
+  /* 3. compute energy caused by changing
+   *    the reference structure */
+  /* get the potential of the new (current) rmsd */
+  dv  = wl_getvf(wl, rmsd);
+  /* get the potential of the old (stock) rmsd */
+  dv -= wl_getvf(wl, rmsd0);
+
+  /* 4. decide if the change of reference is acceptable */
+  if ( dv <= 0 ) {
+    acc = 1;
+  } else {
+    double rr = rand01();
+    acc = ( rr < exp( -dv ) );
+  }
+
+  if ( acc ) {
+    /* accept the state */
+    fdat[0] = rmsd;
+    fdat[1] = go->epot;
+    memcpy(fdat + 2, xf, n * D * sizeof(double));
+    /* TODO: apply the force from the bias */
+    dvdx = kT * wl_getdvf(wl, rmsd) / rmsd / go->mtot;
+    {
+      double dx[D];
+      for ( i = 0; i < n; i++ ) {
+        vdiff(dx, go->x[i], xf[i]);
+        vsinc(go->f[i], dx, -dvdx * go->m[i]);
+      }
+    }
+    /* push the current state */
+    hmc_push(hmc, go->x, go->v, go->f, NULL, fdat); 
+  } else {
+    /* pop the old state, reverse the velocity */
+    hmc_pop(hmc, go->x, go->v, go->f, NULL, fdat, 1);
+    rmsd = fdat[0];
+    go->epot = fdat[1];
+    memcpy(xf, fdat + 2, n * D * sizeof(double));
+  }
+
+  for ( i = 0; i < n; i++ ) { /* VV part 2 */
+    vsinc(go->v[i], go->f[i], dth / go->m[i]);
+  }
+
+  wl_addf(wl, rmsd);
+  wl_updatelnf(wl);
+
+  return rmsd;
+}
+
+
+
 #endif /* CAGORMSD_H__ */
 

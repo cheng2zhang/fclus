@@ -33,6 +33,7 @@ typedef struct {
   double thdt; /* thermostat step size */
   int nstblk;
   int nsthmc;
+  int implicithmc; /* implicit HMC */
   int nvswap;
   double nsteps;
   double nstrep;
@@ -77,6 +78,7 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->thdt = 0.1;
   m->nstblk = 10;
   m->nsthmc = 1;
+  m->implicithmc = 0;
   m->nvswap = 1;
   m->nsteps = 1e10;
   m->nstrep = 1000000;
@@ -117,6 +119,7 @@ __inline static void cagomodel_help(const cagomodel_t *m)
   fprintf(stderr, "  --thdt=:       set the thermostat time step, default %g\n", m->thdt);
   fprintf(stderr, "  --nstblk=:     set the number of steps in each block, default %d\n", m->nstblk);
   fprintf(stderr, "  --nsthmc=:     set the number of steps in each hybrid MC step, default %d\n", m->nsthmc);
+  fprintf(stderr, "  --ihmc:        use implicit HMC, default %d\n", m->implicithmc);
   fprintf(stderr, "  --nsteps=:     set the number of steps, default %g\n", m->nsteps);
   fprintf(stderr, "  --nstrep=:     set the number of steps for reporting, default %g\n", m->nstrep);
   fprintf(stderr, "  --cfg=:        set the configuration file, default: %s\n", m->fncfg);

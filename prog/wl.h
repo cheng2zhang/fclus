@@ -188,6 +188,26 @@ __inline static double wl_getvf(wl_t *wl, double x)
 
 
 
+/* retrieve the gradient dv/dx */
+__inline static double wl_getdvf(wl_t *wl, double x)
+{
+  int i;
+
+  if ( x < wl->xmin ) {
+    i = 0;
+  } else {
+    i = (int) ((x - wl->xmin) / wl->dx + 0.5) - 1;
+    if ( i < 0 ) {
+      i = 0;
+    } else if ( i >= wl->n - 2 ) {
+      i = wl->n - 2;
+    }
+  }
+  return (wl->v[i + 1] - wl->v[i]) / wl->dx;
+}
+
+
+
 /* add an integral entry, update the histogram and potential */
 __inline static int wl_addi(wl_t *wl, int i)
 {
@@ -341,9 +361,9 @@ __inline static int wl_save(const wl_t *wl, const char *fn)
   wl_trimv(wl->v, wl->n);
   fprintf(fp, "# %d %d %g %g %g\n", wl->isf, wl->n, wl->xmin, wl->dx, wl->tot);
   for ( i = 0; i < wl->n; i++ ) {
-    if ( wl->isf ) {
+    if ( wl->isf ) { /* floating-point version */
       fprintf(fp, "%g", wl->xmin + (i + 0.5) * wl->dx);
-    } else {
+    } else { /* integer version */
       fprintf(fp, "%d", wl->nmin + i);
     }
     fprintf(fp, " %g %g %g\n",

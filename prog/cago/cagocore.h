@@ -36,6 +36,7 @@ typedef struct {
 
   /* variables for MD simulations */
   double *m; /* masses */
+  double mtot;
   double (*x)[3];
   double (*v)[3];
   double (*f)[3];
@@ -292,6 +293,11 @@ __inline static cago_t *cago_open(const char *fnpdb,
   xnew(go->m, go->n);
   for ( i = 0; i < go->n; i++ ) {
     go->m[i] = 1.0;
+  }
+
+  go->mtot = 0;
+  for ( i = 0; i < go->n; i++ ) {
+    go->mtot += go->m[i];
   }
 
   go->kb = kb;
