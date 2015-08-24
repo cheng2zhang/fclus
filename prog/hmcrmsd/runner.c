@@ -89,7 +89,7 @@
 #include "gpu_utils.h"
 #include "nbnxn_cuda_data_mgmt.h"
 
-double mdfoo(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
+double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
              const output_env_t oenv, gmx_bool bVerbose, gmx_bool bCompact,
              int nstglobalcomm,
              gmx_constr_t constr,
@@ -1721,7 +1721,7 @@ int mdrunner(gmx_hw_opt_t *hw_opt,
         }
 
         /* Now do whatever the user wants us to do (how flexible...) */
-        mdfoo(fplog, cr, nfile, fnm,
+        mdhmcrmsd(fplog, cr, nfile, fnm,
               oenv, bVerbose, bCompact,
               nstglobalcomm,
               constr,

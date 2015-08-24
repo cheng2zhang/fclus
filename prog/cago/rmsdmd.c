@@ -82,14 +82,16 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
   hmc = cago_ihmc_rmsd_init(go, &fdat);
 
   for ( t = 1; t <= m->nsteps; t++ ) {
-    rmsd = cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
-        wl, 1/m->temp, hmc, fdat);
+    hmctot += 1;
+    hmcacc += cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
+        wl, m->mfl, m->mfh, 1/m->temp, hmc, fdat);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
 
     if ( fmod(t, m->nstrep) < 0.1 ) {
       double flatness = wl_getflatness(wl);
       cago_writepos(go, go->x, go->v, m->fnpos);
       wl_save(wl, m->fnvrmsd);
+      rmsd = hmc->fdat[0];
       printf("%g: ep %g, rmsd %g, hmcacc %.2f%%, flatness %.2f%%, lnf %g\n",
           t, go->epot, rmsd,
           100.0 * hmcacc / hmctot, 100.0 * flatness, wl->lnf);
@@ -126,7 +128,9 @@ int main(int argc, char **argv)
       m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
 
   /* change the degrees of freedom, with velocity swaps
-   * the angular momenta are no longer conserved */
+   * the angular momenta are no longer conserved
+   * NOTE: if the mass is not uniform, linear momenta are not
+   * preserved as well, and `go->dof` should be `go->n * D` */
   if ( m->nvswaps > 0 ) {
     go->dof = (go->n - 1) * D;
   }

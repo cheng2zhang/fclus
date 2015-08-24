@@ -41,6 +41,7 @@
 #endif
 
 #include <stdio.h>
+#include "hmcrmsd.h"
 
 #include "gromacs/legacyheaders/checkpoint.h"
 #include "gromacs/legacyheaders/copyrite.h"
@@ -409,6 +410,7 @@ int gmx_mdrun(int argc, char *argv[])
         { efTOP, "-mp",     "membed",   ffOPTRD },
         { efNDX, "-mn",     "membed",   ffOPTRD },
         { efXVG, "-if",     "imdforces", ffOPTWR },
+        { efRND, "-cfg",    "hmcrmsd.cfg",  ffOPTRD },
         { efXVG, "-swap",   "swapions", ffOPTWR }
     };
 #define NFILE asize(fnm)
@@ -431,7 +433,7 @@ int gmx_mdrun(int argc, char *argv[])
     int             npme          = -1;
     int             nstlist       = 0;
     int             nmultisim     = 0;
-    int             nstglobalcomm = -1;
+    int             nstglobalcomm = 1;
     int             repl_ex_nst   = 0;
     int             repl_ex_seed  = -1;
     int             repl_ex_nex   = 0;
@@ -574,6 +576,8 @@ int gmx_mdrun(int argc, char *argv[])
     const char     *part_suffix = ".part";
     char            suffix[STRLEN];
     int             rc;
+    hmcrmsd_t       *hmcrmsd;
+
 
 
     cr = init_commrec();
@@ -598,6 +602,11 @@ int gmx_mdrun(int argc, char *argv[])
         return 0;
     }
 
+    if ( (hmcrmsd = hmcrmsd_open( opt2fn("-cfg", NFILE, fnm)
+            )) == NULL ) {
+      fprintf(stderr, "failed to initialize HMCRMSD\n");
+      return -1;
+    }
 
     /* we set these early because they might be used in init_multisystem()
        Note that there is the potential for npme>nnodes until the number of
@@ -732,6 +741,8 @@ int gmx_mdrun(int argc, char *argv[])
     {
         gmx_log_close(fplog);
     }
+
+    hmcrmsd_close(hmcrmsd);
 
     return rc;
 }

@@ -673,9 +673,17 @@ __inline static int cago_metro(cago_t *go, double amp, double bet)
 
 
 
-/* compute the RMSD from the reference structure */
+/* compute the RMSD from the reference structure
+ * this function translates and rotates `x` to match `xref` */
 #define cago_rmsd(go, x, xf) \
   vrmsd(x, xf, go->xref, go->m, go->n, 0, NULL, NULL)
+
+
+
+/* compute the RMSD from the reference structure
+ * this function translates and rotates `xref` to match `x` */
+#define cago_rmsdref(go, x, xf) \
+  vrmsd(go->xref, xf, x, go->m, go->n, 0, NULL, NULL)
 
 
 

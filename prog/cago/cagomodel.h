@@ -34,7 +34,6 @@ typedef struct {
   int nstblk;
   int nsthmc;
   int implicithmc; /* implicit HMC */
-  int nvswap;
   double nsteps;
   double nstrep;
   int verbose;
@@ -53,6 +52,8 @@ typedef struct {
   double wl_flatness;
   double wl_frac;
   double invt_c;
+  double mfl; /* minimal mean force for r < rmin */
+  double mfh; /* maximal mean force for r > rmax */
   int changeseed;
   int nvswaps;
 } cagomodel_t;
@@ -79,7 +80,6 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->nstblk = 10;
   m->nsthmc = 1;
   m->implicithmc = 0;
-  m->nvswap = 1;
   m->nsteps = 1e10;
   m->nstrep = 1000000;
   m->verbose = 0;
@@ -98,6 +98,8 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->wl_flatness = 0.3;
   m->wl_frac = 0.5;
   m->invt_c = 1.0;
+  m->mfl = 0.1;
+  m->mfh = -0.1;
   m->changeseed = 0;
   m->nvswaps = 1;
 }
@@ -127,10 +129,14 @@ __inline static void cagomodel_help(const cagomodel_t *m)
   fprintf(stderr, "  --vnc=:        set the output file for the NC bias potential, default: %s\n", m->fnvnc);
   fprintf(stderr, "  --vrmsd=:      set the output file for the RMSD bias potential, default: %s\n", m->fnvrmsd);
   fprintf(stderr, "  --rep=:        set the output report file, default: %s\n", m->fnrep);
+  fprintf(stderr, "  --rmin=:       set the minimal RMSD, default %g\n", m->rmsdmin);
+  fprintf(stderr, "  --rmax=:       set the maximal RMSD, default %g\n", m->rmsdmax);
   fprintf(stderr, "  --lnf0=:       set the initial lnf, default: %g\n", m->wl_lnf0);
   fprintf(stderr, "  --flatness=:   set the histogram flatness for lnf, default: %g\n", m->wl_flatness);
   fprintf(stderr, "  --frac=:       set the reduction factor for lnf, default: %g\n", m->wl_frac);
   fprintf(stderr, "  --invt_c=:     set the constant c in lnf = c/t, default: %g\n", m->invt_c);
+  fprintf(stderr, "  --mfl=         set the minimal mean-force for r < rmin, default %g\n", m->mfl);
+  fprintf(stderr, "  --mfh=         set the maximal mean-force for r > rmax, default %g\n", m->mfh);
   fprintf(stderr, "  --chseed:      randomly change the seed particle, default: %d\n", m->changeseed);
   fprintf(stderr, "  --nvswaps:     set the number of velocity swaps, default: %d\n", m->nvswaps);
   fprintf(stderr, "  -v:            be verbose, -vv to be more verbose, etc.\n");
@@ -199,11 +205,23 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
       m->nbe = atof(val);
     } else if ( strcmpfuzzy(key, "nbc") == 0 ) {
       m->nbc = atof(val);
+    } else if ( strcmpfuzzy(key, "ihmc") == 0 ) {
+      if ( strcmpfuzzy(key, "true") == 0 ) {
+        m->implicithmc = 1;
+      } else if ( strcmpfuzzy(key, "false") == 0 ) {
+        m->implicithmc = 0;
+      } else { /* numerical value, 0 or 1 */
+        m->implicithmc = atoi(key);
+      }
     } else if ( strcmpfuzzy(key, "rc") == 0 ) {
       m->rc = atof(val);
     } else if ( strcmpfuzzy(key, "T") == 0
              || strcmpfuzzy(key, "temp") == 0 ) {
       m->temp = atof(val);
+    } else if ( strcmpfuzzy(key, "rmin") == 0 ) {
+      m->rmsdmin = atof(val);
+    } else if ( strcmpfuzzy(key, "rmax") == 0 ) {
+      m->rmsdmax = atof(val);
     } else if ( strcmpfuzzy(key, "mcamp") == 0 ) {
       m->mcamp = atof(val);
     } else if ( strcmpfuzzy(key, "mddt") == 0 ) {
@@ -235,6 +253,10 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
       m->wl_frac = atof(val);
     } else if ( strcmpfuzzy(key, "invt_c") == 0 ) {
       m->invt_c = atof(val);
+    } else if ( strncmpfuzzy(key, "mfl", 3) == 0 ) {
+      m->mfl = atof(val);
+    } else if ( strncmpfuzzy(key, "mfh", 3) == 0 ) {
+      m->mfh = atof(val);
     } else if ( strcmpfuzzy(key, "changeseed") == 0
             ||  strcmpfuzzy(key, "chseed") == 0 ) {
       m->changeseed = ( strcmpfuzzy(val, "true") == 0 );
@@ -291,10 +313,16 @@ __inline static void cagomodel_doargs(cagomodel_t *m, int argc, char **argv)
 
       if ( strcmpfuzzy(p, "pdb") == 0 ) {
         m->fnpdb = q;
+      } else if ( strcmpfuzzy(p, "ihmc") == 0 ) {
+        m->implicithmc = 1;
       } else if ( strncmp(p, "temp", 4) == 0 ) {
         m->temp = atof(q);
       } else if ( strcmp(p, "rc") == 0 ) {
         m->rc = atof(q);
+      } else if ( strcmpfuzzy(p, "rmin") == 0 ) {
+        m->rmsdmin = atof(q);
+      } else if ( strcmpfuzzy(p, "rmax") == 0 ) {
+        m->rmsdmax = atof(q);
       } else if ( strcmp(p, "mcamp") == 0 ) {
         m->mcamp = atof(q);
       } else if ( strcmp(p, "mddt") == 0 ) {
@@ -327,6 +355,10 @@ __inline static void cagomodel_doargs(cagomodel_t *m, int argc, char **argv)
         m->wl_frac = atof(q);
       } else if ( strcmp(p, "invt_c") == 0 ) {
         m->invt_c = atof(q);
+      } else if ( strncmp(p, "mfl", 3) == 0 ) {
+        m->mfl = atof(q);
+      } else if ( strncmp(p, "mfh", 3) == 0 ) {
+        m->mfh = atof(q);
       } else if ( strcmp(p, "chseed") == 0 ) {
         m->changeseed = 1;
       } else if ( strcmp(p, "nvswaps") == 0 ) {

@@ -166,12 +166,11 @@ __inline static double cago_rmsd_raw(cago_t *go,
     double (*x)[D], double (*xf)[D])
 {
   int i, n = go->n;
-  double wtot = 0, dev = 0, dx[D], dx2;
+  double wtot = 0, dev = 0, dx2;
 
   for ( i = 0; i < n; i++ ) {
     wtot += go->m[i];
-    vdiff(dx, x[i], xf[i]);
-    dx2 = vsqr(dx);
+    dx2 = vdist2(x[i], xf[i]);
     dev += go->m[i] * dx2;
   }
 
@@ -181,13 +180,13 @@ __inline static double cago_rmsd_raw(cago_t *go,
 
 
 /* velocity Verlet with RMSD bias */
-__inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
-    double (*xf)[D], wl_t *wl, double kT,
+__inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
+    double (*xf)[D], wl_t *wl, double mfl, double mfh, double kT,
     hmc_t *hmc, double *fdat)
 {
   int i, n = go->n, acc;
   double dth = 0.5 * dt * fs;
-  double rmsd, rmsd0, dv, dvdx;
+  double rmsd, rmsd0, dv0, dv1, dv, dvdx;
 
   for ( i = 0; i < n; i++ ) { /* VV part 1 */
     vsinc(go->v[i], go->f[i], dth / go->m[i] );
@@ -198,8 +197,9 @@ __inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
   go->epot = cago_force(go, go->x, go->f);
 
   /* compute the force from the bias potential */
-  /* 1. align the structure */
-  rmsd = cago_rmsd(go, go->x, xf);
+  /* 1. rotate and translate `go->xref` to fit `go->x`
+   *    save the transformed structure in `xf` */
+  rmsd = cago_rmsdref(go, go->x, xf);
 
   /* 2. compute the RMSD from the old reference */
   rmsd0 = cago_rmsd_raw(go, go->x, (vct *)(hmc->fdat + 2));
@@ -207,9 +207,10 @@ __inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
   /* 3. compute energy caused by changing
    *    the reference structure */
   /* get the potential of the new (current) rmsd */
-  dv  = wl_getvf(wl, rmsd);
+  dv1 = wl_getvf(wl, rmsd);
   /* get the potential of the old (stock) rmsd */
-  dv -= wl_getvf(wl, rmsd0);
+  dv0 = wl_getvf(wl, rmsd0);
+  dv = dv1 - dv0;
 
   /* 4. decide if the change of reference is acceptable */
   if ( dv <= 0 ) {
@@ -225,7 +226,7 @@ __inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
     fdat[1] = go->epot;
     memcpy(fdat + 2, xf, n * D * sizeof(double));
     /* TODO: apply the force from the bias */
-    dvdx = kT * wl_getdvf(wl, rmsd) / rmsd / go->mtot;
+    dvdx = kT * wl_getdvf(wl, rmsd, mfl, mfh) / rmsd / go->mtot;
     {
       double dx[D];
       for ( i = 0; i < n; i++ ) {
@@ -234,7 +235,7 @@ __inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
       }
     }
     /* push the current state */
-    hmc_push(hmc, go->x, go->v, go->f, NULL, fdat); 
+    hmc_push(hmc, go->x, go->v, go->f, NULL, fdat);
   } else {
     /* pop the old state, reverse the velocity */
     hmc_pop(hmc, go->x, go->v, go->f, NULL, fdat, 1);
@@ -247,10 +248,14 @@ __inline static double cago_vv_rmsd(cago_t *go, double fs, double dt,
     vsinc(go->v[i], go->f[i], dth / go->m[i]);
   }
 
+  ///* if out-of-range RMSD is not allowed,
+  // * vscramble is needed, see ANCHOR 1 */
+  //go->ekin = cago_vscramble(go, go->v, nvswaps);
+
   wl_addf(wl, rmsd);
   wl_updatelnf(wl);
 
-  return rmsd;
+  return acc;
 }
 
 

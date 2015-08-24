@@ -25,7 +25,7 @@ install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 ```
 
 
-Code prototype
+Code template
 ===============
 
 The code is based on GROMACS 5.0.5.
@@ -46,5 +46,64 @@ The following options are also deleted for simplicity.
 * FAHCORE
 
 
+Modifications
+=============
+
+ *  set the default `nstglobalcomm` to 1 in `mdrun.cpp`
 
 
+
+Code analysis
+=============
+
+md.c
+----
+
+* MD loop starts on line 582
+* `dd_partition_system()`, line 674
+
+* `do_force()`, line 768
+
+* `do_md_trajectory_writing()`, line 977
+  o The function call collects x, v, f so that
+    the master node has the complete coordinates now.
+
+* `update_tcouple()`, line 1168
+  o update temperature coupling
+  o defined in `gromacs/mdlib/update.c` as a wrapper
+  o calls `vrescale_tcoupl()` defined in `gromacs/mdlib/coupling.c`
+    +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
+    +  it doesn't touch the actual velocity array.
+
+* `update_coords()`, line 1200
+  o update x, v for the local state
+  o defined in `gromacs/mdlib/update.c`
+  o calls `do_update_md()` in the same function,
+    + the normal branch starts from line 233
+    + `v = v * ekind->tcstat[i].lambda + f * dt`
+    + `xprime = x + v * dt`
+
+* `update_constraints()`, line 1205
+
+* `dd_collect_state()`, line 1430
+
+* `dd_partition_system()`, line 1436
+  o `bNeedRepartition`
+
+* MD loop ends on line 1576
+
+snippets
+--------
+
+### print state->flags
+
+The following prints the flags
+```
+{
+  int est;
+  
+  for ( est = 0; est < estNR; est++ )
+    if ( state->flags & (1<<est) )
+      fprintf(stderr, "%d: %s\n", est, est_names[est]);
+}
+```

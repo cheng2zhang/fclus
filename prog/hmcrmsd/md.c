@@ -124,7 +124,7 @@ static void reset_all_counters(FILE *fplog, t_commrec *cr,
     print_date_and_time(fplog, cr->nodeid, "Restarted time", gmx_gettime());
 }
 
-double mdfoo(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
+double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
              const output_env_t oenv, gmx_bool bVerbose, gmx_bool bCompact,
              int nstglobalcomm,
              gmx_constr_t constr,
@@ -1164,7 +1164,7 @@ double mdfoo(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                      */
                 }
                 else
-                {
+                {   /* printf("step %d, node %d/%d, doing tcoupling\n", (int) step, cr->sim_nodeid, cr->nnodes); getchar(); */
                     update_tcouple(step, ir, state, ekind, &MassQ, mdatoms);
                     update_pcouple(fplog, step, ir, state, pcoupl_mu, M, bInitStep);
                 }

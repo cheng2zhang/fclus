@@ -24,7 +24,7 @@ typedef struct {
   int n;
   int isf;
   int nmin;
-  double xmin, dx;
+  double xmin, xmax, dx;
   int isinvt; /* has entered the 1/t stage */
   unsigned flags;
   double *h; /* histogram */
@@ -88,6 +88,7 @@ __inline static wl_t *wl_openi(int nmin, int nmax,
   wl->nmin = nmin;
   wl->xmin = nmin;
   wl->dx = 1.0;
+  wl->xmax = nmax;
   wl->isf = 0;
   return wl;
 }
@@ -106,6 +107,7 @@ __inline static wl_t *wl_openf(double xmin, double xmax, double dx,
   wl = wl_open0(n, lnf0, flatness, frac, c, flags);
   wl->xmin = xmin;
   wl->dx = dx;
+  wl->xmax = xmin + dx * n;
   wl->nmin = 0;
   wl->isf = 1;
   return wl;
@@ -188,13 +190,18 @@ __inline static double wl_getvf(wl_t *wl, double x)
 
 
 
-/* retrieve the gradient dv/dx */
-__inline static double wl_getdvf(wl_t *wl, double x)
+/* retrieve the gradient dv/dx
+ * if `x < wl->xmin` and the force if less than `fl`, use `fl`
+ * if `x > wl->xmax` and the force if greater than `fl`, use `fl` */
+__inline static double wl_getdvf(wl_t *wl, double x,
+    double fl, double fh)
 {
-  int i;
+  int i, flags = 0;
+  double f;
 
   if ( x < wl->xmin ) {
     i = 0;
+    flags = -1;
   } else {
     i = (int) ((x - wl->xmin) / wl->dx + 0.5) - 1;
     if ( i < 0 ) {
@@ -202,8 +209,20 @@ __inline static double wl_getdvf(wl_t *wl, double x)
     } else if ( i >= wl->n - 2 ) {
       i = wl->n - 2;
     }
+    if ( x >= wl->xmax ) {
+      flags = 1;
+    }
   }
-  return (wl->v[i + 1] - wl->v[i]) / wl->dx;
+  f = (wl->v[i + 1] - wl->v[i]) / wl->dx;
+
+  if ( flags < 0 && f > fl ) {
+    f = fl;
+  }
+  if ( flags > 0 && f < fh ) {
+    f = fh;
+  }
+
+  return f;
 }
 
 

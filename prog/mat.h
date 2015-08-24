@@ -297,9 +297,9 @@ __inline static int msolvezero(double a[D][D], double (*x)[D], double reltol)
     }
 
     /* normalize the row i */
-    y = 1.0 / a[i][i];
+    y = a[i][i];
     for ( k = i; k < D; k++ ) {
-      a[i][k] *= y;
+      a[i][k] /= y;
     }
 
     /* use the pivot to simplify the matrix */
@@ -327,9 +327,7 @@ __inline static int msolvezero(double a[D][D], double (*x)[D], double reltol)
 
 
 
-/* given an eigenvalue, return the corresponding eigenvectors
- * Note: there might be multiple eigenvectors for the eigenvalue */
-__inline static int meigvecs(double (*vecs)[D], double mat[D][D], double val)
+__inline static int meigvecs_low(double (*vecs)[D], double mat[D][D], double val, double tol)
 {
   double m[D][D];
   int d;
@@ -338,7 +336,28 @@ __inline static int meigvecs(double (*vecs)[D], double mat[D][D], double val)
   for ( d = 0; d < D; d++ ) {
     m[d][d] -= val;
   }
-  return msolvezero(m, vecs, DBL_EPSILON * 10000.0);
+  return msolvezero(m, vecs, tol);
+}
+
+
+
+double meig_reltol = 1e-6;
+
+#define meigvecs(vecs, mat, val) meigvecs_(vecs, mat, val, meig_reltol)
+
+/* given an eigenvalue, return the corresponding eigenvectors
+ * Note: there might be multiple eigenvectors for the eigenvalue */
+__inline static int meigvecs_(double (*vecs)[D], double mat[D][D], double val, double tolmax)
+{
+  double tol;
+  int i = 0;
+
+  /* increase tolerance, until a solution is found */
+  for ( tol = DBL_EPSILON * 10; tol < tolmax; tol *= 10 ) {
+    if ( (i = meigvecs_low(vecs, mat, val, tol)) > 0 )
+      break;
+  }
+  return i;
 }
 
 
@@ -410,11 +429,14 @@ __inline static double *meigval(double v[3], double a[3][3])
 
 
 
+#define meigsys(v, vecs, mat, nt) meigsys_(v, vecs, mat, nt, meig_reltol)
+
 /* given the matrix 'mat' and its eigenvalues 'v' return eigenvalues 'vecs'
  * ideally, eigenvalues should be sorted in magnitude-descending order
  * by default, vecs are transposed as a set of column vectors
  * set 'nt' != 0 to disable it: so vecs[0] is the first eigenvector  */
-__inline static int meigsys(double v[3], double vecs[3][3], double mat[3][3], int nt)
+__inline static int meigsys_(double v[3], double vecs[3][3], double mat[3][3],
+    int nt, double tol)
 {
   double vs[5][3] = {{0}}; /* for safety, vs needs 5 rows */
   int n = 0, nn, i = 0;
@@ -422,7 +444,7 @@ __inline static int meigsys(double v[3], double vecs[3][3], double mat[3][3], in
   meigval(v, mat);
 
   for ( nn = i = 0; i < 3; i++ ) {
-    n = meigvecs(vs + nn, mat, v[nn]);
+    n = meigvecs_(vs + nn, mat, v[nn], tol);
     if ( n == 0 ) {
       fprintf(stderr, "meigsys failed: try to increase msolvezero_reltol, i %d, nn %d, %g > %g\n",
           i, nn, msolvezero_lasty, msolvezero_lasttol);
