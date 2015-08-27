@@ -61,8 +61,22 @@ md.c
 
 * MD loop starts on line 582
 * `dd_partition_system()`, line 674
+  o bMasterState is usually FALSE
+  o usually go into branch 3, line 9531 in mdlib/domdec.c.
 
 * `do_force()`, line 768
+  o Defined in `sim_util.c`
+  o `bStateChanged` is TRUE
+    * `gmx_pme_send_coordinates()`, line 1738
+    * `dd_move_x()`, line 1751
+      o copy coordinates, `buf[n]`, line 705 in domdec.c
+    * `ns()`, line 1828
+    * `do_force_lowlevel()`, line 1925
+      o gmx_pme_do();
+    * `dd_move_f()`, line 1983
+    * `pme_receive_force_ener()`, line 2057
+      get force from PME nodes
+
 
 * `do_md_trajectory_writing()`, line 977
   o The function call collects x, v, f so that
@@ -78,12 +92,15 @@ md.c
 * `update_coords()`, line 1200
   o update x, v for the local state
   o defined in `gromacs/mdlib/update.c`
-  o calls `do_update_md()` in the same function,
+  o calls `do_update_md()` in the same file,
     + the normal branch starts from line 233
     + `v = v * ekind->tcstat[i].lambda + f * dt`
     + `xprime = x + v * dt`
 
 * `update_constraints()`, line 1205
+  o defined in `gromacs/mdlib/update.c`
+  o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
+    + coordinates are only partially communicated
 
 * `dd_collect_state()`, line 1430
 
@@ -101,7 +118,7 @@ The following prints the flags
 ```
 {
   int est;
-  
+
   for ( est = 0; est < estNR; est++ )
     if ( state->flags & (1<<est) )
       fprintf(stderr, "%d: %s\n", est, est_names[est]);

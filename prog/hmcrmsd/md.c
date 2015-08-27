@@ -91,6 +91,9 @@
 #include "gromacs/swap/swapcoords.h"
 #include "gromacs/imd/imd.h"
 
+#include "gmxvcomm.h"
+
+
 static void reset_all_counters(FILE *fplog, t_commrec *cr,
                                gmx_int64_t step,
                                gmx_int64_t *step_rel, t_inputrec *ir,
@@ -209,6 +212,11 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
 
     /* Interactive MD */
     gmx_bool          bIMDstep = FALSE;
+
+    /* coordinate communication */
+    gmxvcomm_t *gvc;
+    int arr[] = {0, 1500, 3000, 4500};
+
 
     /* Check for special mdrun options */
     bAppend  = (Flags & MD_APPENDFILES);
@@ -338,6 +346,9 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
 
         setup_bonded_threading(fr, &top->idef);
     }
+
+    /* initialize an object for coordinates communication */
+    gvc = gmxvcomm_open(4, arr, cr, state, state_global);
 
     /* Set up interactive MD (IMD) */
     init_IMD(ir, cr, top_global, fplog, ir->nstcalcenergy, state_global->x,
@@ -980,6 +991,9 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                                  &nchkpt,
                                  bCPT, FALSE, bLastStep, (Flags & MD_CONFOUT),
                                  bSumEkinhOld);
+        gmxvcomm_gatherid(gvc);
+        printf("step %d, node %d/%d, x %g, # %d\n", (int) step, cr->nodeid, cr->nnodes, state->x[0][0], mdatoms->homenr);
+        if ( MASTER(cr) ) { printf("MASTER x %g\n", state_global->x[0][0]); getchar(); }
         /* Check if IMD step and do IMD communication, if bIMD is TRUE. */
         bIMDstep = do_IMD(ir->bIMD, step, cr, bNS, state->box, state->x, ir, t, wcycle);
 
@@ -1618,6 +1632,8 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     IMD_finalize(ir->bIMD, ir->imd);
 
     walltime_accounting_set_nsteps_done(walltime_accounting, step_rel);
+
+    gmxvcomm_close(gvc);
 
     return 0;
 }
