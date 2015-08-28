@@ -9,7 +9,7 @@ Install
 
 1. Install GROMACS 5.0
 2. Copy this directory to `src/programs/`
-3. Move `hmcrmsd_main.cpp` to `src/programs/`
+3. Move `hmcrmsd_main.hpp` to `src/programs/hmcrmsd_main.cpp`. Note the change of the extension.
 4. Append the following code to src/programs/CMakeLists.txt
 
 ```
