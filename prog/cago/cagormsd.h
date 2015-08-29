@@ -181,8 +181,9 @@ __inline static double cago_rmsd_raw(cago_t *go,
 
 /* velocity Verlet with RMSD bias */
 __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
-    double (*xf)[D], wl_t *wl, double mfl, double mfh, double kT,
-    hmc_t *hmc, double *fdat)
+    double (*xf)[D], wl_t *wl,
+    double mflmin, double mflmax, double mfhmin, double mfhmax,
+    double kT, hmc_t *hmc, double *fdat)
 {
   int i, n = go->n, acc;
   double dth = 0.5 * dt * fs;
@@ -226,7 +227,8 @@ __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
     fdat[1] = go->epot;
     memcpy(fdat + 2, xf, n * D * sizeof(double));
     /* TODO: apply the force from the bias */
-    dvdx = kT * wl_getdvf(wl, rmsd, mfl, mfh) / rmsd / go->mtot;
+    dvdx = kT * wl_getdvf(wl, rmsd, mflmin, mflmax, mfhmin, mfhmax);
+    dvdx /= rmsd * go->mtot;
     {
       double dx[D];
       for ( i = 0; i < n; i++ ) {

@@ -194,7 +194,7 @@ __inline static double wl_getvf(wl_t *wl, double x)
  * if `x < wl->xmin` and the force if less than `fl`, use `fl`
  * if `x > wl->xmax` and the force if greater than `fl`, use `fl` */
 __inline static double wl_getdvf(wl_t *wl, double x,
-    double fl, double fh)
+    double flmin, double flmax, double fhmin, double fhmax)
 {
   int i, flags = 0;
   double f;
@@ -215,11 +215,19 @@ __inline static double wl_getdvf(wl_t *wl, double x,
   }
   f = (wl->v[i + 1] - wl->v[i]) / wl->dx;
 
-  if ( flags < 0 && f > fl ) {
-    f = fl;
+  if ( flags < 0 ) {
+    if ( f < flmin ) {
+      f = flmin;
+    } else if ( f > flmax ) {
+      f = flmax;
+    }
   }
-  if ( flags > 0 && f < fh ) {
-    f = fh;
+  if ( flags > 0 ) {
+    if ( f < fhmin ) {
+      f = fhmin;
+    } else if ( f > fhmax ) {
+      f = fhmax;
+    }
   }
 
   return f;

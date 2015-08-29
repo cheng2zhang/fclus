@@ -52,8 +52,10 @@ typedef struct {
   double wl_flatness;
   double wl_frac;
   double invt_c;
-  double mfl; /* minimal mean force for r < rmin */
-  double mfh; /* maximal mean force for r > rmax */
+  double mflmin; /* minimal mean force for r < rmin */
+  double mflmax; /* maximal mean force for r < rmin */
+  double mfhmin; /* minimal mean force for r > rmax */
+  double mfhmax; /* maximal mean force for r > rmax */
   int changeseed;
   int nvswaps;
 } cagomodel_t;
@@ -98,8 +100,10 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->wl_flatness = 0.3;
   m->wl_frac = 0.5;
   m->invt_c = 1.0;
-  m->mfl = 0.1;
-  m->mfh = -0.1;
+  m->mflmin = 0.1;
+  m->mflmax = 1e10;
+  m->mfhmin = -1e10;
+  m->mfhmax = -0.1;
   m->changeseed = 0;
   m->nvswaps = 1;
 }
@@ -135,8 +139,10 @@ __inline static void cagomodel_help(const cagomodel_t *m)
   fprintf(stderr, "  --flatness=:   set the histogram flatness for lnf, default: %g\n", m->wl_flatness);
   fprintf(stderr, "  --frac=:       set the reduction factor for lnf, default: %g\n", m->wl_frac);
   fprintf(stderr, "  --invt_c=:     set the constant c in lnf = c/t, default: %g\n", m->invt_c);
-  fprintf(stderr, "  --mfl=         set the minimal mean-force for r < rmin, default %g\n", m->mfl);
-  fprintf(stderr, "  --mfh=         set the maximal mean-force for r > rmax, default %g\n", m->mfh);
+  fprintf(stderr, "  --mflmin=      set the minimal mean-force for r < rmin, default %g\n", m->mflmin);
+  fprintf(stderr, "  --mflmax=      set the maximal mean-force for r < rmin, default %g\n", m->mflmax);
+  fprintf(stderr, "  --mfhmin=      set the minimal mean-force for r > rmax, default %g\n", m->mfhmin);
+  fprintf(stderr, "  --mfhmax=      set the maximal mean-force for r > rmax, default %g\n", m->mfhmax);
   fprintf(stderr, "  --chseed:      randomly change the seed particle, default: %d\n", m->changeseed);
   fprintf(stderr, "  --nvswaps:     set the number of velocity swaps, default: %d\n", m->nvswaps);
   fprintf(stderr, "  -v:            be verbose, -vv to be more verbose, etc.\n");
@@ -253,10 +259,14 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
       m->wl_frac = atof(val);
     } else if ( strcmpfuzzy(key, "invt_c") == 0 ) {
       m->invt_c = atof(val);
-    } else if ( strncmpfuzzy(key, "mfl", 3) == 0 ) {
-      m->mfl = atof(val);
-    } else if ( strncmpfuzzy(key, "mfh", 3) == 0 ) {
-      m->mfh = atof(val);
+    } else if ( strncmpfuzzy(key, "mflmin", 6) == 0 ) {
+      m->mflmin = atof(val);
+    } else if ( strncmpfuzzy(key, "mflmax", 6) == 0 ) {
+      m->mflmax = atof(val);
+    } else if ( strncmpfuzzy(key, "mfhmin", 6) == 0 ) {
+      m->mfhmin = atof(val);
+    } else if ( strncmpfuzzy(key, "mfhmax", 6) == 0 ) {
+      m->mfhmax = atof(val);
     } else if ( strcmpfuzzy(key, "changeseed") == 0
             ||  strcmpfuzzy(key, "chseed") == 0 ) {
       m->changeseed = ( strcmpfuzzy(val, "true") == 0 );
@@ -355,10 +365,14 @@ __inline static void cagomodel_doargs(cagomodel_t *m, int argc, char **argv)
         m->wl_frac = atof(q);
       } else if ( strcmp(p, "invt_c") == 0 ) {
         m->invt_c = atof(q);
-      } else if ( strncmp(p, "mfl", 3) == 0 ) {
-        m->mfl = atof(q);
-      } else if ( strncmp(p, "mfh", 3) == 0 ) {
-        m->mfh = atof(q);
+      } else if ( strncmp(p, "mflmin", 6) == 0 ) {
+        m->mflmin = atof(q);
+      } else if ( strncmp(p, "mflmax", 6) == 0 ) {
+        m->mflmax = atof(q);
+      } else if ( strncmp(p, "mfhmin", 6) == 0 ) {
+        m->mfhmin = atof(q);
+      } else if ( strncmp(p, "mfhmax", 6) == 0 ) {
+        m->mfhmax = atof(q);
       } else if ( strcmp(p, "chseed") == 0 ) {
         m->changeseed = 1;
       } else if ( strcmp(p, "nvswaps") == 0 ) {
