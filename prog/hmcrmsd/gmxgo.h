@@ -16,9 +16,13 @@ typedef struct {
   int *index; /* index[0..n-1]: global indices of the Go atoms */
   double (*x)[3]; /* x[0..n-1] */
   double (*f)[3]; /* f[0..n-1] bias force */
-  double (*xf)[3]; /* fit structure */
   double (*xref)[3];
+  double (*xf)[3]; /* fit structure */
+  double (*x1)[3]; /* x1[0..n-1] */
   gmxvcomm_t *gvc;
+  double *rhis; /* histogram */
+  double rhis_dx, rhis_max; /* spacing and maximal */
+  int rhis_n;
 } gmxgo_t;
 
 
@@ -173,10 +177,16 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr)
   snew(go->f, go->n);
   snew(go->xref, go->n);
   snew(go->xf, go->n);
+  snew(go->x1, go->n);
 
   /* load the reference */
   if ( MASTER(cr) ) {
     gmxvcomm_loadxref(go, "1VII.pdb");
+
+    go->rhis_dx = 0.002;
+    go->rhis_max = 2.0; /* 20 angstrom */
+    go->rhis_n = (int) ( go->rhis_max / go->rhis_dx + 0.5 );
+    snew(go->rhis, go->rhis_n);
   }
 
   return go;
@@ -186,20 +196,25 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr)
 
 static void gmxgo_close(gmxgo_t *go)
 {
+  if ( MASTER(go->gvc->cr) ) {
+    sfree(go->rhis);
+  }
+
   sfree(go->index);
   gmxvcomm_close(go->gvc);
   sfree(go->x);
   sfree(go->f);
   sfree(go->xref);
   sfree(go->xf);
+  sfree(go->x1);
   sfree(go);
 }
 
 
 
-/* gather the coordinates `x`,
+/* gather the coordinates `x` to `xg`,
  * which should `state->x` (local state) */
-static int gmxgo_gatherx(gmxgo_t *go, rvec *x, int doid)
+static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
 {
   gmxvcomm_t *gvc = go->gvc;
   t_commrec *cr = gvc->cr;
@@ -225,16 +240,16 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, int doid)
   if ( MASTER(cr) ) {
     /* clear the vector */
     for ( id = 0; id < go->n; id++ )
-      vzero(go->x[id]);
+      vzero(xg[id]);
 
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
         for ( j = 0; j < lcnt; j++ ) {
           id = gvc->lwho_m[iw + j];
           for ( d = 0; d < 3; d++ )
-            go->x[id][d] = gvc->lx_m[iw + j][d];
+            xg[id][d] = gvc->lx_m[iw + j][d];
           //printf("id %d: %g %g %g, from node %d\n",
-          //    id, go->x[id][0], go->x[id][1], go->x[id][2], i);
+          //    id, xg[id][0], xg[id][1], xg[id][2], i);
         }
         iw += lcnt;
       }
@@ -268,7 +283,8 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
         for ( j = 0; j < lcnt; j++ ) {
           id = gvc->lwho_m[iw + j];
-          vcopy(gvc->lx_m[iw + j], go->f[id]);
+          for ( d = 0; d < 3; d++ )
+            gvc->lx_m[iw + j][d] = go->f[id][d];
         }
         iw += lcnt;
       }
@@ -283,7 +299,7 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
     il = gvc->la[i];
     /* apply the force additively */
     for ( d = 0; d < 3; d++ )
-      f[il][d] += (real) gvc->lx[i][d];
+      f[il][d] = (real) ( f[il][d] + gvc->lx[i][d] );
   }
 
   return 0;
@@ -291,18 +307,104 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 
 
-static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid)
+/* shift the coordinates to make the molecule whole */
+static void gmxgo_shift(gmxgo_t *go,
+    double (*xin)[3], double (*xout)[3],
+    int ePBC, matrix box)
+{
+  int i;
+  double dx[3];
+  t_pbc pbc[1];
+
+  set_pbc(pbc, ePBC, box);
+
+  vcopy(xout[0], xin[0]);
+  for ( i = 1; i < go->n; i++ ) {
+    pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
+    vadd(xout[i], xout[i - 1], dx);
+  }
+}
+
+
+
+/* compute force */
+static int gmxgo_calcf(gmxgo_t *go, double rmsd)
+{
+  int i;
+  double dx[D], dvdx;
+
+  //dvdx = kT * wl_getdvf(wl, rmsd, mfl, mfh);
+  dvdx  = 0.0 * (rmsd - 0.5);
+  dvdx /= rmsd * go->n;
+
+  for ( i = 0; i < go->n; i++ ) {
+    vdiff(dx, go->x[i], go->xf[i]);
+    vsinc(go->f[i], dx, -dvdx);
+  }
+
+  return 0;
+}
+
+
+
+static int gmxgo_saverhis(gmxgo_t *go, const char *fn)
+{
+  int i, imax;
+  FILE *fp;
+
+  for ( i = go->rhis_n - 1; i >= 0; i-- ) {
+    if ( go->rhis[i] > 0 )
+      break;
+  }
+  if ( i < 0 ) return -1;
+  imax = i + 1;
+
+  if ( (fp = fopen(fn, "w")) == NULL ) {
+    fprintf(stderr, "cannot write %s\n", fn);
+    return -1;
+  }
+
+  for ( i = 0; i < imax; i++ ) {
+    fprintf(fp, "%g %g\n", go->rhis_dx * (i + 0.5), go->rhis[i]);
+  }
+
+  fprintf(stderr, "saving histogram file %s\n", fn);
+  fclose(fp);
+  return 0;
+}
+
+
+
+/* ePBC == fr->ePBC */
+static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
+    int ePBC, matrix box, gmx_int64_t step)
 {
   double rmsd;
   int i;
 
-  gmxgo_gatherx(go, x, doid);
+  /* collect `x` from different nodes to `go->x1` on the master */
+  gmxgo_gatherx(go, x, go->x1, doid);
+
+  /* make the coordinates whole */
+  gmxgo_shift(go, go->x1, go->x, ePBC, box);
+
   if ( MASTER(go->gvc->cr) ) {
-    // for ( i = 0; i < go->n; i++ ) printf("%d: %g %g %g | %g %g %g\n", i, go->x[i][0], go->x[i][1], go->x[i][2], go->xref[i][0], go->xref[i][1], go->xref[i][2]);
+    //for ( i = 0; i < go->n; i++ )
+    //  printf("%d: %g %g %g | %g %g %g\n", i, go->x[i][0], go->x[i][1], go->x[i][2], go->xref[i][0], go->xref[i][1], go->xref[i][2]);
     rmsd = vrmsd(go->xref, go->xf, go->x, NULL, go->n,
         0, NULL, NULL);
-    printf("rmsd %g\n", rmsd);
+    if ( rmsd < go->rhis_max ) {
+      go->rhis[ (int) ( rmsd / go->rhis_dx ) ] += 1;
+    }
+    if ( step > 0 && step % 10000 == 0 ) {
+      gmxgo_saverhis(go, "rhis.dat");
+    }
+
+    fprintf(stderr, "step %d: rmsd %g A\n", (int) step, rmsd * 10);
+    gmxgo_calcf(go, rmsd);
   }
+
+  gmxgo_scatterf(go, f, 0);
 
   return 0;
 }

@@ -93,8 +93,6 @@
 
 #include "gmxgo.h"
 
-
-
 static void reset_all_counters(FILE *fplog, t_commrec *cr,
                                gmx_int64_t step,
                                gmx_int64_t *step_rel, t_inputrec *ir,
@@ -990,9 +988,10 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                                  &nchkpt,
                                  bCPT, FALSE, bLastStep, (Flags & MD_CONFOUT),
                                  bSumEkinhOld);
-        gmxgo_rmsd(go, state->x, 1);
-        printf("step %d, node %d/%d, x %g, # %d\n", (int) step, cr->nodeid, cr->nnodes, state->x[0][0], mdatoms->homenr);
-        if ( MASTER(cr) ) { printf("MASTER x %g\n", state_global->x[0][0]); getchar(); }
+        gmxgo_rmsd(go, state->x, 1, f, fr->ePBC, state->box, step);
+        //printf("step %d, node %d/%d, x %g, # %d\n", (int) step, cr->nodeid, cr->nnodes, state->x[0][0], mdatoms->homenr);
+        //if ( MASTER(cr) ) { printf("MASTER x %g\n", state_global->x[0][0]); getchar(); }
+
         /* Check if IMD step and do IMD communication, if bIMD is TRUE. */
         bIMDstep = do_IMD(ir->bIMD, step, cr, bNS, state->box, state->x, ir, t, wcycle);
 
@@ -1177,7 +1176,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                      */
                 }
                 else
-                {   /* printf("step %d, node %d/%d, doing tcoupling\n", (int) step, cr->sim_nodeid, cr->nnodes); getchar(); */
+                {
                     update_tcouple(step, ir, state, ekind, &MassQ, mdatoms);
                     update_pcouple(fplog, step, ir, state, pcoupl_mu, M, bInitStep);
                 }

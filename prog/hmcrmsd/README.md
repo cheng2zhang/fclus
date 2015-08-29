@@ -25,6 +25,7 @@ install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 ```
 
 
+
 Code template
 ===============
 
@@ -96,11 +97,14 @@ md.c
     + the normal branch starts from line 233
     + `v = v * ekind->tcstat[i].lambda + f * dt`
     + `xprime = x + v * dt`
+    + `x` is usually not changed yet
 
 * `update_constraints()`, line 1205
   o defined in `gromacs/mdlib/update.c`
   o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
     + coordinates are only partially communicated
+    + `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
+    + however, PBC is not applied! The molecule is not necessarily whole.
 
 * `dd_collect_state()`, line 1430
 
