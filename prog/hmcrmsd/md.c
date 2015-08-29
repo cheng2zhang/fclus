@@ -345,7 +345,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     }
 
     /* initialize an object for Go model */
-    go = gmxgo_open(top_global, cr);
+    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0]);
 
     /* Set up interactive MD (IMD) */
     init_IMD(ir, cr, top_global, fplog, ir->nstcalcenergy, state_global->x,
@@ -779,6 +779,9 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                      state->lambda, graph,
                      fr, NULL, mu_tot, t, mdoutf_get_fp_field(outf), ed, bBornRadii,
                      (bNS ? GMX_FORCE_NS : 0) | force_flags);
+
+            /* compute the force */
+            gmxgo_rmsd(go, state->x, 1, f, fr->ePBC, state->box, step);
         }
 
         if (bVV && !bStartingFromCpt)
@@ -988,9 +991,6 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                                  &nchkpt,
                                  bCPT, FALSE, bLastStep, (Flags & MD_CONFOUT),
                                  bSumEkinhOld);
-        gmxgo_rmsd(go, state->x, 1, f, fr->ePBC, state->box, step);
-        //printf("step %d, node %d/%d, x %g, # %d\n", (int) step, cr->nodeid, cr->nnodes, state->x[0][0], mdatoms->homenr);
-        //if ( MASTER(cr) ) { printf("MASTER x %g\n", state_global->x[0][0]); getchar(); }
 
         /* Check if IMD step and do IMD communication, if bIMD is TRUE. */
         bIMDstep = do_IMD(ir->bIMD, step, cr, bNS, state->box, state->x, ir, t, wcycle);

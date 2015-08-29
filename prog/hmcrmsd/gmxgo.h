@@ -20,6 +20,7 @@ typedef struct {
   double (*xf)[3]; /* fit structure */
   double (*x1)[3]; /* x1[0..n-1] */
   gmxvcomm_t *gvc;
+  double kT;
   double *rhis; /* histogram */
   double rhis_dx, rhis_max; /* spacing and maximal */
   int rhis_n;
@@ -164,7 +165,9 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
 
 
 
-static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr)
+/* tp: the temperature */
+static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
+    double tp)
 {
   gmxgo_t *go;
 
@@ -179,6 +182,7 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr)
   snew(go->xf, go->n);
   snew(go->x1, go->n);
 
+  go->kT = BOLTZ * tp;
   /* load the reference */
   if ( MASTER(cr) ) {
     gmxvcomm_loadxref(go, "1VII.pdb");
@@ -275,16 +279,11 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
   /* apply the force on the master node */
   if ( MASTER(cr) ) {
-    /* clear the vector */
-    for ( id = 0; id < go->n; id++ )
-      vzero(go->f[id]);
-
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
         for ( j = 0; j < lcnt; j++ ) {
           id = gvc->lwho_m[iw + j];
-          for ( d = 0; d < 3; d++ )
-            gvc->lx_m[iw + j][d] = go->f[id][d];
+          vcopy(gvc->lx_m[iw + j], go->f[id]);
         }
         iw += lcnt;
       }
@@ -298,10 +297,13 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
   for ( i = 0; i < gvc->lcnt; i++ ) {
     il = gvc->la[i];
     /* apply the force additively */
+    //fprintf(stderr, "i %d, %d: f (%g, %g, %g) += (%g, %g, %g)\n", gvc->lwho[i], gvc->ga[i], f[il][0], f[il][1], f[il][2], gvc->lx[i][0], gvc->lx[i][1], gvc->lx[i][2]);
     for ( d = 0; d < 3; d++ )
       f[il][d] = (real) ( f[il][d] + gvc->lx[i][d] );
   }
 
+  //if ( MASTER(cr) ) getchar();
+  //gmx_barrier(gvc->cr);
   return 0;
 }
 
@@ -333,8 +335,8 @@ static int gmxgo_calcf(gmxgo_t *go, double rmsd)
   int i;
   double dx[D], dvdx;
 
-  //dvdx = kT * wl_getdvf(wl, rmsd, mfl, mfh);
-  dvdx  = 0.0 * (rmsd - 0.5);
+  //dvdx = go->kT * wl_getdvf(wl, rmsd, mfl, mfh);
+  dvdx  = go->kT * 10.0 * (rmsd - 0.5);
   dvdx /= rmsd * go->n;
 
   for ( i = 0; i < go->n; i++ ) {
@@ -381,6 +383,7 @@ static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
 {
   double rmsd;
   int i;
+  char sbuf[STEPSTRSIZE];
 
   /* collect `x` from different nodes to `go->x1` on the master */
   gmxgo_gatherx(go, x, go->x1, doid);
@@ -400,7 +403,7 @@ static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
       gmxgo_saverhis(go, "rhis.dat");
     }
 
-    fprintf(stderr, "step %d: rmsd %g A\n", (int) step, rmsd * 10);
+    fprintf(stderr, "step %s: rmsd %g A\n", gmx_step_str(step, sbuf), rmsd * 10);
     gmxgo_calcf(go, rmsd);
   }
 
