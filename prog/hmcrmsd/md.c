@@ -345,7 +345,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     }
 
     /* initialize an object for Go model */
-    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0]);
+    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0], opt2fn("-cfg", nfile, fnm));
 
     /* Set up interactive MD (IMD) */
     init_IMD(ir, cr, top_global, fplog, ir->nstcalcenergy, state_global->x,
@@ -583,13 +583,12 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         multisim_nsteps = get_multisim_nsteps(cr, ir->nsteps);
     }
 
-
     /* and stop now if we should */
     bLastStep = ((ir->nsteps >= 0 && step_rel > ir->nsteps) ||
                  ((multisim_nsteps >= 0) && (step_rel >= multisim_nsteps )));
     while (!bLastStep)
     {
-
+MDSTEP_START:
         wallcycle_start(wcycle, ewcSTEP);
 
         {
@@ -780,8 +779,12 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                      fr, NULL, mu_tot, t, mdoutf_get_fp_field(outf), ed, bBornRadii,
                      (bNS ? GMX_FORCE_NS : 0) | force_flags);
 
-            /* compute the force */
-            gmxgo_rmsd(go, state->x, 1, f, fr->ePBC, state->box, step);
+        }
+
+        /* compute the bias force */
+        if ( 0 !=  gmxgo_rmsd_force(go, state->x, 1, f, fr->ePBC, state->box, step) ) {
+          fprintf(stderr, "step %s: gmxgo_rmsd_force failed\n", gmx_step_str(step, go->sbuf));
+          exit(1);
         }
 
         if (bVV && !bStartingFromCpt)

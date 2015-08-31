@@ -188,6 +188,8 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
         inpar = 1; /* enter a parentheses block */
       else if ( inpar && (*p == ')' || *p == ']') )
         inpar = 0; /* leave a parentheses block */
+
+      /* convert the key to lower case */
       *p = (char) tolower(*p);
     }
     key = buf;
@@ -197,7 +199,7 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
     val = p;
     for ( ; *p; p++ ) *p = (char) tolower(*p);
 
-    if ( strcmpfuzzy(key, "pdb") ) {
+    if ( strcmpfuzzy(key, "pdb") == 0 ) {
       m->fnpdb = val;
     } else if ( strcmpfuzzy(key, "kb") == 0 ) {
       m->kb = atof(val);

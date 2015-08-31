@@ -30,6 +30,7 @@ typedef struct {
   double *h; /* histogram */
   double *v; /* bias potential */
   double tot;
+  double lnf0;
   double lnf; /* current updating factor lnf */
   double flatness; /* Wang-Landau threshold for the histogram flatness */
   double frac; /* Wang-Landau reduction factor for lnf */
@@ -64,7 +65,7 @@ __inline static wl_t *wl_open0(int n,
     wl->h[i] = 0.0;
     wl->v[i] = 0.0;
   }
-  wl->lnf = lnf0;
+  wl->lnf = wl->lnf0 = lnf0;
   wl->tot = 0;
   wl->isinvt = 0;
   wl->flatness = flatness;
@@ -355,7 +356,7 @@ __inline static int wl_updatelnf(wl_t *wl)
   if ( flatness < wl->flatness ) {
     nlnf = wl->lnf * wl->frac;
     lnfinvt = wl_lnfinvt(wl);
-    if ( nlnf < lnfinvt ) {
+    if ( nlnf < lnfinvt && lnfinvt < wl->lnf0 ) {
       fprintf(stderr, "changing lnf from %g to %g(1/t), flatness %g%%\n",
         wl->lnf, lnfinvt, flatness*100);
       wl->isinvt = 1;

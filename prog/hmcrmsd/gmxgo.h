@@ -18,15 +18,19 @@ typedef struct {
   double (*x)[3]; /* x[0..n-1] */
   double (*f)[3]; /* f[0..n-1] bias force */
   double (*xref)[3];
+  double *mass; /* mass[0..n-1] mass */
+  double masstot;
   double (*xf)[3]; /* fit structure */
   double (*x1)[3]; /* x1[0..n-1] */
   gmxvcomm_t *gvc;
-  gmxgomodel_t *model;
+  gmxgomodel_t model[1];
   double kT;
   wl_t *wl;
   double *rhis; /* histogram */
   double rhis_dx, rhis_max; /* spacing and maximal */
   int rhis_n;
+  double dvdx;
+  char sbuf[STEPSTRSIZE];
 } gmxgo_t;
 
 
@@ -61,6 +65,7 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
 #define BLKSZ 8
   /* search CA atoms from the moltype */
   go->n = 0;
+  go->masstot = 0;
   ncap = BLKSZ;
   snew(go->index, ncap);
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
@@ -78,6 +83,8 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
         srenew(go->index, ncap);
       }
 
+      go->mass[go->n] = mt->atoms.atom[ia].m;
+      go->masstot += go->mass[go->n];
       go->index[go->n] = id + ia;
       go->n += 1;
     }
@@ -170,7 +177,7 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
 
 /* tp: the temperature */
 static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
-    double tp)
+    double tp, const char *fncfg)
 {
   gmxgo_t *go;
 
@@ -187,23 +194,24 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
   /* load the reference */
   if ( MASTER(cr) ) {
-    gmxgomodel_t *m;
+    gmxgomodel_t *m = go->model;
 
-    go->model = gmxgomodel_open();
+    gmxgomodel_default(m);
+    gmxgomodel_load(m, fncfg);
     m = go->model;
 
-    gmxvcomm_loadxref(go, "1VII.pdb");
+    gmxvcomm_loadxref(go, m->fnpdb);
 
-    go->rhis_dx = 0.002;
-    go->rhis_max = 4.0; /* 40 angstrom */
+    go->rhis_dx = m->rhis_dx;
+    go->rhis_max = m->rhis_max;
     go->rhis_n = (int) ( go->rhis_max / go->rhis_dx + 0.5 );
     snew(go->rhis, go->rhis_n);
 
-    //go->wl = wl_openf(m->rmsdmin * 0.1, m->rmsdmax * 0.1, m->rmsddel * 0.1,
-    //    m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
-    go->wl = wl_openf(0.1, 0.8, 0.01,
+    go->wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
         m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
   }
+
+  gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
 
   go->kT = BOLTZ * tp;
 
@@ -215,7 +223,6 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 static void gmxgo_close(gmxgo_t *go)
 {
   if ( MASTER(go->gvc->cr) ) {
-    gmxgomodel_close(go->model);
     sfree(go->rhis);
     wl_close(go->wl);
   }
@@ -352,11 +359,34 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 
 
+/* compute the consecutive peptide bond lengths */
+__inline static void gmxgo_printbonds(gmxgo_t *go,
+    double (*x)[3], int ePBC, matrix box, gmx_int64_t step)
+{
+  int i, c1, c2;
+  double dx[3];
+  t_pbc pbc[1];
+
+  set_pbc(pbc, ePBC, box);
+
+  fprintf(stderr, "step %s:\n", gmx_step_str(step, go->sbuf));
+  for ( i = 1; i < go->n; i++ ) {
+    pbc_dx_d(pbc, x[i], x[i - 1], dx);
+    c1 = gmxvcomm_where(go->gvc, i - 1);
+    c2 = gmxvcomm_where(go->gvc, i);
+    fprintf(stderr, " %d[node %d] - %d[node %d]: %g\n",
+        i - 1, c1, i, c2, vnorm(dx));
+  }
+  fprintf(stderr, "\n");
+}
+
+
+
 /* shift the coordinates to make the molecule whole
  * only the master needs to call this */
-static void gmxgo_shift(gmxgo_t *go,
+static int gmxgo_shift(gmxgo_t *go,
     double (*xin)[3], double (*xout)[3],
-    int ePBC, matrix box)
+    int ePBC, matrix box, gmx_int64_t step)
 {
   int i;
   double dx[3], dr;
@@ -368,16 +398,18 @@ static void gmxgo_shift(gmxgo_t *go,
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
     dr = vnorm(dx); /* should be around 0.39 nm = 3.9 A */
-    if ( dr > 0.5 || dr < 0.3 ) {
-      fprintf(stderr, "%d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
-          i - 1, i, dr, dx[0], dx[1], dx[2],
+    if ( dr > 0.45 || dr < 0.34 ) {
+      fprintf(stderr, "step %s: %d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
+          gmx_step_str(step, go->sbuf), i - 1, i, dr, dx[0], dx[1], dx[2],
           xin[i-1][0], xin[i-1][1], xin[i-1][2], xin[i][0], xin[i][1], xin[i][2]);
+      gmxgo_printbonds(go, xin, ePBC, box, step);
       gmxgo_saverhis(go, go->model->fnrhis);
       wl_save(go->wl, go->model->fnvrmsd);
-      exit(1);
+      return -1;
     }
     vadd(xout[i], xout[i - 1], dx);
   }
+  return 0;
 }
 
 
@@ -391,13 +423,20 @@ static int gmxgo_calcf(gmxgo_t *go, double rmsd)
 
   dvdx = go->kT * wl_getdvf(go->wl, rmsd,
       m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
-  fprintf(stderr, "rmsd %gA, dvdx %g\n", rmsd*10, dvdx);
+  if ( dvdx < m->mfmin ) {
+    dvdx = m->mfmin;
+  } else if ( dvdx > m->mfmax ) {
+    dvdx = m->mfmax;
+  }
+  go->dvdx = dvdx;
+  //fprintf(stderr, "rmsd %gA, dvdx %g\n", rmsd*10, go->dvdx);
+
   //dvdx  = go->kT * 2.0 * (rmsd - 0.5);
-  dvdx /= rmsd * go->n;
+  dvdx /= rmsd * go->masstot;
 
   for ( i = 0; i < go->n; i++ ) {
     vdiff(dx, go->x[i], go->xf[i]);
-    vsinc(go->f[i], dx, -dvdx);
+    vsinc(go->f[i], dx, -go->dvdx * go->mass[i]);
   }
 
   return 0;
@@ -406,12 +445,11 @@ static int gmxgo_calcf(gmxgo_t *go, double rmsd)
 
 
 /* ePBC == fr->ePBC */
-static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
+static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     int ePBC, matrix box, gmx_int64_t step)
 {
   double rmsd;
-  int i;
-  char sbuf[STEPSTRSIZE];
+  int err = 0;
   gmxgomodel_t *m = go->model;
 
   /* collect `x` from different nodes to `go->x1` on the master */
@@ -419,15 +457,18 @@ static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
 
   if ( MASTER(go->gvc->cr) ) {
     /* make the coordinates whole */
-    gmxgo_shift(go, go->x1, go->x, ePBC, box);
+    err = gmxgo_shift(go, go->x1, go->x, ePBC, box, step);
+    if ( err != 0 ) goto BCAST_ERR;
 
     //for ( i = 0; i < go->n; i++ )
     //  printf("%d: %g %g %g | %g %g %g\n", i, go->x[i][0], go->x[i][1], go->x[i][2], go->xref[i][0], go->xref[i][1], go->xref[i][2]);
-    rmsd = vrmsd(go->xref, go->xf, go->x, NULL, go->n,
+
+    rmsd = vrmsd(go->xref, go->xf, go->x, go->mass, go->n,
         0, NULL, NULL);
     wl_addf(go->wl, rmsd);
     wl_updatelnf(go->wl);
 
+    /* update the histogram */
     if ( rmsd < go->rhis_max ) {
       go->rhis[ (int) ( rmsd / go->rhis_dx ) ] += 1;
     }
@@ -436,13 +477,21 @@ static int gmxgo_rmsd(gmxgo_t *go, rvec *x, int doid, rvec *f,
       wl_save(go->wl, m->fnvrmsd);
     }
 
-    fprintf(stderr, "step %s: rmsd %gA\n", gmx_step_str(step, sbuf), rmsd * 10);
+    fprintf(stderr, "step %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g\n",
+        gmx_step_str(step, go->sbuf), rmsd * 10, go->dvdx,
+        wl_getflatness(go->wl) * 100, go->wl->lnf);
+
+    /* compute the force from the RMSD bias */
     gmxgo_calcf(go, rmsd);
   }
 
-  gmxgo_scatterf(go, f, 0);
+BCAST_ERR:
+  gmx_bcast(sizeof(err), &err, go->gvc->cr);
+  if ( err == 0 ) {
+    gmxgo_scatterf(go, f, 0);
+  }
 
-  return 0;
+  return err;
 }
 
 

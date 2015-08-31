@@ -217,5 +217,28 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
 
 
 
+/* find the rank of special atom i
+ * only call this on the master */
+static int gmxvcomm_where(gmxvcomm_t *g, int id)
+{
+  int i, j, iw, lcnt;
+  t_commrec *cr = g->cr;
+  gmx_domdec_t *dd = cr->dd;
+
+  for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
+    if ( (lcnt = g->lcnt_m[i]) > 0 ) {
+      for ( j = 0; j < lcnt; j++ ) {
+        if ( g->lwho_m[iw + j] == id )
+          return i;
+      }
+      iw += lcnt;
+    }
+  }
+
+  return 0;
+}
+
+
+
 #endif /* defined(GMXVCOMM__) */
 

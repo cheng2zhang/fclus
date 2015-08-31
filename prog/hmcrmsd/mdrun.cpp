@@ -41,7 +41,6 @@
 #endif
 
 #include <stdio.h>
-#include "hmcrmsd.h"
 
 #include "gromacs/legacyheaders/checkpoint.h"
 #include "gromacs/legacyheaders/copyrite.h"
@@ -576,7 +575,6 @@ int gmx_mdrun(int argc, char *argv[])
     const char     *part_suffix = ".part";
     char            suffix[STRLEN];
     int             rc;
-    hmcrmsd_t       *hmcrmsd;
 
 
 
@@ -600,12 +598,6 @@ int gmx_mdrun(int argc, char *argv[])
                            asize(desc), desc, 0, NULL, &oenv))
     {
         return 0;
-    }
-
-    if ( (hmcrmsd = hmcrmsd_open( opt2fn("-cfg", NFILE, fnm)
-            )) == NULL ) {
-      fprintf(stderr, "failed to initialize HMCRMSD\n");
-      return -1;
     }
 
     /* we set these early because they might be used in init_multisystem()
@@ -741,8 +733,6 @@ int gmx_mdrun(int argc, char *argv[])
     {
         gmx_log_close(fplog);
     }
-
-    hmcrmsd_close(hmcrmsd);
 
     return rc;
 }
