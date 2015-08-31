@@ -24,6 +24,8 @@ set_target_properties(hmcrmsd PROPERTIES
 install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 ```
 
+5. To change running parameters, edit `hmcrmsd.cfg` and copy to the running directory.
+
 
 
 Code template

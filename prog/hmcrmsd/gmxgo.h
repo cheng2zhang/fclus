@@ -15,11 +15,11 @@
 typedef struct {
   int n; /* number of atoms */
   int *index; /* index[0..n-1]: global indices of the Go atoms */
+  double *mass; /* mass[0..n-1] mass */
+  double masstot;
   double (*x)[3]; /* x[0..n-1] */
   double (*f)[3]; /* f[0..n-1] bias force */
   double (*xref)[3];
-  double *mass; /* mass[0..n-1] mass */
-  double masstot;
   double (*xf)[3]; /* fit structure */
   double (*x1)[3]; /* x1[0..n-1] */
   gmxvcomm_t *gvc;
@@ -29,6 +29,7 @@ typedef struct {
   double *rhis; /* histogram */
   double rhis_dx, rhis_max; /* spacing and maximal */
   int rhis_n;
+  t_commrec *cr;
   double dvdx;
   char sbuf[STEPSTRSIZE];
 } gmxgo_t;
@@ -68,6 +69,7 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   go->masstot = 0;
   ncap = BLKSZ;
   snew(go->index, ncap);
+  snew(go->mass, ncap);
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
     char *atnm = mt->atoms.atomname[ia][0];
     int sel = 0;
@@ -81,18 +83,19 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
       if ( go->n >= ncap ) {
         ncap += BLKSZ;
         srenew(go->index, ncap);
+        srenew(go->mass, ncap);
       }
 
-      go->mass[go->n] = mt->atoms.atom[ia].m;
       go->masstot += go->mass[go->n];
       go->index[go->n] = id + ia;
+      go->mass[go->n] = mt->atoms.atom[ia].m;
       go->n += 1;
     }
   }
 
   fprintf(stderr, "%d spatoms:", go->n);
   for ( i = 0; i < go->n; i++ ) {
-    fprintf(stderr, " %d", go->index[i]);
+    fprintf(stderr, " %d(%g)", go->index[i], go->mass[i]);
   }
   fprintf(stderr, "\n");
 
@@ -183,8 +186,13 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
   snew(go, 1);
 
+  go->cr = cr;
   gmxgo_build(go, mtop, cr);
-  go->gvc = gmxvcomm_open(go->n, go->index, cr);
+  if ( PAR(cr) ) {
+    go->gvc = gmxvcomm_open(go->n, go->index, cr);
+  } else {
+    go->gvc = NULL;
+  }
 
   snew(go->x, go->n);
   snew(go->f, go->n);
@@ -209,9 +217,12 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
     go->wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
         m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+    fprintf(stderr, "parallel %d, domain-decomposition %d\n", PAR(cr), DOMAINDECOMP(cr));
   }
 
-  gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
+  if ( PAR(cr) ) {
+    gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
+  }
 
   go->kT = BOLTZ * tp;
 
@@ -222,13 +233,16 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
 static void gmxgo_close(gmxgo_t *go)
 {
-  if ( MASTER(go->gvc->cr) ) {
+  if ( MASTER(go->cr) ) {
     sfree(go->rhis);
     wl_close(go->wl);
   }
 
   sfree(go->index);
-  gmxvcomm_close(go->gvc);
+  sfree(go->mass);
+  if ( go->gvc != NULL ) {
+    gmxvcomm_close(go->gvc);
+  }
   sfree(go->x);
   sfree(go->f);
   sfree(go->xref);
@@ -268,13 +282,25 @@ static int gmxgo_saverhis(gmxgo_t *go, const char *fn)
 
 
 /* gather the coordinates `x` to `xg`,
- * which should `state->x` (local state) */
+ * which should `state->x` (local state)
+ * only need for domain decomposition */
 static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
 {
   gmxvcomm_t *gvc = go->gvc;
-  t_commrec *cr = gvc->cr;
+  t_commrec *cr = go->cr;
   gmx_domdec_t *dd = cr->dd;
   int i, j, il, iw, lcnt, id, d;
+
+  if ( !DOMAINDECOMP(cr) ) {
+    /* direct map indices and return */
+    for ( id = 0; id < go->n; id++ ) {
+      for ( d = 0; d < 3; d++ ) {
+        i = go->index[id];
+        xg[id][d] = x[i][d];
+      }
+    }
+    return 0;
+  }
 
   if ( doid ) {
     /* we can save this call */
@@ -316,13 +342,24 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
 
 
 
-/* distribute the force */
+/* distribute the force additively */
 static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 {
   gmxvcomm_t *gvc = go->gvc;
-  t_commrec *cr = gvc->cr;
+  t_commrec *cr = go->cr;
   gmx_domdec_t *dd = cr->dd;
   int i, j, il, iw, lcnt, id, d;
+
+  if ( !DOMAINDECOMP(cr) ) {
+    /* direct map indices and return */
+    for ( id = 0; id < go->n; id++ ) {
+      for ( d = 0; d < 3; d++ ) {
+        i = go->index[id];
+        f[i][d] = (real) (f[i][d] + go->f[id][d]);
+      }
+    }
+    return 0;
+  }
 
   if ( doid ) {
     gmxvcomm_gatherid(gvc);
@@ -353,29 +390,34 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
       f[il][d] = (real) ( f[il][d] + gvc->lx[i][d] );
   }
 
-  //if ( MASTER(cr) ) getchar(); gmx_barrier(gvc->cr);
   return 0;
 }
 
 
 
-/* compute the consecutive peptide bond lengths */
-__inline static void gmxgo_printbonds(gmxgo_t *go,
+/* dump basic information */
+__inline static void gmxgo_dump(gmxgo_t *go,
     double (*x)[3], int ePBC, matrix box, gmx_int64_t step)
 {
-  int i, c1, c2;
-  double dx[3];
+  int i, c1, c;
+  double dx[3], dr = 0, f = 0, dev = 0;
   t_pbc pbc[1];
 
   set_pbc(pbc, ePBC, box);
 
   fprintf(stderr, "step %s:\n", gmx_step_str(step, go->sbuf));
-  for ( i = 1; i < go->n; i++ ) {
-    pbc_dx_d(pbc, x[i], x[i - 1], dx);
-    c1 = gmxvcomm_where(go->gvc, i - 1);
-    c2 = gmxvcomm_where(go->gvc, i);
-    fprintf(stderr, " %d[node %d] - %d[node %d]: %g\n",
-        i - 1, c1, i, c2, vnorm(dx));
+  for ( i = 0; i < go->n; i++ ) {
+    c = gmxvcomm_where(go->gvc, i);
+    if ( i > 0 ) {
+      pbc_dx_d(pbc, x[i], x[i - 1], dx);
+      c1 = gmxvcomm_where(go->gvc, i - 1);
+      /* compute the consecutive peptide bond lengths */
+      dr = vnorm(dx);
+      f = vnorm(go->f[i]);
+      dev = vdist(go->x[i], go->xf[i]);
+    }
+    fprintf(stderr, " %d[node %d]: f %g, dev %g, bond %g\n",
+        i, c, f, dev, dr);
   }
   fprintf(stderr, "\n");
 }
@@ -402,7 +444,7 @@ static int gmxgo_shift(gmxgo_t *go,
       fprintf(stderr, "step %s: %d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
           gmx_step_str(step, go->sbuf), i - 1, i, dr, dx[0], dx[1], dx[2],
           xin[i-1][0], xin[i-1][1], xin[i-1][2], xin[i][0], xin[i][1], xin[i][2]);
-      gmxgo_printbonds(go, xin, ePBC, box, step);
+      gmxgo_dump(go, xin, ePBC, box, step);
       gmxgo_saverhis(go, go->model->fnrhis);
       wl_save(go->wl, go->model->fnvrmsd);
       return -1;
@@ -434,6 +476,9 @@ static int gmxgo_calcf(gmxgo_t *go, double rmsd)
   //dvdx  = go->kT * 2.0 * (rmsd - 0.5);
   dvdx /= rmsd * go->masstot;
 
+  for ( i = 0; i < go->n; i++ )
+    vzero( go->f[i] );
+
   for ( i = 0; i < go->n; i++ ) {
     vdiff(dx, go->x[i], go->xf[i]);
     vsinc(go->f[i], dx, -go->dvdx * go->mass[i]);
@@ -451,11 +496,12 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
   double rmsd;
   int err = 0;
   gmxgomodel_t *m = go->model;
+  t_commrec *cr = go->cr;
 
   /* collect `x` from different nodes to `go->x1` on the master */
   gmxgo_gatherx(go, x, go->x1, doid);
 
-  if ( MASTER(go->gvc->cr) ) {
+  if ( MASTER(cr) ) {
     /* make the coordinates whole */
     err = gmxgo_shift(go, go->x1, go->x, ePBC, box, step);
     if ( err != 0 ) goto BCAST_ERR;
@@ -472,21 +518,26 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     if ( rmsd < go->rhis_max ) {
       go->rhis[ (int) ( rmsd / go->rhis_dx ) ] += 1;
     }
+
+    if ( step > 0 && step % m->nstchat == 0 ) {
+      fprintf(stderr, "\rstep %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g\n",
+          gmx_step_str(step, go->sbuf), rmsd * 10, go->dvdx,
+          wl_getflatness(go->wl) * 100, go->wl->lnf);
+    }
+
     if ( step > 0 && step % m->nstrep == 0 ) {
       gmxgo_saverhis(go, m->fnrhis);
       wl_save(go->wl, m->fnvrmsd);
     }
-
-    fprintf(stderr, "step %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g\n",
-        gmx_step_str(step, go->sbuf), rmsd * 10, go->dvdx,
-        wl_getflatness(go->wl) * 100, go->wl->lnf);
 
     /* compute the force from the RMSD bias */
     gmxgo_calcf(go, rmsd);
   }
 
 BCAST_ERR:
-  gmx_bcast(sizeof(err), &err, go->gvc->cr);
+  if ( PAR(cr) ) {
+    gmx_bcast(sizeof(err), &err, cr);
+  }
   if ( err == 0 ) {
     gmxgo_scatterf(go, f, 0);
   }

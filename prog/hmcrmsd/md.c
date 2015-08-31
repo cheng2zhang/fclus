@@ -212,6 +212,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     /* Interactive MD */
     gmx_bool          bIMDstep = FALSE;
 
+    /* object of handling the bias potential based on RMSD */
     gmxgo_t *go;
 
 
@@ -345,7 +346,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     }
 
     /* initialize an object for Go model */
-    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0], opt2fn("-cfg", nfile, fnm));
+    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0], opt2fn_master("-cfg", nfile, fnm, cr));
 
     /* Set up interactive MD (IMD) */
     init_IMD(ir, cr, top_global, fplog, ir->nstcalcenergy, state_global->x,

@@ -59,7 +59,9 @@ static gmxvcomm_t *gmxvcomm_open(int n, int *arr,
 
   if ( MASTER(cr) ) {
     if ( DOMAINDECOMP(cr) ) {
+#ifdef GMX_MPI
       MPI_Comm_size(cr->mpi_comm_mygroup, &sz);
+#endif
     } else {
       sz = 1;
     }
@@ -96,6 +98,8 @@ static int gmxvcomm_gatherid(gmxvcomm_t *g)
 
   if ( !DOMAINDECOMP(cr) ) return 0;
 
+  /* locally compute `lwho`, which is a list
+   * collecting special atoms on the node */
   g->lcnt = 0;
   for ( i = 0; i < g->n; i++ ) {
     ig = g->index[i];
@@ -148,8 +152,11 @@ static int gmxvcomm_gatherv(gmxvcomm_t *g)
 {
   int i, iw, lcnt;
   t_commrec *cr = g->cr;
-  gmx_domdec_t *dd = cr->dd;
+  gmx_domdec_t *dd;
 
+  if ( !DOMAINDECOMP(cr) ) return 0;
+
+  dd = cr->dd;
   if ( DDMASTER(dd) ) {
     /* master collects the vectors */
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
@@ -185,8 +192,11 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
 {
   int i, iw, lcnt;
   t_commrec *cr = g->cr;
-  gmx_domdec_t *dd = cr->dd;
+  gmx_domdec_t *dd;
 
+  if ( !DOMAINDECOMP(cr) ) return 0;
+
+  dd = cr->dd;
   if ( DDMASTER(dd) ) {
     /* master collects the vectors */
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
@@ -223,8 +233,11 @@ static int gmxvcomm_where(gmxvcomm_t *g, int id)
 {
   int i, j, iw, lcnt;
   t_commrec *cr = g->cr;
-  gmx_domdec_t *dd = cr->dd;
+  gmx_domdec_t *dd;
 
+  if ( !DOMAINDECOMP(cr) ) return 0;
+
+  dd = cr->dd;
   for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
     if ( (lcnt = g->lcnt_m[i]) > 0 ) {
       for ( j = 0; j < lcnt; j++ ) {
@@ -240,5 +253,5 @@ static int gmxvcomm_where(gmxvcomm_t *g, int id)
 
 
 
-#endif /* defined(GMXVCOMM__) */
+#endif /* defined(GMXVCOMM_H__) */
 

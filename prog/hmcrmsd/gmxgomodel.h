@@ -32,6 +32,7 @@ typedef struct {
   double rhis_max;
   char *fnrhis;
 
+  int nstchat;
   int nstrep;
 } gmxgomodel_t;
 
@@ -40,20 +41,26 @@ typedef struct {
 static void gmxgomodel_default(gmxgomodel_t *m)
 {
   m->fnpdb = "1VII.pdb";
-  m->mfmin = -4.0;
-  m->mfmax = 4.0;
+  m->mfmin = -100.0;
+  m->mfmax = +100.0;
 
-  m->mflmin = -1.0;
+  /* for rmsd < rmsdmin, a bias with dvdx < 0 helps
+   * the RMSD increase and go back to the range */
+  m->mflmin = -100.0;
   m->mflmax = 0.0;
+
+  /* for rmsd > rmsdmax, a bias with dvdx > 0 helps
+   * the RMSD decrease and go back to the range */
   m->mfhmin = 1.0;
-  m->mfhmax = 3.0;
+  m->mfhmax = 100.0;
+
   m->fnvrmsd = "vrmsd.dat";
 
   m->rmsdmin = 0.08;
-  m->rmsdmax = 0.22;
-  m->rmsddel = 0.01;
+  m->rmsdmax = 0.80;
+  m->rmsddel = 0.005;
 
-  m->wl_lnf0 = 1e-6;
+  m->wl_lnf0 = 1e-4;
   m->wl_flatness = 0.3;
   m->wl_frac = 0.5;
   m->invt_c = 1;
@@ -62,6 +69,7 @@ static void gmxgomodel_default(gmxgomodel_t *m)
   m->rhis_max = 4.0;
   m->fnrhis = "rhis.dat";
 
+  m->nstchat = 1000;
   m->nstrep = 10000;
 }
 
@@ -75,7 +83,7 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
   int inpar;
 
   if ( (fp = fopen(fn, "r")) == NULL ) {
-    fprintf(stderr, "cannot load %s\n", fn);
+    fprintf(stderr, "cannot load configuration file %s\n", fn);
     return -1;
   }
 
@@ -110,11 +118,10 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     /* find the beginning of the value */
     for ( p++; isspace(*p) || *p == '=' ; ) p++;
     val = p;
-    for ( ; *p; p++ ) *p = (char) tolower(*p);
 
     if ( strcmpfuzzy(key, "pdb") == 0
       || strcmpfuzzy(key, "fnpdb") == 0 ) {
-      m->fnpdb = val;
+      m->fnpdb = strclone(val);
     } else if ( strcmpfuzzy(key, "mfmin") == 0 ) {
       m->mfmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfmax") == 0 ) {
@@ -128,7 +135,7 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     } else if ( strcmpfuzzy(key, "mfhmax") == 0 ) {
       m->mfhmax = atof(val);
     } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
-      m->fnvrmsd = val;
+      m->fnvrmsd = strclone(val);
     } else if ( strcmpfuzzy(key, "rmsdmin") == 0 ) {
       m->rmsdmin = atof(val);
     } else if ( strcmpfuzzy(key, "rmsdmax") == 0 ) {
@@ -147,10 +154,12 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
       m->rhis_dx = atof(val);
     } else if ( strcmpfuzzy(key, "rhis_max") == 0 ) {
       m->rhis_max = atof(val);
+    } else if ( strcmpfuzzy(key, "fnrhis") == 0 ) {
+      m->fnrhis = strclone(val);
+    } else if ( strcmpfuzzy(key, "nstchat") == 0 ) {
+      m->nstchat = atoi(val);
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
       m->nstrep = atoi(val);
-    } else if ( strcmpfuzzy(key, "fnrhis") == 0 ) {
-      m->fnrhis = val;
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();

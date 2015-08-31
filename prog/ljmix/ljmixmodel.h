@@ -249,11 +249,11 @@ __inline static int ljmixmodel_load(ljmixmodel_t *m, const char *fn)
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
       m->nstrep = atof(val);
     } else if ( strcmpfuzzy(key, "fnpos") == 0 ) {
-      m->fnpos = val;
+      m->fnpos = strclone(val);
     } else if ( strcmpfuzzy(key, "fnvcls") == 0 ) {
-      m->fnvcls = val;
+      m->fnvcls = strclone(val);
     } else if ( strcmpfuzzy(key, "fnrep") == 0 ) {
-      m->fnrep = val;
+      m->fnrep = strclone(val);
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
       m->wl_lnf0 = atof(val);
     } else if ( strcmpfuzzy(key, "wl_flatness") == 0 ) {

@@ -133,4 +133,15 @@ __inline static int strstartswith(const char *s, const char *t)
 
 
 
+__inline static char *strclone(const char *s)
+{
+  char *t;
+
+  xnew(t, strlen(s) + 1);
+  strcpy(t, s);
+  return t;
+}
+
+
+
 #endif

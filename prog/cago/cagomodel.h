@@ -200,7 +200,7 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
     for ( ; *p; p++ ) *p = (char) tolower(*p);
 
     if ( strcmpfuzzy(key, "pdb") == 0 ) {
-      m->fnpdb = val;
+      m->fnpdb = strclone(val);
     } else if ( strcmpfuzzy(key, "kb") == 0 ) {
       m->kb = atof(val);
     } else if ( strcmpfuzzy(key, "ka") == 0 ) {
@@ -246,13 +246,13 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
       m->nstrep = atof(val);
     } else if ( strcmpfuzzy(key, "fnpos") == 0 ) {
-      m->fnpos = val;
+      m->fnpos = strclone(val);
     } else if ( strcmpfuzzy(key, "fnvnc") == 0 ) {
-      m->fnvnc = val;
+      m->fnvnc = strclone(val);
     } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
-      m->fnvrmsd = val;
+      m->fnvrmsd = strclone(val);
     } else if ( strcmpfuzzy(key, "fnrep") == 0 ) {
-      m->fnrep = val;
+      m->fnrep = strclone(val);
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
       m->wl_lnf0 = atof(val);
     } else if ( strcmpfuzzy(key, "wl_flatness") == 0 ) {
