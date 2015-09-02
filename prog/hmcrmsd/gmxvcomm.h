@@ -58,13 +58,7 @@ static gmxvcomm_t *gmxvcomm_open(int n, int *arr,
   snew(g->lx, n);
 
   if ( MASTER(cr) ) {
-    if ( DOMAINDECOMP(cr) ) {
-#ifdef GMX_MPI
-      MPI_Comm_size(cr->mpi_comm_mygroup, &sz);
-#endif
-    } else {
-      sz = 1;
-    }
+    sz = cr->nnodes;
     snew(g->lcnt_m, sz);
     /* n should be enough */
     snew(g->lwho_m, n);

@@ -10,6 +10,8 @@
 typedef struct {
   const char *fnpdb; /* reference PDB structure */
 
+  int dohmc;
+
   double mfmin;
   double mfmax;
 
@@ -41,6 +43,9 @@ typedef struct {
 static void gmxgomodel_default(gmxgomodel_t *m)
 {
   m->fnpdb = "1VII.pdb";
+
+  m->dohmc = 1;
+
   m->mfmin = -100.0;
   m->mfmax = +100.0;
 
@@ -160,6 +165,9 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
       m->nstchat = atoi(val);
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
       m->nstrep = atoi(val);
+    } else if ( strcmpfuzzy(key, "hmc") == 0
+             || strcmpfuzzy(key, "dohmc") == 0 ) {
+      m->dohmc = atoi(val);
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();

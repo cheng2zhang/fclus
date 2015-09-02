@@ -584,12 +584,13 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         multisim_nsteps = get_multisim_nsteps(cr, ir->nsteps);
     }
 
+
     /* and stop now if we should */
     bLastStep = ((ir->nsteps >= 0 && step_rel > ir->nsteps) ||
                  ((multisim_nsteps >= 0) && (step_rel >= multisim_nsteps )));
     while (!bLastStep)
     {
-MDSTEP_START:
+
         wallcycle_start(wcycle, ewcSTEP);
 
         {
@@ -779,7 +780,6 @@ MDSTEP_START:
                      state->lambda, graph,
                      fr, NULL, mu_tot, t, mdoutf_get_fp_field(outf), ed, bBornRadii,
                      (bNS ? GMX_FORCE_NS : 0) | force_flags);
-
         }
 
         /* compute the bias force */
@@ -787,6 +787,7 @@ MDSTEP_START:
           fprintf(stderr, "step %s: gmxgo_rmsd_force failed\n", gmx_step_str(step, go->sbuf));
           exit(1);
         }
+        if ( go->model->dohmc ) gmxgo_hmcpush(go, state, f);
 
         if (bVV && !bStartingFromCpt)
         /*  ############### START FIRST UPDATE HALF-STEP FOR VV METHODS############### */
@@ -1358,6 +1359,10 @@ MDSTEP_START:
 
         /* ################# END UPDATE STEP 2 ################# */
         /* #### We now have r(t+dt) and v(t+dt/2)  ############# */
+
+        if ( go->model->dohmc ) {
+          gmxgo_hmcselect(go, state, f, 1, fr->ePBC, state->box, step);
+        }
 
         /* The coordinates (x) were unshifted in update */
         if (!bGStat)

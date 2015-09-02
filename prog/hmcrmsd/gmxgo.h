@@ -7,6 +7,7 @@
 #define D 3
 #include "mat.h"
 #include "wl.h"
+#include "mtrand.h"
 #include "gmxvcomm.h"
 #include "gmxgomodel.h"
 
@@ -22,6 +23,7 @@ typedef struct {
   double (*xref)[3];
   double (*xf)[3]; /* fit structure */
   double (*x1)[3]; /* x1[0..n-1] */
+  double (*x2)[3]; /* x2[0..n-1] */
   gmxvcomm_t *gvc;
   gmxgomodel_t model[1];
   double kT;
@@ -31,6 +33,17 @@ typedef struct {
   int rhis_n;
   t_commrec *cr;
   double dvdx;
+
+  /* HMC state variables */
+  int stn, stncap;
+  rvec *stx;
+  rvec *stv;
+  rvec *stf;
+  /*
+  matrix box;
+  */
+
+  /* string buffer to print step */
   char sbuf[STEPSTRSIZE];
 } gmxgo_t;
 
@@ -86,9 +99,9 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
         srenew(go->mass, ncap);
       }
 
-      go->masstot += go->mass[go->n];
       go->index[go->n] = id + ia;
       go->mass[go->n] = mt->atoms.atom[ia].m;
+      go->masstot += go->mass[go->n];
       go->n += 1;
     }
   }
@@ -97,7 +110,7 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   for ( i = 0; i < go->n; i++ ) {
     fprintf(stderr, " %d(%g)", go->index[i], go->mass[i]);
   }
-  fprintf(stderr, "\n");
+  fprintf(stderr, "; masstot %g\n", go->masstot);
 
   return 0;
 }
@@ -117,8 +130,11 @@ static int gmxgo_build(gmxgo_t *go, gmx_mtop_t *mtop, t_commrec *cr)
     gmx_bcast(sizeof(int), &go->n, cr);
     if ( !MASTER(cr) ) {
       snew(go->index, go->n);
+      snew(go->mass, go->n);
     }
     gmx_bcast(sizeof(go->index[0]) * go->n, go->index, cr);
+    gmx_bcast(sizeof(go->mass[0]) * go->n, go->mass, cr);
+    gmx_bcast(sizeof(go->masstot), &go->masstot, cr);
   }
 
   return 0;
@@ -178,6 +194,32 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
 
 
 
+/* initialize */
+static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
+{
+  int ib, n = 0;
+  gmx_molblock_t *mb = mtop->molblock;
+  t_commrec *cr = go->cr;
+
+  /* count the number of atoms */
+  for ( ib = 0; ib < mtop->nmolblock; ib++ ) {
+    n += mb[ib].nmol * mb[ib].natoms_mol;
+  }
+
+  if ( DOMAINDECOMP(cr) ) {
+    /* we allow some margin */
+    n = (int) ((n + 3 * sqrt(n)) / cr->nnodes);
+  }
+
+  go->stncap = n;
+  go->stn = 0;
+  snew(go->stx, n);
+  snew(go->stv, n);
+  snew(go->stf, n);
+}
+
+
+
 /* tp: the temperature */
 static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
     double tp, const char *fncfg)
@@ -199,6 +241,7 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
   snew(go->xref, go->n);
   snew(go->xf, go->n);
   snew(go->x1, go->n);
+  snew(go->x2, go->n);
 
   /* load the reference */
   if ( MASTER(cr) ) {
@@ -226,6 +269,8 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
   go->kT = BOLTZ * tp;
 
+  gmxgo_inithmc(go, mtop);
+
   return go;
 }
 
@@ -248,6 +293,10 @@ static void gmxgo_close(gmxgo_t *go)
   sfree(go->xref);
   sfree(go->xf);
   sfree(go->x1);
+  sfree(go->x2);
+  sfree(go->stx);
+  sfree(go->stv);
+  sfree(go->stf);
   sfree(go);
 }
 
@@ -543,6 +592,128 @@ BCAST_ERR:
   }
 
   return err;
+}
+
+
+
+/* push the current x, v and f
+ * we only save home atoms */
+static int gmxgo_hmcpush(gmxgo_t *go,
+    t_state *state, rvec *f)
+{
+  int i, n;
+  t_commrec *cr = go->cr;
+
+  /* determine the number of home atoms */
+  n = PAR(cr) ? cr->dd->nat_home : state->natoms;
+
+  if ( n > go->stncap ) {
+    go->stncap = n;
+    srenew(go->stx, n);
+    srenew(go->stv, n);
+    srenew(go->stf, n);
+  }
+
+  go->stn = n;
+  memcpy(go->stx, state->x, sizeof(rvec) * n);
+  memcpy(go->stv, state->v, sizeof(rvec) * n);
+  memcpy(go->stf, f,        sizeof(rvec) * n);
+  return 0;
+}
+
+
+
+/* pop x, v, f
+ * assume the number of home atoms are not changed */
+static void gmxgo_hmcpop(gmxgo_t *go,
+    t_state *state, rvec *f, int reversev)
+{
+  int i, n = go->stn, nn, d;
+  t_commrec *cr = go->cr;
+
+  /* determine the number of home atoms */
+  nn = PAR(cr) ? cr->dd->nat_home : state->natoms;
+  if ( nn != n ) {
+    fprintf(stderr, "nn %d vs. n %d\n", nn, n);
+    exit(1);
+  }
+
+  if ( reversev ) {
+    for ( i = 0; i < n; i++ ) {
+      for ( d = 0; d < 3; d++ ) {
+        go->stv[i][d] = -go->stv[i][d];
+      }
+    }
+  }
+  memcpy(state->x, go->stx, sizeof(rvec) * n);
+  memcpy(state->v, go->stv, sizeof(rvec) * n);
+  memcpy(f,        go->stf, sizeof(rvec) * n);
+}
+
+
+
+static double gmxgo_raw_rmsd(gmxgo_t *go,
+    double (*xf)[3], double (*x)[3])
+{
+  int i;
+  double dr2 = 0;
+
+  for ( i = 0; i < go->n; i++ ) {
+    dr2 += vdist2(xf[i], x[i]) * go->mass[i];
+  }
+  dr2 /= go->masstot;
+  return sqrt( dr2 );
+}
+
+
+
+/* select */
+static int gmxgo_hmcselect(gmxgo_t *go,
+    t_state *state, rvec *f, int reversev,
+    int ePBC, matrix box, gmx_int64_t step)
+{
+  double rmsd1, rmsd2, v1, v2;
+  int err = 0, acc = 1;
+  gmxgomodel_t *m = go->model;
+  t_commrec *cr = go->cr;
+
+  /* collect `state->x` from different nodes to `go->x1` on the master */
+  gmxgo_gatherx(go, state->x, go->x1, 1);
+
+  if ( MASTER(cr) ) {
+    /* make the coordinates whole
+     * TODO: possible shift due to PBC */
+    err = gmxgo_shift(go, go->x1, go->x2, ePBC, box, step);
+    if ( err != 0 ) goto BCAST_ERR;
+
+    rmsd2 = vrmsd(go->xref, NULL, go->x2, go->mass, go->n,
+        0, NULL, NULL);
+
+    rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->x2);
+
+    v1 = wl_getvf(go->wl, rmsd1);
+    v2 = wl_getvf(go->wl, rmsd2);
+
+    acc = 1;
+    if ( v2 > v1 ) {
+      double r = rand01();
+      if ( r > exp(-(v2 - v1)) ) {
+        acc = 0;
+        fprintf(stderr, "HMC rejecting a state, rmsd %g -> %g\n", rmsd1, rmsd2);
+      }
+    }
+  }
+
+BCAST_ERR:
+  if ( PAR(cr) ) {
+    gmx_bcast(sizeof(err), &err, cr);
+    gmx_bcast(sizeof(acc), &acc, cr);
+  }
+  if ( !err && !acc ) {
+    gmxgo_hmcpop(go, state, f, reversev);
+  }
+
+  return acc;
 }
 
 

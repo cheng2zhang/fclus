@@ -87,6 +87,8 @@ md.c
 
 * `update_tcouple()`, line 1168
   o update temperature coupling
+    + every node does it (even nonmaster)
+    + does it only `inputrec->nsttcouple` steps
   o defined in `gromacs/mdlib/update.c` as a wrapper
   o calls `vrescale_tcoupl()` defined in `gromacs/mdlib/coupling.c`
     +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
