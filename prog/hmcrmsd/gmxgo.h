@@ -343,8 +343,8 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
   if ( !DOMAINDECOMP(cr) ) {
     /* direct map indices and return */
     for ( id = 0; id < go->n; id++ ) {
+      i = go->index[id]; /* global index */
       for ( d = 0; d < 3; d++ ) {
-        i = go->index[id];
         xg[id][d] = x[i][d];
       }
     }
@@ -374,14 +374,13 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
 
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
-        for ( j = 0; j < lcnt; j++ ) {
-          id = gvc->lwho_m[iw + j];
+        for ( j = 0; j < lcnt; j++, iw++ ) {
+          id = gvc->lwho_m[iw]; /* special-atom index */
           for ( d = 0; d < 3; d++ )
-            xg[id][d] = gvc->lx_m[iw + j][d];
+            xg[id][d] = gvc->lx_m[iw][d];
           //printf("id %d: %g %g %g, from node %d\n",
           //    id, xg[id][0], xg[id][1], xg[id][2], i);
         }
-        iw += lcnt;
       }
     }
   }
@@ -402,8 +401,8 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
   if ( !DOMAINDECOMP(cr) ) {
     /* direct map indices and return */
     for ( id = 0; id < go->n; id++ ) {
+      i = go->index[id]; /* global index */
       for ( d = 0; d < 3; d++ ) {
-        i = go->index[id];
         f[i][d] = (real) (f[i][d] + go->f[id][d]);
       }
     }
@@ -418,11 +417,10 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
   if ( MASTER(cr) ) {
     for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
-        for ( j = 0; j < lcnt; j++ ) {
-          id = gvc->lwho_m[iw + j];
-          vcopy(gvc->lx_m[iw + j], go->f[id]);
+        for ( j = 0; j < lcnt; j++, iw++ ) {
+          id = gvc->lwho_m[iw]; /* special-atom index */
+          vcopy(gvc->lx_m[iw], go->f[id]);
         }
-        iw += lcnt;
       }
     }
   }
@@ -489,8 +487,8 @@ static int gmxgo_shift(gmxgo_t *go,
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
     dr = vnorm(dx); /* should be around 0.39 nm = 3.9 A */
-    if ( dr > 0.45 || dr < 0.34 ) {
-      fprintf(stderr, "step %s: %d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
+    if ( fabs(dr - 0.39) > 0.05 ) {
+      fprintf(stderr, "step %s: broken peptide bond %d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
           gmx_step_str(step, go->sbuf), i - 1, i, dr, dx[0], dx[1], dx[2],
           xin[i-1][0], xin[i-1][1], xin[i-1][2], xin[i][0], xin[i][1], xin[i][2]);
       gmxgo_dump(go, xin, ePBC, box, step);
@@ -505,28 +503,63 @@ static int gmxgo_shift(gmxgo_t *go,
 
 
 
-/* compute force */
-static int gmxgo_calcf(gmxgo_t *go, double rmsd)
+/* project the force `f` along rmsd */
+static int gmxgo_projectf(gmxgo_t *go, double (*f)[3],
+    double rmsd, double (*x)[3], double (*xf)[3])
+{
+  int i;
+  double dx[D], g2 = 0, dot = 0;
+
+  for ( i = 0; i < go->n; i++ ) {
+    /* compute the gradient */
+    vdiff(dx, x[i], xf[i]);
+    /* now `dx` is the gradient: d rmsd / d x_i */
+    vsmul(dx, go->mass[i] / (go->masstot * rmsd) );
+    g2 += vdot(dx, dx);
+    dot += vdot(dx, f[i]);
+    //fprintf(stderr, "%d: g2 %g, dot %g, f (%g, %g, %g)\n", i, g2, dot, f[i][0], f[i][1], f[i][2]);
+  }
+
+  return g2 > 0 ? dot / g2 : 0;
+}
+
+
+
+/* compute the mean force `go->mf` of the current `rmsd`
+ * does not apply to the actual force */
+static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
 {
   int i;
   double dx[D], dvdx;
   gmxgomodel_t *m = go->model;
 
-  dvdx = go->kT * wl_getdvf(go->wl, rmsd,
-      m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+  if ( m->bias_mf ) {
+    /* compute the gradient from the bias potential */
+    dvdx = wl_getdvf_mf(go->wl, rmsd,
+        m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+  } else {
+    /* compute the gradient from the bias mean force */
+    dvdx = wl_getdvf_v(go->wl, rmsd,
+        m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+  }
+  dvdx *= go->kT;
+
+  /* place the limits */
   if ( dvdx < m->mfmin ) {
     dvdx = m->mfmin;
   } else if ( dvdx > m->mfmax ) {
     dvdx = m->mfmax;
   }
+
   go->dvdx = dvdx;
   //fprintf(stderr, "rmsd %gA, dvdx %g\n", rmsd*10, go->dvdx);
 
   //dvdx  = go->kT * 2.0 * (rmsd - 0.5);
   dvdx /= rmsd * go->masstot;
 
-  for ( i = 0; i < go->n; i++ )
+  for ( i = 0; i < go->n; i++ ) {
     vzero( go->f[i] );
+  }
 
   for ( i = 0; i < go->n; i++ ) {
     vdiff(dx, go->x[i], go->xf[i]);
@@ -542,7 +575,7 @@ static int gmxgo_calcf(gmxgo_t *go, double rmsd)
 static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     int ePBC, matrix box, gmx_int64_t step)
 {
-  double rmsd;
+  double rmsd = 0, mf;
   int err = 0;
   gmxgomodel_t *m = go->model;
   t_commrec *cr = go->cr;
@@ -578,18 +611,36 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
       gmxgo_saverhis(go, m->fnrhis);
       wl_save(go->wl, m->fnvrmsd);
     }
-
-    /* compute the force from the RMSD bias */
-    gmxgo_calcf(go, rmsd);
   }
 
 BCAST_ERR:
   if ( PAR(cr) ) {
     gmx_bcast(sizeof(err), &err, cr);
   }
-  if ( err == 0 ) {
-    gmxgo_scatterf(go, f, 0);
+  if ( err ) return err;
+
+  /* compute the projection of force on RMSD */
+  if ( m->bias_mf ) {
+
+    /* collect `f` from different nodes to `go->x1` on the master
+     * `doid = 0` since we must have indices now */
+    gmxgo_gatherx(go, f, go->x1, 0);
+
+    if ( MASTER(cr) ) {
+      /* `go->x1` is the force, project it along RMSD */
+      mf = gmxgo_projectf(go, go->x1, rmsd, go->x, go->xf);
+      //fprintf(stderr, "step %d: computing mean force, rmsd %g, mf %g\n", (int) step, rmsd, mf); getchar();
+      wl_addforcef(go->wl, rmsd, mf);
+    }
   }
+
+  if ( MASTER(cr) ) {
+    /* compute the force from the RMSD bias */
+    gmxgo_calcmf(go, rmsd);
+  }
+
+  /* apply the mean force */
+  gmxgo_scatterf(go, f, 0);
 
   return err;
 }
@@ -656,13 +707,13 @@ static double gmxgo_raw_rmsd(gmxgo_t *go,
     double (*xf)[3], double (*x)[3])
 {
   int i;
-  double dr2 = 0;
+  double dr2, s = 0;
 
   for ( i = 0; i < go->n; i++ ) {
-    dr2 += vdist2(xf[i], x[i]) * go->mass[i];
+    dr2 = vdist2(xf[i], x[i]);
+    s += dr2 * go->mass[i];
   }
-  dr2 /= go->masstot;
-  return sqrt( dr2 );
+  return sqrt( s / go->masstot );
 }
 
 
@@ -672,7 +723,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
 {
-  double rmsd1, rmsd2, v1, v2;
+  double rmsd1, rmsd2, v1, v2, dr0;
   int err = 0, acc = 1;
   gmxgomodel_t *m = go->model;
   t_commrec *cr = go->cr;
@@ -681,15 +732,28 @@ static int gmxgo_hmcselect(gmxgo_t *go,
   gmxgo_gatherx(go, state->x, go->x1, 1);
 
   if ( MASTER(cr) ) {
-    /* make the coordinates whole
-     * TODO: possible shift due to PBC */
+    /* remove the periodic boundary condition
+     * to make the coordinates whole */
     err = gmxgo_shift(go, go->x1, go->x2, ePBC, box, step);
     if ( err != 0 ) goto BCAST_ERR;
 
-    rmsd2 = vrmsd(go->xref, NULL, go->x2, go->mass, go->n,
+    /* transform `xref` to `x1` to fit `x2`
+     * compute the RMSD between `x1` and `x2` */
+    rmsd2 = vrmsd(go->xref, go->x1, go->x2, go->mass, go->n,
         0, NULL, NULL);
 
+    /* comupte the RMSD between `xf` and `x2` */
     rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->x2);
+
+    /* the two fitted structures are supposed to be close
+     * if not, one of them might have been wrapped unintendedly */
+    dr0 = vdist(go->xf[0], go->x1[0]);
+    if ( dr0 > 0.1 ) {
+      /* the threshold 0.1nm or 1A is generous, can be smaller */
+      fprintf(stderr, "The first special atoms of the two "
+          "fitted structures differ by %gA\n", dr0 * 10);
+      goto BCAST_ERR;
+    }
 
     v1 = wl_getvf(go->wl, rmsd1);
     v2 = wl_getvf(go->wl, rmsd2);

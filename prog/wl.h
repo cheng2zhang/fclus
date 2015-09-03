@@ -29,6 +29,7 @@ typedef struct {
   unsigned flags;
   double *h; /* histogram */
   double *v; /* bias potential */
+  double *sf; /* sum of force */
   double tot;
   double lnf0;
   double lnf; /* current updating factor lnf */
@@ -61,9 +62,15 @@ __inline static wl_t *wl_open0(int n,
     free(wl);
     return NULL;
   }
+  if ( (wl->sf = calloc(1, sizeof(double) * n)) == NULL ) {
+    fprintf(stderr, "no memory for the WL force\n");
+    free(wl);
+    return NULL;
+  }
   for ( i = 0; i < n; i++ ) {
     wl->h[i] = 0.0;
     wl->v[i] = 0.0;
+    wl->sf[i] = 0.0;
   }
   wl->lnf = wl->lnf0 = lnf0;
   wl->tot = 0;
@@ -120,6 +127,7 @@ __inline static void wl_close(wl_t *wl)
 {
   free(wl->h);
   free(wl->v);
+  free(wl->sf);
   free(wl);
 }
 
@@ -191,10 +199,34 @@ __inline static double wl_getvf(wl_t *wl, double x)
 
 
 
-/* retrieve the gradient dv/dx
- * if `x < wl->xmin` and the force if less than `fl`, use `fl`
- * if `x > wl->xmax` and the force if greater than `fl`, use `fl` */
-__inline static double wl_getdvf(wl_t *wl, double x,
+/* limit the mean force
+ * if `x < wl->xmin`, limit the force in (flmin, flmax)
+ * if `x > wl->xmax`, limit the force in (fhmin, fhmax) */
+__inline static double wl_wrapmf(int flags, double f,
+    double flmin, double flmax, double fhmin, double fhmax)
+{
+  if ( flags < 0 ) {
+    if ( f < flmin ) {
+      f = flmin;
+    } else if ( f > flmax ) {
+      f = flmax;
+    }
+  }
+  if ( flags > 0 ) {
+    if ( f < fhmin ) {
+      f = fhmin;
+    } else if ( f > fhmax ) {
+      f = fhmax;
+    }
+  }
+
+  return f;
+}
+
+
+
+/* retrieve the gradient dv/dx from the bias potential */
+__inline static double wl_getdvf_v(wl_t *wl, double x,
     double flmin, double flmax, double fhmin, double fhmax)
 {
   int i, flags = 0;
@@ -216,22 +248,30 @@ __inline static double wl_getdvf(wl_t *wl, double x,
   }
   f = (wl->v[i + 1] - wl->v[i]) / wl->dx;
 
-  if ( flags < 0 ) {
-    if ( f < flmin ) {
-      f = flmin;
-    } else if ( f > flmax ) {
-      f = flmax;
-    }
-  }
-  if ( flags > 0 ) {
-    if ( f < fhmin ) {
-      f = fhmin;
-    } else if ( f > fhmax ) {
-      f = fhmax;
-    }
-  }
+  return wl_wrapmf(flags, f, flmin, flmax, fhmin, fhmax);
+}
 
-  return f;
+
+
+/* retrieve the gradient dv/dx from the accumulated mean force */
+__inline static double wl_getdvf_mf(wl_t *wl, double x,
+    double flmin, double flmax, double fhmin, double fhmax)
+{
+  int i, flags = 0;
+  double f;
+
+  if ( x < wl->xmin ) {
+    i = 0;
+    flags = -1;
+  } else {
+    i = (int) ((x - wl->xmin) / wl->dx);
+    if ( i >= wl->n - 1 ) {
+      i = wl->n - 1;
+    }
+  }
+  f = (wl->h[i] > 0) ? wl->sf[i] / wl->h[i] : 0;
+
+  return wl_wrapmf(flags, f, flmin, flmax, fhmin, fhmax);
 }
 
 
@@ -276,6 +316,30 @@ __inline static int wl_addf(wl_t *wl, double x)
   wl->h[i] += 1.0;
   wl->v[i] += wl->lnf;
   wl->tot += 1.0;
+  return 0;
+}
+
+
+
+/* update mean force */
+__inline static int wl_addforcef(wl_t *wl, double x, double f)
+{
+  int i;
+
+  if ( x < wl->xmin ) {
+    if ( wl->flags & WL_VERBOSE ) {
+      fprintf(stderr, "wl: out of range x %g < %g\n", x, wl->xmin);
+    }
+    return -1;
+  }
+  i = (int) ((x - wl->xmin) / wl->dx);
+  if ( i < 0 || i >= wl->n ) {
+    if ( wl->flags & WL_VERBOSE ) {
+      fprintf(stderr, "wl: out of range x %g >= %g\n", x, wl->xmin + wl->dx * wl->n);
+    }
+    return -1;
+  }
+  wl->sf[i] += f;
   return 0;
 }
 
@@ -379,7 +443,7 @@ __inline static int wl_save(const wl_t *wl, const char *fn)
 {
   FILE *fp;
   int i;
-  double htot;
+  double htot, mf;
 
   if ( (fp = fopen(fn, "w")) == NULL ) {
     fprintf(stderr, "cannot write %s\n", fn);
@@ -394,8 +458,10 @@ __inline static int wl_save(const wl_t *wl, const char *fn)
     } else { /* integer version */
       fprintf(fp, "%d", wl->nmin + i);
     }
-    fprintf(fp, " %g %g %g\n",
-        wl->v[i], wl->h[i]/htot, wl->h[i]);
+    mf = (wl->h[i] > 0) ? wl->sf[i] / wl->h[i] : 0;
+    if ( mf > 0 ) { printf("%g: mf %g\n", wl->h[i], mf); getchar(); }
+    fprintf(fp, " %g %g %g %g\n",
+        wl->v[i], wl->h[i]/htot, wl->h[i], mf);
   }
   fclose(fp);
   return 0;

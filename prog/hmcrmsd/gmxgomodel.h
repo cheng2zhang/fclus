@@ -10,7 +10,9 @@
 typedef struct {
   const char *fnpdb; /* reference PDB structure */
 
-  int dohmc;
+  int dohmc; /* use HMC to reject unwanted configurations */
+
+  int bias_mf; /* use mean force to estimate the bias potential */
 
   double mfmin;
   double mfmax;
@@ -45,6 +47,8 @@ static void gmxgomodel_default(gmxgomodel_t *m)
   m->fnpdb = "1VII.pdb";
 
   m->dohmc = 1;
+
+  m->bias_mf = 0;
 
   m->mfmin = -100.0;
   m->mfmax = +100.0;
@@ -168,6 +172,9 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     } else if ( strcmpfuzzy(key, "hmc") == 0
              || strcmpfuzzy(key, "dohmc") == 0 ) {
       m->dohmc = atoi(val);
+    } else if ( strcmpfuzzy(key, "biasmf") == 0
+             || strcmpfuzzy(key, "bias_mf") == 0 ) {
+      m->bias_mf = atoi(val);
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();
