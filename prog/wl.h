@@ -22,14 +22,16 @@
 
 typedef struct {
   int n;
-  int isf;
+  int isfloat;
   int nmin;
   double xmin, xmax, dx;
   int isinvt; /* has entered the 1/t stage */
   unsigned flags;
   double *h; /* histogram */
   double *v; /* bias potential */
+  double *cf; /* counts of force */
   double *sf; /* sum of force */
+  double *vf; /* bias potential from integrating the mean force */
   double tot;
   double lnf0;
   double lnf; /* current updating factor lnf */
@@ -52,25 +54,37 @@ __inline static wl_t *wl_open0(int n,
     return NULL;
   }
   wl->n = n;
-  if ( (wl->h = calloc(1, sizeof(double) * n)) == NULL ) {
+  if ( (wl->h = calloc(n, sizeof(double))) == NULL ) {
     fprintf(stderr, "no memory for the WL histogram\n");
     free(wl);
     return NULL;
   }
-  if ( (wl->v = calloc(1, sizeof(double) * n)) == NULL ) {
+  if ( (wl->v = calloc(n, sizeof(double))) == NULL ) {
     fprintf(stderr, "no memory for the WL potential\n");
     free(wl);
     return NULL;
   }
-  if ( (wl->sf = calloc(1, sizeof(double) * n)) == NULL ) {
-    fprintf(stderr, "no memory for the WL force\n");
+  if ( (wl->cf = calloc(n, sizeof(double))) == NULL ) {
+    fprintf(stderr, "no memory for the mean-force counts\n");
+    free(wl);
+    return NULL;
+  }
+  if ( (wl->sf = calloc(n + 1, sizeof(double))) == NULL ) {
+    fprintf(stderr, "no memory for the mean force\n");
+    free(wl);
+    return NULL;
+  }
+  if ( (wl->vf = calloc(n + 1, sizeof(double))) == NULL ) {
+    fprintf(stderr, "no memory for the potential of mean force\n");
     free(wl);
     return NULL;
   }
   for ( i = 0; i < n; i++ ) {
     wl->h[i] = 0.0;
     wl->v[i] = 0.0;
+    wl->cf[i] = 0.0;
     wl->sf[i] = 0.0;
+    wl->vf[i] = 0.0;
   }
   wl->lnf = wl->lnf0 = lnf0;
   wl->tot = 0;
@@ -97,7 +111,7 @@ __inline static wl_t *wl_openi(int nmin, int nmax,
   wl->xmin = nmin;
   wl->dx = 1.0;
   wl->xmax = nmax;
-  wl->isf = 0;
+  wl->isfloat = 0;
   return wl;
 }
 
@@ -117,7 +131,7 @@ __inline static wl_t *wl_openf(double xmin, double xmax, double dx,
   wl->dx = dx;
   wl->xmax = xmin + dx * n;
   wl->nmin = 0;
-  wl->isf = 1;
+  wl->isfloat = 1;
   return wl;
 }
 
@@ -127,7 +141,9 @@ __inline static void wl_close(wl_t *wl)
 {
   free(wl->h);
   free(wl->v);
+  free(wl->cf);
   free(wl->sf);
+  free(wl->vf);
   free(wl);
 }
 
@@ -226,7 +242,7 @@ __inline static double wl_wrapmf(int flags, double f,
 
 
 /* retrieve the gradient dv/dx from the bias potential */
-__inline static double wl_getdvf_v(wl_t *wl, double x,
+__inline static double wl_getdvdx_v(wl_t *wl, double x,
     double flmin, double flmax, double fhmin, double fhmax)
 {
   int i, flags = 0;
@@ -253,25 +269,76 @@ __inline static double wl_getdvf_v(wl_t *wl, double x,
 
 
 
-/* retrieve the gradient dv/dx from the accumulated mean force */
-__inline static double wl_getdvf_mf(wl_t *wl, double x,
-    double flmin, double flmax, double fhmin, double fhmax)
+__inline static double wl_getdelv_v(wl_t *wl, double x1, double x2)
 {
-  int i, flags = 0;
-  double f;
+  return wl_getvf(wl, x2) - wl_getvf(wl, x1);
+}
+
+
+
+/* compute the bin containing `x`
+ * `flag` is +1 or -1 for overflow or underflow */
+__inline static int wl_getid_mf(wl_t *wl, double x, int *flag)
+{
+  int i;
 
   if ( x < wl->xmin ) {
     i = 0;
-    flags = -1;
+    *flag = -1;
   } else {
     i = (int) ((x - wl->xmin) / wl->dx);
-    if ( i >= wl->n - 1 ) {
+    if ( i >= wl->n ) {
       i = wl->n - 1;
+      *flag = 1;
+    } else {
+      *flag = 0;
     }
   }
-  f = (wl->h[i] > 0) ? wl->sf[i] / wl->h[i] : 0;
+  return i;
+}
 
-  return wl_wrapmf(flags, f, flmin, flmax, fhmin, fhmax);
+
+
+/* retrieve the gradient dv/dx from the accumulated mean force */
+__inline static double wl_getdvdx_mf(wl_t *wl, double x, double minh,
+    double flmin, double flmax, double fhmin, double fhmax)
+{
+  int i, flag;
+  double f;
+
+  i = wl_getid_mf(wl, x, &flag);
+  f = ( wl->cf[i] > minh ) ? wl->sf[i] / wl->cf[i] : 0;
+  return wl_wrapmf(flag, f, flmin, flmax, fhmin, fhmax);
+}
+
+
+
+/* retrieve difference of the bias potential, v(x2) - v(x1),
+ * from integrating the accumulated mean force
+ * we use an approximate formula */
+__inline static double wl_getdelv_mf(wl_t *wl,
+    double x1, double x2, double minh,
+    double flmin, double flmax, double fhmin, double fhmax)
+{
+  double f1 = wl_getdvdx_mf(wl, x1, minh, flmin, flmax, fhmin, fhmax);
+  double f2 = wl_getdvdx_mf(wl, x2, minh, flmin, flmax, fhmin, fhmax);
+
+  return (f1 + f2) / 2 * (x2 - x1);
+}
+
+
+
+/* integrate the mean force to get the bias potential */
+__inline static void wl_intmf(wl_t *wl)
+{
+  int i;
+  double mf;
+
+  wl->vf[0] = 0;
+  for ( i = 0; i < wl->n; i++ ) {
+    mf = ( wl->cf[i] > 0 ) ? wl->sf[i] / wl->cf[i] : 0;
+    wl->vf[i+1] = wl->vf[i] + mf * wl->dx;
+  }
 }
 
 
@@ -340,6 +407,7 @@ __inline static int wl_addforcef(wl_t *wl, double x, double f)
     return -1;
   }
   wl->sf[i] += f;
+  wl->cf[i] += 1;
   return 0;
 }
 
@@ -439,7 +507,7 @@ __inline static int wl_updatelnf(wl_t *wl)
 
 
 /* save data to file */
-__inline static int wl_save(const wl_t *wl, const char *fn)
+__inline static int wl_save(wl_t *wl, const char *fn)
 {
   FILE *fp;
   int i;
@@ -449,19 +517,24 @@ __inline static int wl_save(const wl_t *wl, const char *fn)
     fprintf(stderr, "cannot write %s\n", fn);
     return -1;
   }
+
   htot = wl_gethtot(wl->h, wl->n);
   wl_trimv(wl->v, wl->n);
-  fprintf(fp, "# %d %d %g %g %g\n", wl->isf, wl->n, wl->xmin, wl->dx, wl->tot);
+  /* integrate the mean force */
+  wl_intmf(wl);
+
+  fprintf(fp, "# %d %d %g %g %g\n", wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot);
   for ( i = 0; i < wl->n; i++ ) {
-    if ( wl->isf ) { /* floating-point version */
+    if ( wl->isfloat ) { /* floating-point version */
       fprintf(fp, "%g", wl->xmin + (i + 0.5) * wl->dx);
     } else { /* integer version */
       fprintf(fp, "%d", wl->nmin + i);
     }
-    mf = (wl->h[i] > 0) ? wl->sf[i] / wl->h[i] : 0;
-    if ( mf > 0 ) { printf("%g: mf %g\n", wl->h[i], mf); getchar(); }
-    fprintf(fp, " %g %g %g %g\n",
-        wl->v[i], wl->h[i]/htot, wl->h[i], mf);
+    mf = (wl->cf[i] > 0) ? wl->sf[i] / wl->cf[i] : 0;
+    //if ( mf > 0 ) { printf("%g: mf %g\n", wl->h[i], mf); getchar(); }
+    fprintf(fp, " %g %g %g %g %g %g\n",
+        wl->v[i], wl->h[i]/htot, wl->h[i],
+        (wl->vf[i] + wl->vf[i+1])/2, mf, wl->cf[i]);
   }
   fclose(fp);
   return 0;
@@ -473,8 +546,9 @@ __inline static int wl_save(const wl_t *wl, const char *fn)
 __inline static int wl_load(wl_t *wl, const char *fn)
 {
   FILE *fp;
-  int i, n = wl->n, isf;
+  int i, n = wl->n, isfloat, next;
   double x1, x2, x, y, v, tot, xmin, dx;
+  double vf, mf, cf;
   char ln[64000] = "";
 
   if ( (fp = fopen(fn, "r")) == NULL ) {
@@ -483,18 +557,18 @@ __inline static int wl_load(wl_t *wl, const char *fn)
   }
   if ( fgets(ln, sizeof ln, fp) == NULL
     || ln[0] != '#'
-    || sscanf(ln + 1, "%d%d%lf%lf%lf", &isf, &n, &xmin, &dx, &tot) != 5 ) {
+    || sscanf(ln + 1, "%d%d%lf%lf%lf", &isfloat, &n, &xmin, &dx, &tot) != 5 ) {
     fprintf(fp, "%s: bad information line!\n%s", fn, ln);
     fclose(fp);
     return -1;
   }
-  if ( isf != wl->isf
+  if ( isfloat != wl->isfloat
     || n != wl->n
     || fabs(xmin - wl->xmin) > 1e-5
     || fabs(dx - wl->dx) > 1e-8 ) {
     fprintf(stderr, "%s: dimensions mismatch, ", fn);
-    fprintf(stderr, "isf %d#%d, n %d#%d, xmin %g#%g, dx %g#%g\n",
-        isf, wl->isf, n, wl->n, xmin, wl->xmin, dx, wl->dx);
+    fprintf(stderr, "isfloat %d#%d, n %d#%d, xmin %g#%g, dx %g#%g\n",
+        isfloat, wl->isfloat, n, wl->n, xmin, wl->xmin, dx, wl->dx);
     fclose(fp);
     return -1;
   }
@@ -506,12 +580,12 @@ __inline static int wl_load(wl_t *wl, const char *fn)
       fclose(fp);
       return -1;
     }
-    if ( wl->isf ) {
+    if ( wl->isfloat ) {
       x2 = wl->xmin + (i + 0.5) * wl->dx;
     } else {
       x2 = wl->nmin + i;
     }
-    if ( 4 != sscanf(ln, "%lf %lf %lf %lf", &x1, &v, &x, &y)
+    if ( 4 != sscanf(ln, "%lf%lf%lf%lf%n", &x1, &v, &x, &y, &next)
       || fabs(x1 - x2) > 1e-6 ) {
       fprintf(stderr, "%s: bad line %d, %g#%g\n%s", fn, i, x1, x2, ln);
       fclose(fp);
@@ -519,7 +593,15 @@ __inline static int wl_load(wl_t *wl, const char *fn)
     }
     wl->v[i] = v;
     wl->h[i] = y;
+    if ( 3 != sscanf(ln + next, "%lf%lf%lf", &vf, &mf, &cf) ) {
+      wl->cf[i] = cf;
+      wl->sf[i] = mf * cf;
+    } else {
+      wl->cf[i] = 0;
+      wl->sf[i] = 0;
+    }
   }
+  wl_intmf(wl);
   fclose(fp);
   return 0;
 }

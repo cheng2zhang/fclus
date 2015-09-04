@@ -7,6 +7,7 @@
 #define D 3
 #include "mat.h"
 #include "wl.h"
+#include "hist.h"
 #include "mtrand.h"
 #include "gmxvcomm.h"
 #include "gmxgomodel.h"
@@ -18,19 +19,17 @@ typedef struct {
   int *index; /* index[0..n-1]: global indices of the Go atoms */
   double *mass; /* mass[0..n-1] mass */
   double masstot;
-  double (*x)[3]; /* x[0..n-1] */
-  double (*f)[3]; /* f[0..n-1] bias force */
-  double (*xref)[3];
-  double (*xf)[3]; /* fit structure */
-  double (*x1)[3]; /* x1[0..n-1] */
-  double (*x2)[3]; /* x2[0..n-1] */
+  double (*x)[D]; /* x[0..n-1] */
+  double (*f)[D]; /* f[0..n-1] bias force */
+  double (*xref)[D];
+  double (*xf)[D]; /* fit structure */
+  double (*x1)[D]; /* x1[0..n-1] */
+  double (*x2)[D]; /* x2[0..n-1] */
   gmxvcomm_t *gvc;
   gmxgomodel_t model[1];
   double kT;
   wl_t *wl;
-  double *rhis; /* histogram */
-  double rhis_dx, rhis_max; /* spacing and maximal */
-  int rhis_n;
+  hist_t *rhis; /* histogram */
   t_commrec *cr;
   double dvdx;
 
@@ -148,7 +147,7 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
   FILE *fp;
   char s[256];
   int id = 0;
-  float x[3];
+  float x[D];
 
   if ( (fp = fopen(fnpdb, "r")) == NULL ) {
     fprintf(stderr, "cannot read %s\n", fnpdb);
@@ -185,7 +184,8 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
   }
 
   if ( id < go->n ) {
-    fprintf(stderr, "Warning: missing atoms %s, %d < %d\n", fnpdb, id, go->n);
+    fprintf(stderr, "Warning: missing atoms %s, %d < %d\n",
+        fnpdb, id, go->n);
     return -1;
   }
 
@@ -208,7 +208,7 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
 
   if ( DOMAINDECOMP(cr) ) {
     /* we allow some margin */
-    n = (int) ((n + 3 * sqrt(n)) / cr->nnodes);
+    n = (int) ((n + 3.0 * sqrt(n)) / cr->nnodes);
   }
 
   go->stncap = n;
@@ -220,9 +220,10 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
 
 
 
-/* tp: the temperature */
+/* tp: the temperature
+ * ctn: continue from the previous simulation */
 static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
-    double tp, const char *fncfg)
+    double tp, const char *fncfg, int ctn)
 {
   gmxgo_t *go;
 
@@ -253,13 +254,15 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
     gmxvcomm_loadxref(go, m->fnpdb);
 
-    go->rhis_dx = m->rhis_dx;
-    go->rhis_max = m->rhis_max;
-    go->rhis_n = (int) ( go->rhis_max / go->rhis_dx + 0.5 );
-    snew(go->rhis, go->rhis_n);
-
     go->wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
         m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+
+    go->rhis = hist_open(0, m->rhis_max, m->rhis_dx);
+
+    if ( ctn ) {
+      wl_load(go->wl, m->fnvrmsd);
+      hist_load(go->rhis, m->fnrhis);
+    }
     fprintf(stderr, "parallel %d, domain-decomposition %d\n", PAR(cr), DOMAINDECOMP(cr));
   }
 
@@ -279,8 +282,8 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 static void gmxgo_close(gmxgo_t *go)
 {
   if ( MASTER(go->cr) ) {
-    sfree(go->rhis);
     wl_close(go->wl);
+    hist_close(go->rhis);
   }
 
   sfree(go->index);
@@ -302,38 +305,11 @@ static void gmxgo_close(gmxgo_t *go)
 
 
 
-static int gmxgo_saverhis(gmxgo_t *go, const char *fn)
-{
-  int i, imax;
-  FILE *fp;
-
-  for ( i = go->rhis_n - 1; i >= 0; i-- ) {
-    if ( go->rhis[i] > 0 )
-      break;
-  }
-  if ( i < 0 ) return -1;
-  imax = i + 1;
-
-  if ( (fp = fopen(fn, "w")) == NULL ) {
-    fprintf(stderr, "cannot write %s\n", fn);
-    return -1;
-  }
-
-  for ( i = 0; i < imax; i++ ) {
-    fprintf(fp, "%g %g\n", go->rhis_dx * (i + 0.5), go->rhis[i]);
-  }
-
-  fprintf(stderr, "saving histogram file %s\n", fn);
-  fclose(fp);
-  return 0;
-}
-
-
-
 /* gather the coordinates `x` to `xg`,
  * which should `state->x` (local state)
  * only need for domain decomposition */
-static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
+static int gmxgo_gatherx(gmxgo_t *go, rvec *x,
+    double (*xg)[D], int doid)
 {
   gmxvcomm_t *gvc = go->gvc;
   t_commrec *cr = go->cr;
@@ -344,7 +320,7 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
     /* direct map indices and return */
     for ( id = 0; id < go->n; id++ ) {
       i = go->index[id]; /* global index */
-      for ( d = 0; d < 3; d++ ) {
+      for ( d = 0; d < D; d++ ) {
         xg[id][d] = x[i][d];
       }
     }
@@ -359,7 +335,7 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
   /* fill the buffer `gvc->lx` with the local coordinates */
   for ( i = 0; i < gvc->lcnt; i++ ) {
     il = gvc->la[i];
-    for ( d = 0; d < 3; d++ )
+    for ( d = 0; d < D; d++ )
       gvc->lx[i][d] = x[il][d];
   }
 
@@ -376,7 +352,7 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x, double (*xg)[3], int doid)
       if ( (lcnt = gvc->lcnt_m[i]) > 0 ) {
         for ( j = 0; j < lcnt; j++, iw++ ) {
           id = gvc->lwho_m[iw]; /* special-atom index */
-          for ( d = 0; d < 3; d++ )
+          for ( d = 0; d < D; d++ )
             xg[id][d] = gvc->lx_m[iw][d];
           //printf("id %d: %g %g %g, from node %d\n",
           //    id, xg[id][0], xg[id][1], xg[id][2], i);
@@ -402,7 +378,7 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
     /* direct map indices and return */
     for ( id = 0; id < go->n; id++ ) {
       i = go->index[id]; /* global index */
-      for ( d = 0; d < 3; d++ ) {
+      for ( d = 0; d < D; d++ ) {
         f[i][d] = (real) (f[i][d] + go->f[id][d]);
       }
     }
@@ -433,7 +409,7 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
     il = gvc->la[i];
     /* apply the force additively */
     //fprintf(stderr, "i %d, %d: f (%g, %g, %g) += (%g, %g, %g)\n", gvc->lwho[i], gvc->ga[i], f[il][0], f[il][1], f[il][2], gvc->lx[i][0], gvc->lx[i][1], gvc->lx[i][2]);
-    for ( d = 0; d < 3; d++ )
+    for ( d = 0; d < D; d++ )
       f[il][d] = (real) ( f[il][d] + gvc->lx[i][d] );
   }
 
@@ -444,10 +420,10 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 /* dump basic information */
 __inline static void gmxgo_dump(gmxgo_t *go,
-    double (*x)[3], int ePBC, matrix box, gmx_int64_t step)
+    double (*x)[D], int ePBC, matrix box, gmx_int64_t step)
 {
   int i, c1, c;
-  double dx[3], dr = 0, f = 0, dev = 0;
+  double dx[D], dr = 0, f = 0, dev = 0;
   t_pbc pbc[1];
 
   set_pbc(pbc, ePBC, box);
@@ -474,11 +450,11 @@ __inline static void gmxgo_dump(gmxgo_t *go,
 /* shift the coordinates to make the molecule whole
  * only the master needs to call this */
 static int gmxgo_shift(gmxgo_t *go,
-    double (*xin)[3], double (*xout)[3],
+    double (*xin)[D], double (*xout)[D],
     int ePBC, matrix box, gmx_int64_t step)
 {
   int i;
-  double dx[3], dr;
+  double dx[D], dr;
   t_pbc pbc[1];
 
   set_pbc(pbc, ePBC, box);
@@ -492,7 +468,7 @@ static int gmxgo_shift(gmxgo_t *go,
           gmx_step_str(step, go->sbuf), i - 1, i, dr, dx[0], dx[1], dx[2],
           xin[i-1][0], xin[i-1][1], xin[i-1][2], xin[i][0], xin[i][1], xin[i][2]);
       gmxgo_dump(go, xin, ePBC, box, step);
-      gmxgo_saverhis(go, go->model->fnrhis);
+      hist_save(go->rhis, go->model->fnrhis);
       wl_save(go->wl, go->model->fnvrmsd);
       return -1;
     }
@@ -504,23 +480,21 @@ static int gmxgo_shift(gmxgo_t *go,
 
 
 /* project the force `f` along rmsd */
-static int gmxgo_projectf(gmxgo_t *go, double (*f)[3],
-    double rmsd, double (*x)[3], double (*xf)[3])
+static double gmxgo_projectf(gmxgo_t *go, double (*f)[D],
+    double rmsd, double kT, double (*x)[D], double (*xf)[D])
 {
-  int i;
-  double dx[D], g2 = 0, dot = 0;
+  int i, n = go->n;
+  double dx[D], dot = 0;
 
-  for ( i = 0; i < go->n; i++ ) {
+  for ( i = 0; i < n; i++ ) {
     /* compute the gradient */
     vdiff(dx, x[i], xf[i]);
-    /* now `dx` is the gradient: d rmsd / d x_i */
-    vsmul(dx, go->mass[i] / (go->masstot * rmsd) );
-    g2 += vdot(dx, dx);
     dot += vdot(dx, f[i]);
-    //fprintf(stderr, "%d: g2 %g, dot %g, f (%g, %g, %g)\n", i, g2, dot, f[i][0], f[i][1], f[i][2]);
   }
 
-  return g2 > 0 ? dot / g2 : 0;
+  /* because of the fixed length of the peptide bonds
+   * the factor D * n may not be correct */
+  return (dot / kT + D * n - 1) / rmsd;
 }
 
 
@@ -535,11 +509,12 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
 
   if ( m->bias_mf ) {
     /* compute the gradient from the bias potential */
-    dvdx = wl_getdvf_mf(go->wl, rmsd,
+    dvdx = wl_getdvdx_mf(go->wl, rmsd, m->minh,
         m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+    //printf("%g, %g\n", rmsd, dvdx); getchar();
   } else {
     /* compute the gradient from the bias mean force */
-    dvdx = wl_getdvf_v(go->wl, rmsd,
+    dvdx = wl_getdvdx_v(go->wl, rmsd,
         m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
   }
   dvdx *= go->kT;
@@ -597,9 +572,7 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     wl_updatelnf(go->wl);
 
     /* update the histogram */
-    if ( rmsd < go->rhis_max ) {
-      go->rhis[ (int) ( rmsd / go->rhis_dx ) ] += 1;
-    }
+    hist_add(go->rhis, rmsd);
 
     if ( step > 0 && step % m->nstchat == 0 ) {
       fprintf(stderr, "\rstep %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g\n",
@@ -608,8 +581,8 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     }
 
     if ( step > 0 && step % m->nstrep == 0 ) {
-      gmxgo_saverhis(go, m->fnrhis);
       wl_save(go->wl, m->fnvrmsd);
+      hist_save(go->rhis, m->fnrhis);
     }
   }
 
@@ -619,16 +592,18 @@ BCAST_ERR:
   }
   if ( err ) return err;
 
-  /* compute the projection of force on RMSD */
-  if ( m->bias_mf ) {
-
+  /* compute the projection of force on RMSD
+   * we compute the mean force even it is not needed */
+  /* if ( m->bias_mf ) */
+  {
     /* collect `f` from different nodes to `go->x1` on the master
      * `doid = 0` since we must have indices now */
     gmxgo_gatherx(go, f, go->x1, 0);
 
     if ( MASTER(cr) ) {
-      /* `go->x1` is the force, project it along RMSD */
-      mf = gmxgo_projectf(go, go->x1, rmsd, go->x, go->xf);
+      /* `go->x1` is the force, project it along RMSD
+       * note that the force must be the force without the bias */
+      mf = gmxgo_projectf(go, go->x1, rmsd, go->kT, go->x, go->xf);
       //fprintf(stderr, "step %d: computing mean force, rmsd %g, mf %g\n", (int) step, rmsd, mf); getchar();
       wl_addforcef(go->wl, rmsd, mf);
     }
@@ -691,7 +666,7 @@ static void gmxgo_hmcpop(gmxgo_t *go,
 
   if ( reversev ) {
     for ( i = 0; i < n; i++ ) {
-      for ( d = 0; d < 3; d++ ) {
+      for ( d = 0; d < D; d++ ) {
         go->stv[i][d] = -go->stv[i][d];
       }
     }
@@ -704,7 +679,7 @@ static void gmxgo_hmcpop(gmxgo_t *go,
 
 
 static double gmxgo_raw_rmsd(gmxgo_t *go,
-    double (*xf)[3], double (*x)[3])
+    double (*xf)[D], double (*x)[D])
 {
   int i;
   double dr2, s = 0;
@@ -723,7 +698,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
 {
-  double rmsd1, rmsd2, v1, v2, dr0;
+  double rmsd1, rmsd2, delv, dr0;
   int err = 0, acc = 1;
   gmxgomodel_t *m = go->model;
   t_commrec *cr = go->cr;
@@ -755,15 +730,19 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       goto BCAST_ERR;
     }
 
-    v1 = wl_getvf(go->wl, rmsd1);
-    v2 = wl_getvf(go->wl, rmsd2);
+    if ( m->bias_mf ) {
+      delv = wl_getdelv_mf(go->wl, rmsd1, rmsd2, m->minh,
+          m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+    } else {
+      delv = wl_getdelv_v(go->wl, rmsd1, rmsd2);
+    }
 
     acc = 1;
-    if ( v2 > v1 ) {
+    if ( delv > 0 ) {
       double r = rand01();
-      if ( r > exp(-(v2 - v1)) ) {
+      if ( r > exp(-delv) ) {
         acc = 0;
-        fprintf(stderr, "HMC rejecting a state, rmsd %g -> %g\n", rmsd1, rmsd2);
+        fprintf(stderr, "HMC rejecting a state, rmsd %g -> %g, delv %g\n", rmsd1, rmsd2, delv);
       }
     }
   }

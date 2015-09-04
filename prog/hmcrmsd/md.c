@@ -345,9 +345,6 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         setup_bonded_threading(fr, &top->idef);
     }
 
-    /* initialize an object for Go model */
-    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0], opt2fn_master("-cfg", nfile, fnm, cr));
-
     /* Set up interactive MD (IMD) */
     init_IMD(ir, cr, top_global, fplog, ir->nstcalcenergy, state_global->x,
              nfile, fnm, oenv, imdport, Flags);
@@ -373,6 +370,11 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
     {
         bStateFromCP = FALSE;
     }
+
+    /* initialize an object for Go model
+     * all nodes call this */
+    go = gmxgo_open(top_global, cr, ir->opts.ref_t[0],
+        opt2fn_master("-cfg", nfile, fnm, cr), bStateFromCP);
 
     if (MASTER(cr))
     {

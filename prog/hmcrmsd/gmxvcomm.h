@@ -9,6 +9,10 @@
 
 #include "gmx_ga2la.h"
 
+/* DIM is defined "types/simple.h" */
+
+
+
 /* the following macros are defined in domdec.c */
 #ifndef DDRANK
 #define DDRANK(dd, rank)    (rank)
@@ -33,8 +37,8 @@ typedef struct {
               special atom in the buffer, `0 <= i < lcnt` */
   int *ga; /* ga[i] is gives the global index of the ith
               special atom in the buffer, `0 <= i < lcnt` */
-  double (*lx)[3]; /* local vectors */
-  double (*lx_m)[3]; /* master collector of `lx` */
+  double (*lx)[DIM]; /* local vectors */
+  double (*lx_m)[DIM]; /* master collector of `lx` */
 } gmxvcomm_t;
 
 
@@ -117,7 +121,8 @@ static int gmxvcomm_gatherid(gmxvcomm_t *g)
         if ( i != dd->rank ) {
 #ifdef GMX_MPI
           MPI_Recv(g->lwho_m + iw, lcnt, MPI_INT,
-              DDRANK(dd, i), i, dd->mpi_comm_all, MPI_STATUS_IGNORE);
+              DDRANK(dd, i), i, dd->mpi_comm_all,
+              MPI_STATUS_IGNORE);
 #endif
         } else {
           memcpy(g->lwho_m + iw, g->lwho, lcnt * sizeof(int));
@@ -157,8 +162,9 @@ static int gmxvcomm_gatherv(gmxvcomm_t *g)
       if ( (lcnt = g->lcnt_m[i]) > 0 ) {
         if ( i != dd->rank ) {
 #ifdef GMX_MPI
-          MPI_Recv(g->lx_m + iw, lcnt * 3, MPI_DOUBLE,
-              DDRANK(dd, i), i, dd->mpi_comm_all, MPI_STATUS_IGNORE);
+          MPI_Recv(g->lx_m + iw, lcnt * DIM, MPI_DOUBLE,
+              DDRANK(dd, i), i, dd->mpi_comm_all,
+              MPI_STATUS_IGNORE);
 #endif
         } else {
           memcpy(g->lx_m + iw, g->lx, lcnt * sizeof(g->lx[0]));
@@ -170,7 +176,7 @@ static int gmxvcomm_gatherv(gmxvcomm_t *g)
     /* slaves send `lx` */
     if ( g->lcnt > 0 ) {
 #ifdef GMX_MPI
-      MPI_Send(g->lx, g->lcnt * 3, MPI_DOUBLE,
+      MPI_Send(g->lx, g->lcnt * DIM, MPI_DOUBLE,
           DDMASTERRANK(dd), dd->rank, dd->mpi_comm_all);
 #endif
     }
@@ -197,7 +203,7 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
       if ( (lcnt = g->lcnt_m[i]) > 0 ) {
         if ( i != dd->rank ) {
 #ifdef GMX_MPI
-          MPI_Send(g->lx_m + iw, lcnt * 3, MPI_DOUBLE,
+          MPI_Send(g->lx_m + iw, lcnt * DIM, MPI_DOUBLE,
               DDRANK(dd, i), i, dd->mpi_comm_all);
 #endif
         } else {
@@ -210,8 +216,9 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
     /* slaves send `lx` */
     if ( g->lcnt > 0 ) {
 #ifdef GMX_MPI
-      MPI_Recv(g->lx, g->lcnt * 3, MPI_DOUBLE,
-          DDMASTERRANK(dd), dd->rank, dd->mpi_comm_all, MPI_STATUS_IGNORE);
+      MPI_Recv(g->lx, g->lcnt * DIM, MPI_DOUBLE,
+          DDMASTERRANK(dd), dd->rank, dd->mpi_comm_all,
+          MPI_STATUS_IGNORE);
 #endif
     }
   }
@@ -234,11 +241,10 @@ static int gmxvcomm_where(gmxvcomm_t *g, int id)
   dd = cr->dd;
   for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
     if ( (lcnt = g->lcnt_m[i]) > 0 ) {
-      for ( j = 0; j < lcnt; j++ ) {
-        if ( g->lwho_m[iw + j] == id )
+      for ( j = 0; j < lcnt; j++, iw++ ) {
+        if ( g->lwho_m[iw] == id )
           return i;
       }
-      iw += lcnt;
     }
   }
 

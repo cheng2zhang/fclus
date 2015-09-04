@@ -21,6 +21,9 @@ typedef struct {
   double mflmax;
   double mfhmin;
   double mfhmax;
+
+  double minh;
+
   char *fnvrmsd;
 
   double rmsdmin; /* minimal RMSD in angstroms */
@@ -62,6 +65,8 @@ static void gmxgomodel_default(gmxgomodel_t *m)
    * the RMSD decrease and go back to the range */
   m->mfhmin = 1.0;
   m->mfhmax = 100.0;
+
+  m->minh = 0;
 
   m->fnvrmsd = "vrmsd.dat";
 
@@ -143,6 +148,8 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
       m->mfhmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfhmax") == 0 ) {
       m->mfhmax = atof(val);
+    } else if ( strcmpfuzzy(key, "minh") == 0 ) {
+      m->minh = atof(val);
     } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
       m->fnvrmsd = strclone(val);
     } else if ( strcmpfuzzy(key, "rmsdmin") == 0 ) {
