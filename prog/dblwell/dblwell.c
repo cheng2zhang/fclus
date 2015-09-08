@@ -12,6 +12,7 @@ typedef struct {
   double xpart;
   double xmax;
   double dx;
+  int vflip;
   const char *prog;
   const char *fnhis;
 } model_t;
@@ -28,6 +29,7 @@ static void model_default(model_t *m)
   m->xpart = -0.5;
   m->xmax = 10;
   m->dx = 0.05;
+  m->vflip = 1;
   m->fnhis = "hist.dat";
 }
 
@@ -40,8 +42,9 @@ static void model_help(const model_t *m)
   fprintf(stderr, "  --nsteps=%.0f:   set the number of steps\n", m->nsteps);
   fprintf(stderr, "  --tp=%.3f:         set the temperature\n", m->tp);
   fprintf(stderr, "  --dt=%.3f:         set the time step\n", m->dt);
-  fprintf(stderr, "  --thdt=%0.3f:      set the thermostat time step\n", m->thdt);
+  fprintf(stderr, "  --thdt=%0.3f:       set the thermostat time step\n", m->thdt);
   fprintf(stderr, "  --xpart=%0.3f:     set the partition position\n", m->xpart);
+  fprintf(stderr, "  --novi=%d:           do not flip velocity\n", m->vflip);
   exit(1);
 }
 
@@ -78,6 +81,9 @@ static int model_doargs(model_t *m, int argc, char **argv)
         m->thdt = atof(q);
       } else if ( strcmp(p, "xpart") == 0 ) {
         m->xpart = atof(q);
+      } else if ( strcmp(p, "novi") == 0
+               || strcmp(p, "novflip") == 0 ) {
+        m->vflip = 0;
       } else if ( strcmp(p, "help") == 0 ) {
         model_help(m);
       }
@@ -93,11 +99,11 @@ static double force(model_t *m, double x,
     double *f, double *xi)
 {
   double dx;
-  
+
   *xi = ( x > m->xpart ? 1.0 : -1.0 );
   dx = x - *xi;
   *f = -dx;
-  return 0.5 * dx * dx; 
+  return 0.5 * dx * dx;
 }
 
 
@@ -152,48 +158,74 @@ static int domd(model_t *m)
 {
   int t, nhis;
   double x = 0.01, v = 0, f = 0, dt = m->dt;
-  double ep, ek, xi, epo, xio;
+  double ep, ek, xi;
   double *hist;
 
   nhis = (int) ( m->xmax * 2 / m->dx ) + 1;
-  xnew(hist, nhis); 
+  xnew(hist, nhis);
 
   v = sqrt(m->tp);
-  epo = force(m, x, &f, &xio);
+  ep = force(m, x, &f, &xi);
   for ( t = 0; t < m->nsteps; t++ ) {
-    v += f * 0.5 * dt;
-    x += v * dt;
-    ep = force(m, x, &f, &xi);
-    v += f * 0.5 * dt;
-    vrescale(m->thdt, &v, m->tp);
-    ek = 0.5 * v * v;
+    double x0, xi0, v0, f0, ep0, ek0;
+
+    x0 = x;
+    xi0 = xi;
+    v0 = v;
+    f0 = f;
+    ep0 = ep;
+    ek0 = 0.5 * v0 * v0;
+
+    /* regular velocity-verlet */
+    {
+      int i, L = 20;
+
+      for ( i = 0; i < L; i++ ) {
+        v += f * 0.5 * dt / L;
+        x += v * dt / L;
+        ep = force(m, x, &f, &xi);
+        v += f * 0.5 * dt / L;
+      }
+    }
 
     /* use HMC to effect the change
      * due to the reference coordinate */
-    if ( m->dohmc && fabs(xi - xio) > 1e-3 ) {
-      double de = ep - 0.5 * (x - xio) * (x - xio), r;
-      int acc = 0;
+    if ( m->dohmc && fabs(xi - xi0) > 1e-3 ) {
+      double de, r;
+      int acc = 1;
 
-      if ( de < 0 ) {
-        acc = 1;
-      } else {
+      //de = ep - 0.5 * (x - xi0) * (x - xi0);
+      de = ep + (0.5 * v * v) - (ep0 + ek0);
+
+      if ( de > 0 ) {
         r = rand01();
-        if ( r < exp(-de/m->tp) ) {
-          acc = 1;
+        if ( r > exp(-de/m->tp) ) {
+          acc = 0;
         }
       }
 
       if ( !acc ) {
-        v = -v; 
+        if ( m->vflip ) {
+          v = -v0;
+        } else {
+          v = v0;
+        }
+        x = x0;
+        xi = xi0;
+        f = f0;
       }
+    }
+
+    /* velocity rescaling to adjust the velocity */
+    if ( m->vflip ) {
+      vrescale(m->thdt, &v, m->tp);
+    } else {
+      v = randgaus();
     }
 
     if ( x >= -m->xmax && x < m->xmax ) {
       hist[ (int) ((x + m->xmax) / m->dx) ] += 1;
     }
-
-    epo = ep;
-    xio = xi;
   }
 
   savehis(m, hist, nhis);

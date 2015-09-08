@@ -119,8 +119,9 @@ static int hist_load(hist_t *h, const char *fn)
       || fabs(h->xmin - xmin) > dx * 0.01
       || fabs(h->dx - dx) > dx * 0.01
       || h->n != n ) {
-      fprintf(stderr, "incompatible setting, xmin %g vs %g, dx %g vs %g, n %d vs %d\n",
-         h->xmin, xmin, h->dx, dx, h->n, n);
+      fprintf(stderr, "incompatible setting, "
+          "xmin %g vs %g, dx %g vs %g, n %d vs %d\n",
+          h->xmin, xmin, h->dx, dx, h->n, n);
       fclose(fp);
       return -1;
     }
