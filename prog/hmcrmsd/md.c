@@ -785,11 +785,13 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         }
 
         /* compute the bias force */
-        if ( 0 !=  gmxgo_rmsd_force(go, state->x, 1, f, fr->ePBC, state->box, step) ) {
+        if ( 0 !=  gmxgo_rmsd_force(go, state, 1, f, fr->ePBC, state->box, step) ) {
           fprintf(stderr, "step %s: gmxgo_rmsd_force failed\n", gmx_step_str(step, go->sbuf));
           exit(1);
         }
-        if ( go->model->dohmc ) gmxgo_hmcpush(go, state, f);
+        if ( go->model->dohmc ) {
+          gmxgo_hmcpushxf(go, state, f, step);
+        }
 
         if (bVV && !bStartingFromCpt)
         /*  ############### START FIRST UPDATE HALF-STEP FOR VV METHODS############### */
@@ -1226,6 +1228,75 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                                    &top->idef, shake_vir,
                                    cr, nrnb, wcycle, upd, constr,
                                    FALSE, bCalcVir, state->veta);
+
+                /* we push the velocity here because of the following reason
+                 * for the leapfrog integrator, the procedure is
+                 *  1. neighbor search and domain decomposition
+                 *  2. compute force          [ in do_force() ]
+                 *    A. position x, and force f are pushed here for HMC
+                 *
+                 *  3. compute the velocity rescaling factor [ in update_tcouple() ]
+                 *  4. v' = v + (f/m) dt      [ in update_coords() ]
+                 *  5. x' = x + v dt          [ in update_coords() ]
+                 *  6. constraints for x, v   [ in update_constraints ]
+                 *    B. push v for HMC
+                 *    C. possible HMC pop
+                 *
+                 * If an HMC pop occurs, it will follow through steps 1-2
+                 * for the next MD step (which should not change the value of f).
+                 * Next it should experience step 3, which requires the velocity
+                 * to satisfy the constraints (eliminating normal components,
+                 * which reduces the kinetic energy)
+                 * Thus, a velocity push can only occur after step 2 or 6.
+                 * In the latter case, as we proceed to step 4, we actually
+                 * recover the pushed v' back to v, which fits natually into
+                 * the velocity rescaling scheme, as shown below
+                 *
+                 *  --(step a2)--> x1,  v1,  f1  [push x1, f1]
+                 *  --(step a4)--> x1,  v2*, f1
+                 *  --(step a5)--> x2*, v2*, f1
+                 *  --(step a6)--> x2,  v2,  f1  [push v2]
+                 * ---------------------------------
+                 *   normal MD propagation
+                 * ---------------------------------
+                 *  --(step b2)--> x2,  v2,  f2  [push x2, f2]
+                 *  --(step b4)--> x2,  v3*, f2
+                 *  --(step b5)--> x3*, v3*, f2
+                 *  --(step b6)--> x3,  v3,  f2  [push v3]
+                 * ----------------------------------
+                 *   HMC pop x2, -v3, f2
+                 *   roughly recover the state after b4
+                 *   with the inverse and normalized v3
+                 * ----------------------------------
+                 *  --(step c2)--> x2, -v3,  f2
+                 *  --(step c4)--> x2, -v2#, f2  [reversing b4, roughly the state after b2]
+                 *  --(step c5)--> x1#,-v2#, f2  [reversing a5, roughly the state after a4, except the force]
+                 *  --(step c6)--> x1, -v2,  f2
+                 *
+                 * For the forward propagation
+                 *  In step a5,
+                 *    x2* = x1 + (v2*) dt     [x.forward] <-------------+
+                 *  In step b4,                                         |
+                 *    v3* = v2 + (f2/m) dt    [v.forward] <--------+    |
+                 *  In step b6,                                    |    |
+                 *    v3 = Normalize(v3*)                          |    |
+                 *                                                 |    |
+                 * For the reverse,                                |    |
+                 *  In step c4,                                    |    |
+                 *   -v2# = -v3 + (f2/m) dt   [v.backward] <-------+    |
+                 *  In step c5,                                         |
+                 *    x1# = x2 + (-v2#) dt    [x.backward] <------------+
+                 *  In step c6,
+                 *   -v2  = Normalize(-v2#)
+                 *
+                 * Another strategy is to place the push before constraints
+                 * and manually disable the velocity rescaling (thermostat)
+                 * in the next step.  But this seems to be an overkill,
+                 * unless the current scheme fails.
+                 * */
+                if ( go->model->dohmc ) {
+                  gmxgo_hmcpushv(go, state, step);
+                }
 
                 if (bCalcVir && bUpdateDoLR && ir->nstcalclr > 1)
                 {

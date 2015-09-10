@@ -3,7 +3,8 @@
 
 
 
-/* Communicator for a set of coordinates */
+/* Communicator for a set of coordinates
+ * This module is useful only for domain decomposition */
 
 
 
@@ -91,11 +92,13 @@ static void gmxvcomm_close(gmxvcomm_t *g)
 static int gmxvcomm_gatherid(gmxvcomm_t *g)
 {
   int i, ig, il, iw, lcnt;
-  t_commrec *cr = g->cr;
-  gmx_domdec_t *dd = cr->dd;
+  t_commrec *cr;
+  gmx_domdec_t *dd;
 
-  if ( !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
 
+  cr = g->cr;
+  dd = cr->dd;
   /* locally compute `lwho`, which is a list
    * collecting special atoms on the node */
   g->lcnt = 0;
@@ -150,11 +153,12 @@ static int gmxvcomm_gatherid(gmxvcomm_t *g)
 static int gmxvcomm_gatherv(gmxvcomm_t *g)
 {
   int i, iw, lcnt;
-  t_commrec *cr = g->cr;
+  t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
 
+  cr = g->cr;
   dd = cr->dd;
   if ( DDMASTER(dd) ) {
     /* master collects the vectors */
@@ -191,11 +195,12 @@ static int gmxvcomm_gatherv(gmxvcomm_t *g)
 static int gmxvcomm_scatterv(gmxvcomm_t *g)
 {
   int i, iw, lcnt;
-  t_commrec *cr = g->cr;
+  t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
 
+  cr = g->cr;
   dd = cr->dd;
   if ( DDMASTER(dd) ) {
     /* master collects the vectors */
@@ -228,16 +233,19 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
 
 
 
-/* find the rank of special atom i
+/* find the rank of special atom `id`
  * only call this on the master */
 static int gmxvcomm_where(gmxvcomm_t *g, int id)
 {
   int i, j, iw, lcnt;
-  t_commrec *cr = g->cr;
+  t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(cr) ) {
+    return 0;
+  }
 
+  cr = g->cr;
   dd = cr->dd;
   for ( iw = 0, i = 0; i < dd->nnodes; i++ ) {
     if ( (lcnt = g->lcnt_m[i]) > 0 ) {

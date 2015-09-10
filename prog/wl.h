@@ -490,12 +490,12 @@ __inline static int wl_updatelnf(wl_t *wl)
     lnfinvt = wl_lnfinvt(wl);
     if ( nlnf < lnfinvt && lnfinvt < wl->lnf0 ) {
       fprintf(stderr, "changing lnf from %g to %g(1/t), flatness %g%%\n",
-        wl->lnf, lnfinvt, flatness*100);
+          wl->lnf, lnfinvt, flatness*100);
       wl->isinvt = 1;
       wl->lnf = lnfinvt;
     } else {
       fprintf(stderr, "changing lnf from %g to %g (1/t %g), flatness %g%%\n",
-        wl->lnf, nlnf, lnfinvt, flatness*100);
+          wl->lnf, nlnf, lnfinvt, flatness*100);
       wl->lnf = nlnf;
       wl_clearh(wl->h, wl->n);
     }
@@ -523,17 +523,20 @@ __inline static int wl_save(wl_t *wl, const char *fn)
   /* integrate the mean force */
   wl_intmf(wl);
 
-  fprintf(fp, "# %d %d %g %g %g\n", wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot);
+  fprintf(fp, "# %d %d %g %g %g\n",
+      wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot);
   for ( i = 0; i < wl->n; i++ ) {
-    if ( wl->isfloat ) { /* floating-point version */
+    if ( wl->isfloat ) {
+      /* floating-point version */
       fprintf(fp, "%g", wl->xmin + (i + 0.5) * wl->dx);
-    } else { /* integer version */
+    } else {
+      /* integer version */
       fprintf(fp, "%d", wl->nmin + i);
     }
+
     mf = (wl->cf[i] > 0) ? wl->sf[i] / wl->cf[i] : 0;
-    //if ( mf > 0 ) { printf("%g: mf %g\n", wl->h[i], mf); getchar(); }
     fprintf(fp, " %g %g %g %g %g %g\n",
-        wl->v[i], wl->h[i]/htot, wl->h[i],
+        wl->v[i], wl->h[i] / (htot * wl->dx), wl->h[i],
         (wl->vf[i] + wl->vf[i+1])/2, mf, wl->cf[i]);
   }
   fclose(fp);

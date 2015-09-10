@@ -28,6 +28,28 @@ install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 
 
 
+System preparation
+==================
+
+```
+mkdir init
+cd init
+path/to/simulpdb.py \
+  --gmxexe=gromacs/build/root \
+  -d 15
+  my.pdb
+cd ..
+```
+
+Adjust `-d 15` to control the number of water
+
+```
+gromacs/build/root/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
+gromacs/build/root/bin/hmcrmsd -cfg 1LE1.cfg -deffnm md -v -ntmpi 1 -ntomp 2
+```
+
+
+
 Code template
 ===============
 

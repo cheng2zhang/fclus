@@ -39,8 +39,13 @@ typedef struct {
   double rhis_max;
   char *fnrhis;
 
+  char *fnlog;
+
+  int nstlog;
   int nstchat;
   int nstrep;
+
+  int debug;
 } gmxgomodel_t;
 
 
@@ -83,8 +88,13 @@ static void gmxgomodel_default(gmxgomodel_t *m)
   m->rhis_max = 4.0;
   m->fnrhis = "rhis.dat";
 
+  m->fnlog = "rmsd.log";
+
+  m->nstlog = 1000;
   m->nstchat = 1000;
   m->nstrep = 10000;
+
+  m->debug = 0;
 }
 
 
@@ -130,7 +140,8 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     key = buf;
 
     /* find the beginning of the value */
-    for ( p++; isspace(*p) || *p == '=' ; ) p++;
+    for ( p++; *p && (isspace(*p) || *p == '=') ; )
+      p++;
     val = p;
 
     if ( strcmpfuzzy(key, "pdb") == 0
@@ -172,6 +183,10 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
       m->rhis_max = atof(val);
     } else if ( strcmpfuzzy(key, "fnrhis") == 0 ) {
       m->fnrhis = strclone(val);
+    } else if ( strcmpfuzzy(key, "fnlog") == 0 ) {
+      m->fnlog = strclone(val);
+    } else if ( strcmpfuzzy(key, "nstlog") == 0 ) {
+      m->nstlog = atoi(val);
     } else if ( strcmpfuzzy(key, "nstchat") == 0 ) {
       m->nstchat = atoi(val);
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
@@ -182,6 +197,9 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     } else if ( strcmpfuzzy(key, "biasmf") == 0
              || strcmpfuzzy(key, "bias_mf") == 0 ) {
       m->bias_mf = atoi(val);
+    } else if ( strcmpfuzzy(key, "debug") == 0
+             || strcmpfuzzy(key, "dbg") == 0 ) {
+      m->debug = (*val) ? atoi(val) : 1;
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();
@@ -192,6 +210,8 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
 
   return 0;
 }
+
+
 
 #endif /* GMXGOMODEL_H__ */
 

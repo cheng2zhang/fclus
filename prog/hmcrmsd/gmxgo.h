@@ -41,7 +41,9 @@ typedef struct {
   /*
   matrix box;
   */
+  double hmcrej, hmctot;
 
+  FILE *fplog;
   /* string buffer to print step */
   char sbuf[STEPSTRSIZE];
 } gmxgo_t;
@@ -216,6 +218,8 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
   snew(go->stx, n);
   snew(go->stv, n);
   snew(go->stf, n);
+  go->hmcrej = 0;
+  go->hmctot = 0;
 }
 
 
@@ -263,7 +267,8 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
       wl_load(go->wl, m->fnvrmsd);
       hist_load(go->rhis, m->fnrhis);
     }
-    fprintf(stderr, "parallel %d, domain-decomposition %d\n", PAR(cr), DOMAINDECOMP(cr));
+    fprintf(stderr, "parallel %d, domain-decomposition %d\n",
+        PAR(cr), DOMAINDECOMP(cr));
   }
 
   if ( PAR(cr) ) {
@@ -418,17 +423,28 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 
 
+/* distance between two alpha carbon atoms */
+#define CACABOND 0.382
+/* maximal deviation */
+#define CACABOND_DEV 0.06
+
+
+
 /* dump basic information */
 __inline static void gmxgo_dump(gmxgo_t *go,
     double (*x)[D], int ePBC, matrix box, gmx_int64_t step)
 {
   int i, c1, c;
-  double dx[D], dr = 0, f = 0, dev = 0;
+  double dx[D], dr = 0, f = 0, dev = 0, rmsd;
   t_pbc pbc[1];
 
   set_pbc(pbc, ePBC, box);
 
-  fprintf(stderr, "step %s:\n", gmx_step_str(step, go->sbuf));
+  rmsd = vrmsd(go->xref, go->xf, go->x, go->mass, go->n,
+      0, NULL, NULL);
+  fprintf(stderr, "step %s, RMSD %gA:\n",
+      gmx_step_str(step, go->sbuf), rmsd * 10);
+
   for ( i = 0; i < go->n; i++ ) {
     c = gmxvcomm_where(go->gvc, i);
     if ( i > 0 ) {
@@ -439,8 +455,8 @@ __inline static void gmxgo_dump(gmxgo_t *go,
       f = vnorm(go->f[i]);
       dev = vdist(go->x[i], go->xf[i]);
     }
-    fprintf(stderr, " %d[node %d]: f %g, dev %g, bond %g\n",
-        i, c, f, dev, dr);
+    fprintf(stderr, " %d[node %d]: f %g, dev %gA, bond %gA (%+gA)\n",
+        i, c, f, dev * 10, dr * 10, (dr - CACABOND) * 10);
   }
   fprintf(stderr, "\n");
 }
@@ -453,8 +469,8 @@ static int gmxgo_shift(gmxgo_t *go,
     double (*xin)[D], double (*xout)[D],
     int ePBC, matrix box, gmx_int64_t step)
 {
-  int i;
-  double dx[D], dr;
+  int i, id = -1, err = 0;
+  double dx[D], dr, dev, devmax = 0;
   t_pbc pbc[1];
 
   set_pbc(pbc, ePBC, box);
@@ -462,19 +478,32 @@ static int gmxgo_shift(gmxgo_t *go,
   vcopy(xout[0], xin[0]);
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
-    dr = vnorm(dx); /* should be around 0.39 nm = 3.9 A */
-    if ( fabs(dr - 0.39) > 0.05 ) {
-      fprintf(stderr, "step %s: broken peptide bond %d-%d, dr %g, (%g, %g, %g); (%g, %g, %g) - (%g, %g, %g)\n",
-          gmx_step_str(step, go->sbuf), i - 1, i, dr, dx[0], dx[1], dx[2],
-          xin[i-1][0], xin[i-1][1], xin[i-1][2], xin[i][0], xin[i][1], xin[i][2]);
-      gmxgo_dump(go, xin, ePBC, box, step);
-      hist_save(go->rhis, go->model->fnrhis);
-      wl_save(go->wl, go->model->fnvrmsd);
-      return -1;
+    dr = vnorm(dx);
+    dev = fabs(dr - CACABOND);
+    if ( dev > devmax ) {
+      devmax = dev;
+      id = i;
     }
     vadd(xout[i], xout[i - 1], dx);
   }
-  return 0;
+
+  err = (devmax > CACABOND_DEV);
+  if ( err ) {
+    pbc_dx_d(pbc, xin[id], xin[id - 1], dx);
+    dr = vnorm(dx);
+    fprintf(stderr, "step %s: broken peptide bond %d-%d, dr %g, "
+        "(%g, %g, %g); (%g, %g, %g) - (%g, %g, %g), dev %g\n",
+        gmx_step_str(step, go->sbuf), id - 1, id, dr,
+        dx[0], dx[1], dx[2],
+        xin[id - 1][0], xin[id - 1][1], xin[id - 1][2],
+        xin[id][0], xin[id][1], xin[id][2], devmax);
+    gmxgo_dump(go, xin, ePBC, box, step);
+    hist_save(go->rhis, go->model->fnrhis);
+    wl_save(go->wl, go->model->fnvrmsd);
+  }
+
+  //fprintf(stderr, "step %d, max dev %gA\n", (int) step, devmax*10);
+  return err;
 }
 
 
@@ -546,11 +575,37 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
 
 
 
+/* print a short message on screen */
+static void gmxgo_chat(gmxgo_t *go, gmx_int64_t step, double rmsd)
+{
+  fprintf(stderr, "\rstep %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g, hmcrej %g\n",
+      gmx_step_str(step, go->sbuf), rmsd * 10, go->dvdx,
+      wl_getflatness(go->wl) * 100, go->wl->lnf, go->hmcrej);
+}
+
+
+
+/* write the log file */
+static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
+{
+  if ( go->fplog == NULL ) {
+    go->fplog = fopen(go->model->fnlog, "w");
+  }
+
+  if ( go->fplog != NULL ) {
+    fprintf(go->fplog, "%s %g\n",
+        gmx_step_str(step, go->sbuf), rmsd);
+  }
+}
+
+
+
 /* ePBC == fr->ePBC */
-static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
+static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
     int ePBC, matrix box, gmx_int64_t step)
 {
   double rmsd = 0, mf;
+  rvec *x = state->x;
   int err = 0;
   gmxgomodel_t *m = go->model;
   t_commrec *cr = go->cr;
@@ -574,10 +629,24 @@ static int gmxgo_rmsd_force(gmxgo_t *go, rvec *x, int doid, rvec *f,
     /* update the histogram */
     hist_add(go->rhis, rmsd);
 
-    if ( step > 0 && step % m->nstchat == 0 ) {
-      fprintf(stderr, "\rstep %s: rmsd %gA, dvdx %g, flatness %g%%, lnf %g\n",
-          gmx_step_str(step, go->sbuf), rmsd * 10, go->dvdx,
-          wl_getflatness(go->wl) * 100, go->wl->lnf);
+    if ( (step > 0 && step % m->nstchat == 0) || m->debug ) {
+      gmxgo_chat(go, step, rmsd);
+
+      /* debugging code to test HMC rejection */
+      if ( m->debug == 3 ) {
+        int id;
+
+        for ( id = 0; id < go->stn; id+= 1000 ) {
+          fprintf(stderr, "step %d, id %d, x: %g, %g, %g\n", (int) step, id, x[id][0], x[id][1], x[id][2]);
+          fprintf(stderr, "step %d, id %d, v: %g, %g, %g\n", (int) step, id, state->v[id][0], state->v[id][1], state->v[id][2]);
+          fprintf(stderr, "step %d, id %d, f: %g, %g, %g\n", (int) step, id, f[id][0], f[id][1], f[id][2]);
+        }
+        //getchar();
+      }
+
+      if ( step > 0 && step % m->nstlog == 0 ) {
+        gmxgo_log(go, step, rmsd);
+      }
     }
 
     if ( step > 0 && step % m->nstrep == 0 ) {
@@ -622,10 +691,26 @@ BCAST_ERR:
 
 
 
-/* push the current x, v and f
- * we only save home atoms */
-static int gmxgo_hmcpush(gmxgo_t *go,
-    t_state *state, rvec *f)
+/* copy n vectors */
+static void gmxgo_vcopy(rvec *dest, rvec *src, int n)
+{
+  int i, d = 0;
+
+  //memcpy(dest, src, sizeof(rvec) * n);
+  for ( i = 0; i < n; i++ ) {
+    for ( d = 0; d < DIM; d++ ) {
+      dest[i][d] = src[i][d];
+    }
+  }
+}
+
+
+/* push the current x and f
+ * we only save home atoms
+ * call this after do_force() to make sure
+ * that the force `f` matches the position `x` */
+static int gmxgo_hmcpushxf(gmxgo_t *go,
+    t_state *state, rvec *f, gmx_int64_t step)
 {
   int i, n;
   t_commrec *cr = go->cr;
@@ -634,6 +719,57 @@ static int gmxgo_hmcpush(gmxgo_t *go,
   n = PAR(cr) ? cr->dd->nat_home : state->natoms;
 
   if ( n > go->stncap ) {
+    if ( MASTER(cr) ) {
+      fprintf(stderr, "hmcpushxf: step %s, expanding state variable %d -> %d\n",
+          gmx_step_str(step, go->sbuf), go->stncap, n);
+    }
+    go->stncap = n;
+    srenew(go->stx, n);
+    srenew(go->stv, n);
+    srenew(go->stf, n);
+  }
+
+#if 0
+  if ( go->model->debug == 3 && step % 300 - 1 == 3 ) {
+    int id;
+
+    /* see if the force matches the just popped value */
+    for ( id = 0; id < n; id+= 1000 ) {
+      fprintf(stderr, "step %d, id %d, f: %g(%g), %g(%g), %g(%g)\n",
+          (int) step, id,
+          f[id][0], go->stf[id][0],
+          f[id][1], go->stf[id][1],
+          f[id][2], go->stf[id][2]);
+    }
+    getchar();
+  }
+#endif
+
+  go->stn = n;
+  gmxgo_vcopy(go->stx, state->x, n);
+  gmxgo_vcopy(go->stf, f,        n);
+
+  return 0;
+}
+
+
+
+/* push the current v
+ * we only save home atoms */
+static int gmxgo_hmcpushv(gmxgo_t *go,
+    t_state *state, gmx_int64_t step)
+{
+  int i, n;
+  t_commrec *cr = go->cr;
+
+  /* determine the number of home atoms */
+  n = PAR(cr) ? cr->dd->nat_home : state->natoms;
+
+  if ( n > go->stncap ) {
+    if ( MASTER(cr) ) {
+      fprintf(stderr, "hmcpushv: step %s, expanding state variable %d -> %d\n",
+          gmx_step_str(step, go->sbuf), go->stncap, n);
+    }
     go->stncap = n;
     srenew(go->stx, n);
     srenew(go->stv, n);
@@ -641,9 +777,7 @@ static int gmxgo_hmcpush(gmxgo_t *go,
   }
 
   go->stn = n;
-  memcpy(go->stx, state->x, sizeof(rvec) * n);
-  memcpy(go->stv, state->v, sizeof(rvec) * n);
-  memcpy(go->stf, f,        sizeof(rvec) * n);
+  gmxgo_vcopy(go->stv, state->v, n);
   return 0;
 }
 
@@ -671,9 +805,10 @@ static void gmxgo_hmcpop(gmxgo_t *go,
       }
     }
   }
-  memcpy(state->x, go->stx, sizeof(rvec) * n);
-  memcpy(state->v, go->stv, sizeof(rvec) * n);
-  memcpy(f,        go->stf, sizeof(rvec) * n);
+
+  gmxgo_vcopy(state->x, go->stx, n);
+  gmxgo_vcopy(state->v, go->stv, n);
+  gmxgo_vcopy(f,        go->stf, n);
 }
 
 
@@ -740,11 +875,20 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     acc = 1;
     if ( delv > 0 ) {
       double r = rand01();
-      if ( r > exp(-delv) ) {
-        acc = 0;
-        fprintf(stderr, "HMC rejecting a state, rmsd %g -> %g, delv %g\n", rmsd1, rmsd2, delv);
-      }
+      acc = ( r < exp(-delv) );
     }
+
+    /* special flag to test HMC rejection */
+    if ( m->debug == 3 ) {
+      acc = ( step % 300 != 3 );
+    }
+
+    if ( !acc ) {
+      go->hmcrej += 1;
+      fprintf(stderr, "step %s: HMC rejecting a state, rmsd %g -> %g, delv %g\n",
+          gmx_step_str(step, go->sbuf), rmsd1, rmsd2, delv);
+    }
+    go->hmctot += 1;
   }
 
 BCAST_ERR:
