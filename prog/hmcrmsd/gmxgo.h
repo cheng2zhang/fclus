@@ -87,8 +87,18 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
     char *atnm = mt->atoms.atomname[ia][0];
     int sel = 0;
+    int seltype = go->model->seltype;
 
-    if ( strcmp(atnm, "CA") == 0 ) {
+    if ( seltype == SEL_CA ) {
+      if ( strcmp(atnm, "CA") == 0 ) {
+        sel = 1;
+      }
+    } else if ( seltype == SEL_HEAVY ) {
+      if ( strcmp(atnm, "H") != 0
+        && strcmp(atnm, "D") != 0 ) {
+        sel = 1;
+      }
+    } else {
       sel = 1;
     }
 

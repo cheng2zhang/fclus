@@ -6,9 +6,15 @@
 #include "util.h"
 
 
+enum { SEL_CA = 0, SEL_HEAVY, SEL_ALL, SEL_COUNT };
+const char *seltype_names[] = {
+  "CA", "heavy", "all", "count" };
+
 
 typedef struct {
   const char *fnpdb; /* reference PDB structure */
+
+  int seltype; /* SEL_CA, SEL_HEAVY or SEL_ALL */
 
   int dohmc; /* use HMC to reject unwanted configurations */
 
@@ -90,13 +96,27 @@ static void gmxgomodel_default(gmxgomodel_t *m)
 
   m->fnlog = "rmsd.log";
 
-  m->nstlog = 1000;
+  m->nstlog = 100;
   m->nstchat = 1000;
   m->nstrep = 10000;
 
   m->debug = 0;
 }
 
+
+
+static int array_select(const char *val, const char **names, int cnt)
+{
+  int i;
+
+  for ( i = 0; i < cnt; i++ ) {
+    if ( strcmpfuzzy(val, names[i]) == 0 ) {
+      return i;
+    }
+  }
+
+  return -1;
+}
 
 
 /* load settings from the configuration file `fn` */
@@ -147,6 +167,8 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
     if ( strcmpfuzzy(key, "pdb") == 0
       || strcmpfuzzy(key, "fnpdb") == 0 ) {
       m->fnpdb = strclone(val);
+    } else if ( strcmpfuzzy(key, "seltype") == 0 ) {
+      m->seltype = array_select(val, seltype_names, SEL_COUNT);
     } else if ( strcmpfuzzy(key, "mfmin") == 0 ) {
       m->mfmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfmax") == 0 ) {
