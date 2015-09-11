@@ -523,8 +523,9 @@ __inline static int wl_save(wl_t *wl, const char *fn)
   /* integrate the mean force */
   wl_intmf(wl);
 
-  fprintf(fp, "# %d %d %g %g %g\n",
-      wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot);
+  fprintf(fp, "# %d %d %g %g %g %d %g\n",
+      wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot,
+      wl->isinvt, wl->lnf);
   for ( i = 0; i < wl->n; i++ ) {
     if ( wl->isfloat ) {
       /* floating-point version */
@@ -550,8 +551,10 @@ __inline static int wl_load(wl_t *wl, const char *fn)
 {
   FILE *fp;
   int i, n = wl->n, isfloat, next;
+  int isinvt;
   double x1, x2, x, y, v, tot, xmin, dx;
   double vf, mf, cf;
+  double lnf;
   char ln[64000] = "";
 
   if ( (fp = fopen(fn, "r")) == NULL ) {
@@ -560,7 +563,8 @@ __inline static int wl_load(wl_t *wl, const char *fn)
   }
   if ( fgets(ln, sizeof ln, fp) == NULL
     || ln[0] != '#'
-    || sscanf(ln + 1, "%d%d%lf%lf%lf", &isfloat, &n, &xmin, &dx, &tot) != 5 ) {
+    || sscanf(ln + 1, "%d%d%lf%lf%lf%n",
+              &isfloat, &n, &xmin, &dx, &tot, &next) != 5 ) {
     fprintf(fp, "%s: bad information line!\n%s", fn, ln);
     fclose(fp);
     return -1;
@@ -576,6 +580,11 @@ __inline static int wl_load(wl_t *wl, const char *fn)
     return -1;
   }
   wl->tot = tot;
+
+  if ( 2 == sscanf(ln + 1 + next, "%d%lf", &isinvt, &lnf) ) {
+    wl->isinvt = isinvt;
+    wl->lnf = lnf;
+  }
 
   for ( i = 0; i < n; i++ ) {
     if ( fgets(ln, sizeof ln, fp) == NULL ) {

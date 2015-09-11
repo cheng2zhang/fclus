@@ -43,6 +43,9 @@ typedef struct {
   */
   double hmcrej, hmctot;
 
+  /* continue from the previous run */
+  int isctn;
+
   FILE *fplog;
   /* string buffer to print step */
   char sbuf[STEPSTRSIZE];
@@ -273,6 +276,8 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
     go->rhis = hist_open(0, m->rhis_max, m->rhis_dx);
 
+    /* continue from the last run */
+    go->isctn = ctn;
     if ( ctn ) {
       wl_load(go->wl, m->fnvrmsd);
       hist_load(go->rhis, m->fnrhis);
@@ -599,7 +604,7 @@ static void gmxgo_chat(gmxgo_t *go, gmx_int64_t step, double rmsd)
 static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 {
   if ( go->fplog == NULL ) {
-    go->fplog = fopen(go->model->fnlog, "w");
+    go->fplog = fopen(go->model->fnlog, (go->isctn ? "a" : "w"));
   }
 
   if ( go->fplog != NULL ) {
