@@ -157,7 +157,7 @@ static int gmxgo_build(gmxgo_t *go, gmx_mtop_t *mtop, t_commrec *cr)
 
 
 /* load the reference coordinates */
-static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
+static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 {
   FILE *fp;
   char s[256];
@@ -180,8 +180,12 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
     if ( s[16] != ' ' && s[16] != 'A' )
       continue;
 
-    if ( strncmp(s + 12, " CA ", 4) != 0 )
-      continue;
+    if ( go->model->seltype == SEL_CA ) {
+      if ( strncmp(s + 12, " CA ", 4) != 0 )
+        continue;
+    } else {
+      /* TODO */
+    }
 
     if ( id >= go->n ) {
       fprintf(stderr, "Warning: additional atoms exists in %s\n", fnpdb);
@@ -199,7 +203,7 @@ static int gmxvcomm_loadxref(gmxgo_t *go, const char *fnpdb)
   }
 
   if ( id < go->n ) {
-    fprintf(stderr, "Warning: missing atoms %s, %d < %d\n",
+    fprintf(stderr, "Error: missing atoms %s, %d < %d\n",
         fnpdb, id, go->n);
     return -1;
   }
@@ -247,6 +251,23 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
   snew(go, 1);
 
   go->cr = cr;
+ 
+  /* load input parameters from the configuration file */ 
+  if ( MASTER(cr) ) {
+    gmxgomodel_t *m = go->model;
+
+    gmxgomodel_default(m);
+    gmxgomodel_load(m, fncfg);
+  }
+
+  /* broadcast the parameters */
+  if ( PAR(cr) ) {
+    gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
+  }
+
+  go->kT = BOLTZ * tp;
+
+
   gmxgo_build(go, mtop, cr);
   if ( PAR(cr) ) {
     go->gvc = gmxvcomm_open(go->n, go->index, cr);
@@ -265,11 +286,9 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
   if ( MASTER(cr) ) {
     gmxgomodel_t *m = go->model;
 
-    gmxgomodel_default(m);
-    gmxgomodel_load(m, fncfg);
-    m = go->model;
-
-    gmxvcomm_loadxref(go, m->fnpdb);
+    if ( gmxgo_loadxref(go, m->fnpdb) != 0 ) {
+      exit(1);
+    }
 
     go->wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
         m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
@@ -285,12 +304,6 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
     fprintf(stderr, "parallel %d, domain-decomposition %d\n",
         PAR(cr), DOMAINDECOMP(cr));
   }
-
-  if ( PAR(cr) ) {
-    gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
-  }
-
-  go->kT = BOLTZ * tp;
 
   gmxgo_inithmc(go, mtop);
 

@@ -60,6 +60,8 @@ static void gmxgomodel_default(gmxgomodel_t *m)
 {
   m->fnpdb = "1VII.pdb";
 
+  m->seltype = SEL_CA;
+
   m->dohmc = 1;
 
   m->bias_mf = 0;
@@ -169,6 +171,7 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
       m->fnpdb = strclone(val);
     } else if ( strcmpfuzzy(key, "seltype") == 0 ) {
       m->seltype = array_select(val, seltype_names, SEL_COUNT);
+      //printf("m->seltype %d\n", m->seltype); getchar();
     } else if ( strcmpfuzzy(key, "mfmin") == 0 ) {
       m->mfmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfmax") == 0 ) {
