@@ -6,15 +6,27 @@
 #include "util.h"
 
 
-enum { SEL_CA = 0, SEL_HEAVY, SEL_ALL, SEL_COUNT };
+enum {
+  SEL_CA = 0,
+  SEL_HEAVY,
+  SEL_ALL,
+  SEL_CAENDTOEND,
+  SEL_COUNT
+};
+
 const char *seltype_names[] = {
-  "CA", "heavy", "all", "count" };
+  "CA",
+  "heavy",
+  "all",
+  "CA-end-to-end",
+  "count"
+};
 
 
 typedef struct {
   const char *fnpdb; /* reference PDB structure */
 
-  int seltype; /* SEL_CA, SEL_HEAVY or SEL_ALL */
+  int seltype; /* SEL_CA, SEL_HEAVY, SEL_ALL */
 
   int dohmc; /* use HMC to reject unwanted configurations */
 

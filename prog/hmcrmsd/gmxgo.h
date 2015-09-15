@@ -25,6 +25,12 @@ typedef struct {
   double (*xf)[D]; /* fit structure */
   double (*x1)[D]; /* x1[0..n-1] */
   double (*x2)[D]; /* x2[0..n-1] */
+
+  int nres; /* number of residues */
+  int *resid;
+  char **resnm;
+  char **atnm;
+
   gmxvcomm_t *gvc;
   gmxgomodel_t model[1];
   double kT;
@@ -53,6 +59,11 @@ typedef struct {
 
 
 
+/* block size used for dynamic allocation */
+const int gmxgo_blksz = 32;
+
+
+
 /* extract the coordinates of the special atoms */
 static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
 {
@@ -72,6 +83,9 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   }
   mt = mtop->moltype + itp;
 
+  /* set the number of residues */
+  go->nres = mt->atoms.nres;
+
   /* find the molblock correpsonding to the moltype */
   id = 0;
   for ( ib = 0; ib < mtop->nmolblock; ib++ ) {
@@ -80,51 +94,75 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
     id += mb->nmol * mb->natoms_mol;
   }
 
-#define BLKSZ 8
   /* search CA atoms from the moltype */
   go->n = 0;
   go->masstot = 0;
-  ncap = BLKSZ;
+  ncap = gmxgo_blksz;
   snew(go->index, ncap);
-  snew(go->mass, ncap);
+  snew(go->mass,  ncap);
+  snew(go->resid, ncap);
+  snew(go->resnm, ncap);
+  snew(go->atnm,  ncap);
+
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
-    char *atnm = mt->atoms.atomname[ia][0];
-    int sel = 0;
-    int seltype = go->model->seltype;
+    char atnm[8];
+    int resind = mt->atoms.atom[ia].resind;
+    int sel = 0, seltype = go->model->seltype;
+
+    strcpy(atnm, mt->atoms.atomname[ia][0]);
+    strstrip(atnm);
 
     if ( seltype == SEL_CA ) {
       if ( strcmp(atnm, "CA") == 0 ) {
         sel = 1;
       }
     } else if ( seltype == SEL_HEAVY ) {
-      if ( strcmp(atnm, "H") != 0
-        && strcmp(atnm, "D") != 0 ) {
+      if ( atnm[0] != 'H' && atnm[0] != 'D' ) {
+        sel = 1;
+      }
+    } else if ( seltype == SEL_ALL ) {
+      sel = 1;
+    } else if ( seltype == SEL_CAENDTOEND ) {
+      if ( strcmp(atnm, "CA") == 0
+        &&  (resind == 0 || resind == go->nres - 1) ) {
         sel = 1;
       }
     } else {
-      sel = 1;
+      fprintf(stderr, "unknown seltype %d\n", seltype);
+      return -1;
     }
 
     if ( sel ) {
       /* reallocate the memory */
       if ( go->n >= ncap ) {
-        ncap += BLKSZ;
+        ncap += gmxgo_blksz;
         srenew(go->index, ncap);
-        srenew(go->mass, ncap);
+        srenew(go->mass,  ncap);
+        srenew(go->resid, ncap);
+        srenew(go->resnm, ncap);
+        srenew(go->atnm,  ncap);
       }
 
       go->index[go->n] = id + ia;
       go->mass[go->n] = mt->atoms.atom[ia].m;
       go->masstot += go->mass[go->n];
+      /* `resind` is the zero-based index
+       * `resinfo[].nr` is the residue index
+       * that is supposed to match that in PDB */
+      go->resid[go->n] = mt->atoms.resinfo[resind].nr;
+      go->resnm[go->n] = mt->atoms.resinfo[resind].name[0];
+      go->atnm[go->n] = mt->atoms.atomname[ia][0];
       go->n += 1;
     }
   }
 
-  fprintf(stderr, "%d spatoms:", go->n);
+  fprintf(stderr, "%d spatoms, total mass %g:\n",
+      go->n, go->masstot);
   for ( i = 0; i < go->n; i++ ) {
-    fprintf(stderr, " %d(%g)", go->index[i], go->mass[i]);
+    fprintf(stderr, " %4d %-4s %4d %-4s %8.3f\n",
+        go->index[i], go->atnm[i], go->resid[i], go->resnm[i],
+        go->mass[i]);
   }
-  fprintf(stderr, "; masstot %g\n", go->masstot);
 
   return 0;
 }
@@ -161,54 +199,110 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 {
   FILE *fp;
   char s[256];
-  int id = 0;
-  float x[D];
+
+  int i, id, err;
+  int natm, ncap, *resid;
+  float (*xref)[D], x[D];
+  char (*atnm)[8], (*resnm)[8], sresid[8];
+
+  natm = 0;
+  ncap = gmxgo_blksz;
+  snew(resid, ncap);
+  snew(xref,  ncap);
+  snew(atnm,  ncap);
+  snew(resnm, ncap);
 
   if ( (fp = fopen(fnpdb, "r")) == NULL ) {
     fprintf(stderr, "cannot read %s\n", fnpdb);
     return -1;
   }
 
+  /* 1. load raw PDB information */
   while ( fgets(s, sizeof s, fp) ) {
     /* a model is finished, we implicitly include ENDMDL */
     if ( strncmp(s, "TER", 3) == 0 || strncmp(s, "END", 3) == 0 )
       break;
 
-    if ( strncmp(s, "ATOM ", 5) != 0 )
+    /* PDB format specification
+     * http://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM
+     * */
+    if ( strncmp(s, "ATOM  ", 6) != 0 )
       continue;
 
+    /* alternate location */
     if ( s[16] != ' ' && s[16] != 'A' )
       continue;
 
-    if ( go->model->seltype == SEL_CA ) {
-      if ( strncmp(s + 12, " CA ", 4) != 0 )
-        continue;
-    } else {
-      /* TODO */
+    /* reallocate memory if possible */
+    if ( natm >= ncap ) {
+      ncap += gmxgo_blksz;
+      srenew(resid, ncap);
+      srenew(xref,  ncap);
+      srenew(atnm,  ncap);
+      srenew(resnm, ncap);
     }
 
-    if ( id >= go->n ) {
-      fprintf(stderr, "Warning: additional atoms exists in %s\n", fnpdb);
-      break;
-    }
+    /* copy the atom name */
+    strncpy(atnm[natm], s + 12, 4);
+    atnm[natm][4] = '\0';
+    strstrip(atnm[natm]);
+
+    /* copy the residue name */
+    strncpy(resnm[natm], s + 17, 3);
+    resnm[natm][3] = '\0';
+    strstrip(resnm[natm]);
+
+    /* copy the residue index */
+    strncpy(sresid, s + 22, 4);
+    sresid[4] = '\0';
+    resid[natm] = atoi( strstrip(sresid) );
 
     /* scan the coordinates */
     sscanf(s + 30 , "%f%f%f", x, x + 1, x + 2);
 
     /* convert the unit from angstroms to nanometers */
-    go->xref[id][0] = x[0] / 10;
-    go->xref[id][1] = x[1] / 10;
-    go->xref[id][2] = x[2] / 10;
-    id += 1;
+    xref[natm][0] = x[0] / 10;
+    xref[natm][1] = x[1] / 10;
+    xref[natm][2] = x[2] / 10;
+
+    fprintf(stderr, "%4d %-4s %4d %-4s %8.3f %8.3f %8.3f\n",
+        natm, atnm[natm], resid[natm], resnm[natm],
+        xref[natm][0], xref[natm][1], xref[natm][2]);
+    natm += 1;
   }
 
-  if ( id < go->n ) {
-    fprintf(stderr, "Error: missing atoms %s, %d < %d\n",
-        fnpdb, id, go->n);
-    return -1;
+  /* 2. match raw PDB information to the GROMACS topology */
+  err = 0;
+  for ( id = 0; id < go->n; id++ ) {
+    /* try to find the matching atoom from the PDB file */
+    for ( i = 0; i < natm; i++ ) {
+      if ( resid[i] == go->resid[id]
+        && strcmp(resnm[i], go->resnm[id]) == 0
+        && strcmp(atnm[i], go->atnm[id]) == 0 ) {
+        break;
+      }
+    }
+
+    if ( i >= natm ) {
+      fprintf(stderr, "cannot find matching atom for "
+          "id %d, atnm %s, resnm %s, resid %d\n",
+          id, go->atnm[id], go->resnm[id], go->resid[id]);
+      err = 1;
+      break;
+    }
+
+    /* copy the reference coordinates */
+    go->xref[id][0] = xref[i][0];
+    go->xref[id][1] = xref[i][1];
+    go->xref[id][2] = xref[i][2];
   }
 
-  return 0;
+  free(resid);
+  free(xref);
+  free(atnm);
+  free(resnm);
+
+  return err;
 }
 
 
@@ -251,8 +345,8 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
   snew(go, 1);
 
   go->cr = cr;
- 
-  /* load input parameters from the configuration file */ 
+
+  /* load input parameters from the configuration file */
   if ( MASTER(cr) ) {
     gmxgomodel_t *m = go->model;
 
@@ -506,11 +600,13 @@ static int gmxgo_shift(gmxgo_t *go,
   vcopy(xout[0], xin[0]);
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
-    dr = vnorm(dx);
-    dev = fabs(dr - CACABOND);
-    if ( dev > devmax ) {
-      devmax = dev;
-      id = i;
+    if ( go->model->seltype == SEL_CA ) {
+      dr = vnorm(dx);
+      dev = fabs(dr - CACABOND);
+      if ( dev > devmax ) {
+        devmax = dev;
+        id = i;
+      }
     }
     vadd(xout[i], xout[i - 1], dx);
   }
