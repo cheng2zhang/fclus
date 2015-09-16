@@ -36,7 +36,7 @@ mkdir init
 cd init
 path/to/simulpdb.py \
   --gmxexe=gromacs/build/root \
-  -d 15
+  -d 9
   my.pdb
 cd ..
 ```

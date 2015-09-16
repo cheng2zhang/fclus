@@ -201,7 +201,7 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
   char s[256];
 
   int i, id, err;
-  int natm, ncap, *resid;
+  int natm, ncap, *resid, *used, *matched;
   float (*xref)[D], x[D];
   char (*atnm)[8], (*resnm)[8], sresid[8];
 
@@ -265,16 +265,25 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
     xref[natm][1] = x[1] / 10;
     xref[natm][2] = x[2] / 10;
 
+    /*
     fprintf(stderr, "%4d %-4s %4d %-4s %8.3f %8.3f %8.3f\n",
         natm, atnm[natm], resid[natm], resnm[natm],
         xref[natm][0], xref[natm][1], xref[natm][2]);
+    */
     natm += 1;
   }
 
   /* 2. match raw PDB information to the GROMACS topology */
   err = 0;
+  /* the array `used` tracks if each PDB entry is used */
+  snew(used,  natm);
+  for ( i = 0; i < natm; i++ ) used[i] = 0;
+
+  snew(matched, go->n);
+  for ( id = 0; id < go->n; id++ ) matched[id] = 0;
+
   for ( id = 0; id < go->n; id++ ) {
-    /* try to find the matching atoom from the PDB file */
+    /* try to find the matching atom from the PDB file */
     for ( i = 0; i < natm; i++ ) {
       if ( resid[i] == go->resid[id]
         && strcmp(resnm[i], go->resnm[id]) == 0
@@ -283,21 +292,86 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
       }
     }
 
+    /* if matching fails */
     if ( i >= natm ) {
-      fprintf(stderr, "cannot find matching atom for "
-          "id %d, atnm %s, resnm %s, resid %d\n",
-          id, go->atnm[id], go->resnm[id], go->resid[id]);
-      err = 1;
-      break;
+      if ( err <= 1
+        && ( go->atnm[id][0] == 'H' || go->atnm[id][0] == 'D' ) ) {
+        err = 1;
+      } else {
+        fprintf(stderr, "cannot find matching atom for "
+            "id %d, atnm %s, resnm %s, resid %d\n",
+            id, go->atnm[id], go->resnm[id], go->resid[id]);
+        err = 2;
+        break;
+      }
+    } else {
+      matched[id] = 1;
     }
 
     /* copy the reference coordinates */
     go->xref[id][0] = xref[i][0];
     go->xref[id][1] = xref[i][1];
     go->xref[id][2] = xref[i][2];
+
+    /* make this PDB entry is used, so we avoid
+     * this in subsequent fuzzy matching */
+    used[i] = 1;
+  }
+
+  /* try fuzzy matching for hydrogen or deuterium atoms */
+  if ( err == 1 ) {
+    int len;
+
+    err = 0; /* clear the error flag */
+    for ( id = 0; id < go->n; id++ ) {
+      if ( matched[id] ) continue;
+
+      len = strlen(go->atnm[id]) - 1;
+
+      /* we do fuzzy matching only if the last character
+       * of the atom name is a number */
+      if ( !isdigit(go->atnm[id][len]) ) {
+        err = 2;
+      } else {
+        for ( i = 0; i < natm; i++ ) {
+          if ( resid[i] == go->resid[id]
+            && strcmp(resnm[i], go->resnm[id]) == 0
+            && strncmp(atnm[i], go->atnm[id], len) == 0
+            && !used[i] ) {
+            fprintf(stderr, "fuzzy matching atom %d, "
+                "%s (PDB) -> %s (GROMACS)\n",
+                id, atnm[i], go->atnm[id]);
+            break;
+          }
+        }
+
+        if ( i >= natm ) {
+          err = 2;
+        } else {
+          /* copy the reference coordinates */
+          go->xref[id][0] = xref[i][0];
+          go->xref[id][1] = xref[i][1];
+          go->xref[id][2] = xref[i][2];
+
+          /* mark this PDB entry as used, so we can avoid
+           * this in subsequent fuzzy matching */
+          used[i] = 1;
+          matched[id] = 1;
+        }
+      }
+
+      if ( err ) {
+        fprintf(stderr, "cannot fuzzy match atom for "
+            "id %4d, atnm %4s, resnm %4s, resid %4d\n",
+            id, go->atnm[id], go->resnm[id], go->resid[id]);
+        break;
+      }
+    }
   }
 
   free(resid);
+  free(used);
+  free(matched);
   free(xref);
   free(atnm);
   free(resnm);
