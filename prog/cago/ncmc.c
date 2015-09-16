@@ -10,7 +10,6 @@ int main(int argc, char **argv)
 {
   cagomodel_t m[1];
   cago_t *go;
-  cagonc_t *r;
   wl_t *wl;
   int it, nc, ncmin, ncmax;
   double t, rmsd = 0, tot = 0, acc = 0;
@@ -33,7 +32,6 @@ int main(int argc, char **argv)
   /* open a Wang-Landau object */
   wl = wl_openi(ncmin, ncmax,
       m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
-  r = cagonc_open(go, wl);
 
   /* warm up the system such that nc < ncmax */
   nc = cago_ncontacts(go, go->x, -1, NULL, NULL);
@@ -51,7 +49,7 @@ int main(int argc, char **argv)
     for ( it = 0; it < m->nstblk; it++ ) {
       /* a step of Metropolis alogrithm */
       tot += 1;
-      acc += cagonc_metro(r, m->mcamp, 1/m->temp, &nc);
+      acc += cago_metro_nc(go, wl, m->mcamp, 1/m->temp, &nc);
 
       wl_addi(wl, nc);
     }
@@ -74,7 +72,6 @@ int main(int argc, char **argv)
   }
 
   cago_close(go);
-  cagonc_close(r);
   wl_close(wl);
   return 0;
 }

@@ -1,5 +1,5 @@
-#ifndef CAGORMSD_H__
-#define CAGORMSD_H__
+#ifndef CAGONC_H__
+#define CAGONC_H__
 
 
 
@@ -10,39 +10,6 @@
 
 
 #define VMAX DBL_MAX
-
-
-
-typedef struct {
-  cago_t *go;
-  wl_t *wl;
-} cagonc_t;
-
-
-
-__inline static cagonc_t *cagonc_open(cago_t *go, wl_t *wl)
-{
-  cagonc_t *r;
-
-  xnew(r, 1);
-  r->go = go;
-  r->wl = wl;
-  return r;
-}
-
-
-
-__inline static void cagonc_close(cagonc_t *r)
-{
-  free(r);
-}
-
-
-
-__inline static double cagonc_getv(cagonc_t *r, int x)
-{
-  return wl_getvi(r->wl, x);
-}
 
 
 
@@ -63,10 +30,9 @@ __inline static int cago_ncontacts2(cago_t *go,
 
 
 /* Metropolis algorithm */
-__inline static int cagonc_metro(cagonc_t *r,
+__inline static int cago_metro_nc(cago_t *go, wl_t *wl,
     double amp, double bet, int *pnc)
 {
-  cago_t *go = r->go;
   int i, acc;
   double xi[D], du, dutot;
   int nc;
@@ -80,15 +46,15 @@ __inline static int cagonc_metro(cagonc_t *r,
   du = cago_depot(go, go->x, i, xi);
 
   nc = cago_ncontacts2(go, go->x, i, xi, -1, NULL, NULL);
-  unc = cagonc_getv(r, nc);
-  dunc = unc - cagonc_getv(r, *pnc);
+  unc = wl_getvi(wl, nc);
+  dunc = unc - wl_getvi(wl, *pnc);
 
   dutot = bet * du + dunc;
   if ( dutot < 0 ) {
     acc = 1;
   } else {
-    double rr = rand01();
-    acc = ( rr < exp( -dutot ) );
+    double r = rand01();
+    acc = ( r < exp( -dutot ) );
   }
   if ( acc ) {
     vcopy(go->x[i], xi);
@@ -106,16 +72,16 @@ __inline static int cagonc_metro(cagonc_t *r,
 
 /* a step of HMC
  * `*pnc` gives the current number of contact on return */
-__inline static int cagonc_hmc(cagonc_t *r, hmc_t *hmc, int *pnc)
+__inline static int cago_hmc_nc(cago_t *go, wl_t *wl,
+    hmc_t *hmc, int *pnc)
 {
-  cago_t *go = r->go;
   /* compute the current RMSD */
   int nc = cago_ncontacts(go, go->x, -1, NULL, NULL);
   int acc;
   double dv = 0;
 
-  dv  = cagonc_getv(r, nc);
-  dv -= cagonc_getv(r, hmc->idat[0]);
+  dv  = wl_getvi(wl, nc);
+  dv -= wl_getvi(wl, hmc->idat[0]);
 
   if ( dv <= 0 ) {
     acc = 1;
@@ -139,5 +105,35 @@ __inline static int cagonc_hmc(cagonc_t *r, hmc_t *hmc, int *pnc)
 
 
 
-#endif /* CAGORMSD_H__ */
+
+
+/* initialize an HMC object for implicit NC */
+__inline hmc_t *cago_ihmc_nc_init(cago_t *go, int *idat, double **pfdat)
+{
+  hmc_t *hmc;
+  double *fdat;
+  int cnt = 1 + go->n * D;
+
+  /* make a hybrid Monte-Carlo object
+   * with 1 extra integer
+   * and n*D + 1 extra floating-point numbers:
+   * NC, potential energy, and the fit structure */
+  hmc = hmc_open(go->n, 1, cnt);
+
+  xnew(fdat, cnt);
+  idat[0] = cago_ncontacts(go, go->x, -1, NULL, NULL);
+  fdat[0] = cago_rmsd(go, go->x, go->x1);
+  memcpy(fdat + 1, go->x1, go->n * D * sizeof(double));
+  *pfdat = fdat;
+
+  /* push the initial state */
+  hmc_push(hmc, go->x, go->v, go->f, idat, fdat);
+
+  return hmc;
+}
+
+
+
+
+#endif /* CAGONC_H__ */
 

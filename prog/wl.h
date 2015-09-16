@@ -271,7 +271,9 @@ __inline static double wl_getdvdx_v(wl_t *wl, double x,
 
 __inline static double wl_getdelv_v(wl_t *wl, double x1, double x2)
 {
-  return wl_getvf(wl, x2) - wl_getvf(wl, x1);
+  double v2 = wl_getvf(wl, x2);
+  double v1 = wl_getvf(wl, x1);
+  return v2 - v1;
 }
 
 

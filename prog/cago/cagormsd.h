@@ -51,8 +51,8 @@ __inline static int cago_metro_rmsd(cago_t *go, wl_t *wl,
   if ( dutot < 0 ) {
     acc = 1;
   } else {
-    double rr = rand01();
-    acc = ( rr < exp( -dutot ) );
+    double r = rand01();
+    acc = ( r < exp( -dutot ) );
   }
   if ( acc ) {
     vcopy(go->x[i], xi);
@@ -108,8 +108,8 @@ __inline static int cago_hmc_rmsd(cago_t *go, wl_t *wl,
   if ( dv <= 0 ) {
     acc = 1;
   } else {
-    double rr = rand01();
-    acc = ( rr < exp( -dv ) );
+    double r = rand01();
+    acc = ( r < exp( -dv ) );
   }
 
   if ( acc ) {
@@ -217,8 +217,8 @@ __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
   if ( dv <= 0 ) {
     acc = 1;
   } else {
-    double rr = rand01();
-    acc = ( rr < exp( -dv ) );
+    double r = rand01();
+    acc = ( r < exp( -dv ) );
   }
 
   if ( acc ) {
@@ -227,7 +227,8 @@ __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
     fdat[1] = go->epot;
     memcpy(fdat + 2, xf, n * D * sizeof(double));
     /* TODO: apply the force from the bias */
-    dvdx = kT * wl_getdvf(wl, rmsd, mflmin, mflmax, mfhmin, mfhmax);
+    dvdx = kT * wl_getdvdx_v(wl, rmsd,
+        mflmin, mflmax, mfhmin, mfhmax);
     dvdx /= rmsd * go->mtot;
     {
       double dx[D];

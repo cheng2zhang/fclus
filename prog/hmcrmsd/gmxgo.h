@@ -338,9 +338,10 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
             && strcmp(resnm[i], go->resnm[id]) == 0
             && strncmp(atnm[i], go->atnm[id], len) == 0
             && !used[i] ) {
-            fprintf(stderr, "fuzzy matching atom %d, "
-                "%s (PDB) -> %s (GROMACS)\n",
-                id, atnm[i], go->atnm[id]);
+            fprintf(stderr, "fuzzy matching atom %4d, "
+                "%4s (PDB) -> %4s (GROMACS, residue %s%d)\n",
+                id, atnm[i], go->atnm[id],
+                go->resnm[i], go->resid[id]);
             break;
           }
         }

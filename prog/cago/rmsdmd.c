@@ -84,7 +84,7 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
   for ( t = 1; t <= m->nsteps; t++ ) {
     hmctot += 1;
     hmcacc += cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
-        wl, m->mflmin, m->flmax, m->mfhmin, m->mfhmax,
+        wl, m->mflmin, m->mflmax, m->mfhmin, m->mfhmax,
         m->temp, hmc, fdat);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
 
@@ -100,6 +100,7 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
   }
 
   hmc_close(hmc);
+
   return 0;
 }
 
@@ -149,3 +150,4 @@ int main(int argc, char **argv)
   wl_close(wl);
   return 0;
 }
+
