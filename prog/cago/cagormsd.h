@@ -136,7 +136,7 @@ __inline static int cago_hmc_rmsd(cago_t *go, wl_t *wl,
 
 
 /* initialize an HMC object for implicit RMSD */
-__inline hmc_t *cago_ihmc_rmsd_init(cago_t *go, double **pfdat)
+__inline static hmc_t *cago_ihmc_rmsd_init(cago_t *go, double **pfdat)
 {
   hmc_t *hmc;
   double *fdat;
@@ -179,7 +179,7 @@ __inline static double cago_rmsd_raw(cago_t *go,
 
 
 
-/* velocity Verlet with RMSD bias */
+/* velocity Verlet with RMSD bias (implicit hybrid MC) */
 __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
     double (*xf)[D], wl_t *wl,
     double mflmin, double mflmax, double mfhmin, double mfhmax,
@@ -226,7 +226,7 @@ __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
     fdat[0] = rmsd;
     fdat[1] = go->epot;
     memcpy(fdat + 2, xf, n * D * sizeof(double));
-    /* TODO: apply the force from the bias */
+    /* apply the force from the bias */
     dvdx = kT * wl_getdvdx_v(wl, rmsd,
         mflmin, mflmax, mfhmin, mfhmax);
     dvdx /= rmsd * go->mtot;

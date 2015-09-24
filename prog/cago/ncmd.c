@@ -86,15 +86,17 @@ static int run_ihmc_nc(cago_t *go, wl_t *wl, cagomodel_t *m)
   int idat = 0;
   double hmcacc = 0, hmctot = DBL_MIN;
   double *fdat;
+  xymap_t *xy;
 
   /* make a hybrid Monte-Carlo object */
   hmc = cago_ihmc_nc_init(go, &idat, &fdat);
+  xy = xymap_open(-go->ncont, 0, 1.0);
 
   for ( t = 1; t <= m->nsteps; t++ ) {
     hmctot += 1;
-    //hmcacc += cago_vv_nc(go, 1.0, m->mddt, go->x1,
-    //    wl, m->mflmin, m->mflmax, m->mfhmin, m->mfhmax,
-    //    m->temp, hmc, &idat, fdat);
+    hmcacc += cago_vv_nc(go, 1.0, m->mddt, go->x1,
+        wl, xy, m->mflmin, m->mflmax, m->mfhmin, m->mfhmax,
+        m->temp, hmc, &idat, fdat);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
 
     if ( fmod(t, m->nstrep) < 0.1 ) {
@@ -108,6 +110,7 @@ static int run_ihmc_nc(cago_t *go, wl_t *wl, cagomodel_t *m)
   }
 
   hmc_close(hmc);
+  xymap_close(xy);
 
   return 0;
 }

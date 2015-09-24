@@ -789,7 +789,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
           fprintf(stderr, "step %s: gmxgo_rmsd_force failed\n", gmx_step_str(step, go->sbuf));
           exit(1);
         }
-        if ( go->model->dohmc ) {
+        if ( go->cfg->dohmc ) {
           gmxgo_hmcpushxf(go, state, f, step);
         }
 
@@ -1294,7 +1294,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                  * in the next step.  But this seems to be an overkill,
                  * unless the current scheme fails.
                  * */
-                if ( go->model->dohmc ) {
+                if ( go->cfg->dohmc ) {
                   gmxgo_hmcpushv(go, state, step);
                 }
 
@@ -1433,7 +1433,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         /* ################# END UPDATE STEP 2 ################# */
         /* #### We now have r(t+dt) and v(t+dt/2)  ############# */
 
-        if ( go->model->dohmc ) {
+        if ( go->cfg->dohmc ) {
           gmxgo_hmcselect(go, state, f, 1, fr->ePBC, state->box, step);
         }
 

@@ -10,7 +10,7 @@
 #include "hist.h"
 #include "mtrand.h"
 #include "gmxvcomm.h"
-#include "gmxgomodel.h"
+#include "gmxgocfg.h"
 
 
 
@@ -32,7 +32,7 @@ typedef struct {
   char **atnm;
 
   gmxvcomm_t *gvc;
-  gmxgomodel_t model[1];
+  gmxgocfg_t cfg[1];
   double kT;
   wl_t *wl;
   hist_t *rhis; /* histogram */
@@ -86,7 +86,7 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   /* set the number of residues */
   go->nres = mt->atoms.nres;
 
-  /* find the molblock correpsonding to the moltype */
+  /* find the molblock corresponding to the moltype */
   id = 0;
   for ( ib = 0; ib < mtop->nmolblock; ib++ ) {
     mb = mtop->molblock + ib;
@@ -107,7 +107,7 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
     char atnm[8];
     int resind = mt->atoms.atom[ia].resind;
-    int sel = 0, seltype = go->model->seltype;
+    int sel = 0, seltype = go->cfg->seltype;
 
     strcpy(atnm, mt->atoms.atomname[ia][0]);
     strstrip(atnm);
@@ -423,15 +423,15 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
   /* load input parameters from the configuration file */
   if ( MASTER(cr) ) {
-    gmxgomodel_t *m = go->model;
+    gmxgocfg_t *cfg = go->cfg;
 
-    gmxgomodel_default(m);
-    gmxgomodel_load(m, fncfg);
+    gmxgocfg_default(cfg);
+    gmxgocfg_load(cfg, fncfg);
   }
 
   /* broadcast the parameters */
   if ( PAR(cr) ) {
-    gmx_bcast(sizeof(gmxgomodel_t), go->model, cr);
+    gmx_bcast(sizeof(gmxgocfg_t), go->cfg, cr);
   }
 
   go->kT = BOLTZ * tp;
@@ -453,22 +453,26 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 
   /* load the reference */
   if ( MASTER(cr) ) {
-    gmxgomodel_t *m = go->model;
+    gmxgocfg_t *cfg = go->cfg;
 
-    if ( gmxgo_loadxref(go, m->fnpdb) != 0 ) {
+    if ( gmxgo_loadxref(go, cfg->fnpdb) != 0 ) {
       exit(1);
     }
 
-    go->wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
-        m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+    go->wl = wl_openf(cfg->rmsdmin, cfg->rmsdmax, cfg->rmsddel,
+        cfg->wl_lnf0, cfg->wl_flatness, cfg->wl_frac, cfg->invt_c,
+        NULL, 0);
+    if ( go->wl == NULL ) {
+      exit(1);
+    }
 
-    go->rhis = hist_open(0, m->rhis_max, m->rhis_dx);
+    go->rhis = hist_open(0, cfg->rhis_max, cfg->rhis_dx);
 
     /* continue from the last run */
     go->isctn = ctn;
     if ( ctn ) {
-      wl_load(go->wl, m->fnvrmsd);
-      hist_load(go->rhis, m->fnrhis);
+      wl_load(go->wl, cfg->fnvrmsd);
+      hist_load(go->rhis, cfg->fnrhis);
     }
     fprintf(stderr, "parallel %d, domain-decomposition %d\n",
         PAR(cr), DOMAINDECOMP(cr));
@@ -622,7 +626,7 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 /* distance between two alpha carbon atoms */
 #define CACABOND 0.382
-/* maximal deviation */
+/* maximal permissible deviation */
 #define CACABOND_DEV 0.06
 
 
@@ -675,7 +679,7 @@ static int gmxgo_shift(gmxgo_t *go,
   vcopy(xout[0], xin[0]);
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
-    if ( go->model->seltype == SEL_CA ) {
+    if ( go->cfg->seltype == SEL_CA ) {
       dr = vnorm(dx);
       dev = fabs(dr - CACABOND);
       if ( dev > devmax ) {
@@ -697,8 +701,8 @@ static int gmxgo_shift(gmxgo_t *go,
         xin[id - 1][0], xin[id - 1][1], xin[id - 1][2],
         xin[id][0], xin[id][1], xin[id][2], devmax);
     gmxgo_dump(go, xin, ePBC, box, step);
-    hist_save(go->rhis, go->model->fnrhis);
-    wl_save(go->wl, go->model->fnvrmsd);
+    hist_save(go->rhis, go->cfg->fnrhis);
+    wl_save(go->wl, go->cfg->fnvrmsd);
   }
 
   //fprintf(stderr, "step %d, max dev %gA\n", (int) step, devmax*10);
@@ -707,13 +711,19 @@ static int gmxgo_shift(gmxgo_t *go,
 
 
 
-/* project the force `f` along rmsd */
+/* compute the projection of the force `f` along rmsd
+ * used in mean-force based flat-histogram sampling */
 static double gmxgo_projectf(gmxgo_t *go, double (*f)[D],
     double rmsd, double kT, double (*x)[D], double (*xf)[D])
 {
   int i, n = go->n;
   double dx[D], dot = 0;
 
+  /* the mean force is equal to Sum_i u_i f_i
+   * with u_i the conjugate field to the gradient,
+   *    dR/dx_i = m_i (x_i - xref_i) / (M R)
+   * and u_i should satisfy Sum_i u_i dR/dx_i = 1
+   * Here we use u_i = (x_i - xref_i) / R */
   for ( i = 0; i < n; i++ ) {
     /* compute the gradient */
     vdiff(dx, x[i], xf[i]);
@@ -728,45 +738,77 @@ static double gmxgo_projectf(gmxgo_t *go, double (*f)[D],
 
 
 /* compute the mean force `go->mf` of the current `rmsd`
+ * compute dV(R)/dR and dV(R)/dx_i, with R being the RMSD
+ * and V(R) being the bias potential
  * does not apply to the actual force */
 static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
 {
   int i;
-  double dx[D], dvdx;
-  gmxgomodel_t *m = go->model;
+  double dvdx;
+  gmxgocfg_t *cfg = go->cfg;
 
-  if ( m->bias_mf ) {
+  /* 1. compute dV(R)/dR */
+  if ( cfg->bias_mf ) {
     /* compute the gradient from the bias potential */
-    dvdx = wl_getdvdx_mf(go->wl, rmsd, m->minh,
-        m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
-    //printf("%g, %g\n", rmsd, dvdx); getchar();
+    dvdx = wl_getdvdx_mf(go->wl, rmsd, cfg->minh,
+        cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
   } else {
     /* compute the gradient from the bias mean force */
     dvdx = wl_getdvdx_v(go->wl, rmsd,
-        m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+        cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
   }
+  //fprintf(stderr, "rmsd %g, dvdx %g\n", rmsd, dvdx); getchar();
+
+  if ( abs(go->cfg->debug) == 15 ) {
+    /* In this test, we apply a quadratic potential
+     * this test allows us to see if the unit for kT is proper
+     * If beta V(R) = 1/2 A (R - R0)^2,
+     * then dV(R)/dR = kT A (R - R0),
+     * the factor kT is to be applied later on,
+     * for a large A, we expect | R - R0 | ~ 1/sqrt(A)
+     *
+     * Thus, we can compare the distribution with
+     *   (0.5*A/pi)**0.5*exp(-0.5*A*(x - R0)**2)
+     * in gnuplot
+     * */
+    double A = 900;
+    dvdx = A * (rmsd - 0.5);
+  } else if ( abs(go->cfg->debug) == 17 ) {
+    /* This potential should roughly cancel
+     * this distribution at 600 K
+     * which means that the distribution
+     * between rmsd = (0.6, 1.0) should be flat */
+    if ( fabs(rmsd - 0.8) < 0.2 ) {
+      dvdx = -60.0 * (rmsd - 0.8);
+    } else {
+      /* restraining force */
+      dvdx = 100.0 * (rmsd - 0.8);
+    }
+  }
+
   dvdx *= go->kT;
 
-  /* place the limits */
-  if ( dvdx < m->mfmin ) {
-    dvdx = m->mfmin;
-  } else if ( dvdx > m->mfmax ) {
-    dvdx = m->mfmax;
+  /* apply the limits */
+  if ( dvdx < cfg->mfmin ) {
+    dvdx = cfg->mfmin;
+  } else if ( dvdx > cfg->mfmax ) {
+    dvdx = cfg->mfmax;
   }
 
   go->dvdx = dvdx;
-  //fprintf(stderr, "rmsd %gA, dvdx %g\n", rmsd*10, go->dvdx);
+  //fprintf(stderr, "rmsd %gA, dvdx %g, kT %g (%g, %g)\n", rmsd*10, go->dvdx, go->kT, cfg->mfmin, cfg->mfmax);
 
-  //dvdx  = go->kT * 2.0 * (rmsd - 0.5);
+  /* 2. compute the force scaling factor
+   * f_i = -dV(R)/dx_i
+   *     = -(dV(R)/dR) (dR/dx_i)
+   *     = -(dV(R)/dR) m_i (x_i - xref_i) / (M R)
+   * we divide the factor (M R) first
+   **/
   dvdx /= rmsd * go->masstot;
 
   for ( i = 0; i < go->n; i++ ) {
-    vzero( go->f[i] );
-  }
-
-  for ( i = 0; i < go->n; i++ ) {
-    vdiff(dx, go->x[i], go->xf[i]);
-    vsinc(go->f[i], dx, -go->dvdx * go->mass[i]);
+    vdiff(go->f[i], go->x[i], go->xf[i]);
+    vsmul(go->f[i], -dvdx * go->mass[i]);
   }
 
   return 0;
@@ -788,7 +830,7 @@ static void gmxgo_chat(gmxgo_t *go, gmx_int64_t step, double rmsd)
 static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 {
   if ( go->fplog == NULL ) {
-    go->fplog = fopen(go->model->fnlog, (go->isctn ? "a" : "w"));
+    go->fplog = fopen(go->cfg->fnlog, (go->isctn ? "a" : "w"));
   }
 
   if ( go->fplog != NULL ) {
@@ -799,14 +841,16 @@ static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 
 
 
-/* ePBC == fr->ePBC */
+/* compute the force from the RMSD bias potential
+ * add this force to `f`
+ * set the argument ePBC as fr->ePBC */
 static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
     int ePBC, matrix box, gmx_int64_t step)
 {
   double rmsd = 0, mf;
   rvec *x = state->x;
   int err = 0;
-  gmxgomodel_t *m = go->model;
+  gmxgocfg_t *cfg = go->cfg;
   t_commrec *cr = go->cr;
 
   /* collect `x` from different nodes to `go->x1` on the master */
@@ -820,19 +864,29 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
     //for ( i = 0; i < go->n; i++ )
     //  printf("%d: %g %g %g | %g %g %g\n", i, go->x[i][0], go->x[i][1], go->x[i][2], go->xref[i][0], go->xref[i][1], go->xref[i][2]);
 
+    /* rotate and translate `go->xref` to fit the current
+     * configuration `go->x`, the rotated and translated structure
+     * is saved in `go->xf`
+     * also compute the RMSD between `go->xf` and `go->x` */
     rmsd = vrmsd(go->xref, go->xf, go->x, go->mass, go->n,
         0, NULL, NULL);
+
+    /* add the current RMSD to WL, update the bias potential */
     wl_addf(go->wl, rmsd);
+    /* update the updating magnitude, lnf */
     wl_updatelnf(go->wl);
 
-    /* update the histogram */
+    /* update the RMSD histogram
+     * This histogram is independent of one in WL
+     * and it covers a wider range with a finer width */
     hist_add(go->rhis, rmsd);
 
-    if ( (step > 0 && step % m->nstchat == 0) || m->debug ) {
+    if ( (step > 0 && step % cfg->nstchat == 0) || cfg->debug > 0 ) {
       gmxgo_chat(go, step, rmsd);
 
+#if 0
       /* debugging code to test HMC rejection */
-      if ( m->debug == 3 ) {
+      if ( cfg->debug == 3 ) {
         int id;
 
         for ( id = 0; id < go->stn; id+= 1000 ) {
@@ -842,15 +896,16 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
         }
         //getchar();
       }
+#endif
 
-      if ( step > 0 && step % m->nstlog == 0 ) {
+      if ( step > 0 && step % cfg->nstlog == 0 ) {
         gmxgo_log(go, step, rmsd);
       }
     }
 
-    if ( step > 0 && step % m->nstrep == 0 ) {
-      wl_save(go->wl, m->fnvrmsd);
-      hist_save(go->rhis, m->fnrhis);
+    if ( step > 0 && step % cfg->nstrep == 0 ) {
+      wl_save(go->wl, cfg->fnvrmsd);
+      hist_save(go->rhis, cfg->fnrhis);
     }
   }
 
@@ -861,8 +916,9 @@ BCAST_ERR:
   if ( err ) return err;
 
   /* compute the projection of force on RMSD
-   * we compute the mean force even it is not needed */
-  /* if ( m->bias_mf ) */
+   * only useful for the mean-force based flat-histogram
+   * it seems that this code is not working */
+  if ( cfg->bias_mf )
   {
     /* collect `f` from different nodes to `go->x1` on the master
      * `doid = 0` since we must have indices now */
@@ -878,12 +934,14 @@ BCAST_ERR:
   }
 
   if ( MASTER(cr) ) {
-    /* compute the force from the RMSD bias */
+    /* compute the force from the RMSD bias potential */
     gmxgo_calcmf(go, rmsd);
   }
 
-  /* apply the mean force */
-  gmxgo_scatterf(go, f, 0);
+  /* apply the mean force (additively) */
+  if ( !cfg->passive ) {
+    gmxgo_scatterf(go, f, 0);
+  }
 
   return err;
 }
@@ -914,6 +972,8 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
   int i, n;
   t_commrec *cr = go->cr;
 
+  if ( go->cfg->passive ) return 0;
+
   /* determine the number of home atoms */
   n = PAR(cr) ? cr->dd->nat_home : state->natoms;
 
@@ -929,7 +989,7 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
   }
 
 #if 0
-  if ( go->model->debug == 3 && step % 300 - 1 == 3 ) {
+  if ( go->cfg->debug == 3 && step % 300 - 1 == 3 ) {
     int id;
 
     /* see if the force matches the just popped value */
@@ -961,6 +1021,8 @@ static int gmxgo_hmcpushv(gmxgo_t *go,
   int i, n;
   t_commrec *cr = go->cr;
 
+  if ( go->cfg->passive ) return 0;
+
   /* determine the number of home atoms */
   n = PAR(cr) ? cr->dd->nat_home : state->natoms;
 
@@ -982,13 +1044,15 @@ static int gmxgo_hmcpushv(gmxgo_t *go,
 
 
 
-/* pop x, v, f
- * assume the number of home atoms are not changed */
-static void gmxgo_hmcpop(gmxgo_t *go,
+/* pop x, v, f (reverse to the previous configuration)
+ * assume the number of home atoms is not changed */
+static int gmxgo_hmcpop(gmxgo_t *go,
     t_state *state, rvec *f, int reversev)
 {
   int i, n = go->stn, nn, d;
   t_commrec *cr = go->cr;
+
+  if ( go->cfg->passive ) return 0;
 
   /* determine the number of home atoms */
   nn = PAR(cr) ? cr->dd->nat_home : state->natoms;
@@ -1008,10 +1072,13 @@ static void gmxgo_hmcpop(gmxgo_t *go,
   gmxgo_vcopy(state->x, go->stx, n);
   gmxgo_vcopy(state->v, go->stv, n);
   gmxgo_vcopy(f,        go->stf, n);
+
+  return 0;
 }
 
 
 
+/* compute the RMSD between two structures */
 static double gmxgo_raw_rmsd(gmxgo_t *go,
     double (*xf)[D], double (*x)[D])
 {
@@ -1027,15 +1094,18 @@ static double gmxgo_raw_rmsd(gmxgo_t *go,
 
 
 
-/* select */
+/* decide whether to accept the current configuration
+ * or return to the previous one */
 static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
 {
   double rmsd1, rmsd2, delv, dr0;
   int err = 0, acc = 1;
-  gmxgomodel_t *m = go->model;
+  gmxgocfg_t *cfg = go->cfg;
   t_commrec *cr = go->cr;
+
+  if ( cfg->passive ) return 0;
 
   /* collect `state->x` from different nodes to `go->x1` on the master */
   gmxgo_gatherx(go, state->x, go->x1, 1);
@@ -1064,9 +1134,9 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       goto BCAST_ERR;
     }
 
-    if ( m->bias_mf ) {
-      delv = wl_getdelv_mf(go->wl, rmsd1, rmsd2, m->minh,
-          m->mflmin, m->mflmax, m->mfhmin, m->mfhmax);
+    if ( cfg->bias_mf ) {
+      delv = wl_getdelv_mf(go->wl, rmsd1, rmsd2, cfg->minh,
+          cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
     } else {
       delv = wl_getdelv_v(go->wl, rmsd1, rmsd2);
     }
@@ -1077,10 +1147,12 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       acc = ( r < exp(-delv) );
     }
 
+#if 0
     /* special flag to test HMC rejection */
-    if ( m->debug == 3 ) {
+    if ( cfg->debug == 3 ) {
       acc = ( step % 300 != 3 );
     }
+#endif
 
     if ( !acc ) {
       go->hmcrej += 1;
@@ -1095,8 +1167,13 @@ BCAST_ERR:
     gmx_bcast(sizeof(err), &err, cr);
     gmx_bcast(sizeof(acc), &acc, cr);
   }
+
   if ( !err && !acc ) {
     gmxgo_hmcpop(go, state, f, reversev);
+  }
+
+  if ( PAR(cr) ) {
+    gmx_barrier(cr);
   }
 
   return acc;

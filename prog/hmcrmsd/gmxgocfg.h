@@ -3,6 +3,10 @@
 
 
 
+/* input parameters */
+
+
+
 #include "util.h"
 
 
@@ -27,6 +31,9 @@ typedef struct {
   const char *fnpdb; /* reference PDB structure */
 
   int seltype; /* SEL_CA, SEL_HEAVY, SEL_ALL */
+
+  int passive; /* only observe the RMSD distribution
+                  do not change it */
 
   int dohmc; /* use HMC to reject unwanted configurations */
 
@@ -64,57 +71,60 @@ typedef struct {
   int nstrep;
 
   int debug;
-} gmxgomodel_t;
+} gmxgocfg_t;
 
 
 
-static void gmxgomodel_default(gmxgomodel_t *m)
+static void gmxgocfg_default(gmxgocfg_t *cfg)
 {
-  m->fnpdb = "1VII.pdb";
+  cfg->fnpdb = "1VII.pdb";
 
-  m->seltype = SEL_CA;
+  cfg->seltype = SEL_ALL;
 
-  m->dohmc = 1;
+  cfg->passive = 0;
 
-  m->bias_mf = 0;
+  cfg->dohmc = 1;
 
-  m->mfmin = -100.0;
-  m->mfmax = +100.0;
+  cfg->bias_mf = 0;
+
+  cfg->mfmin = -1000.0;
+  cfg->mfmax = +1000.0;
 
   /* for rmsd < rmsdmin, a bias with dvdx < 0 helps
    * the RMSD increase and go back to the range */
-  m->mflmin = -100.0;
-  m->mflmax = 0.0;
+  cfg->mflmin = -1000.0;
+  cfg->mflmax = 0.0;
 
   /* for rmsd > rmsdmax, a bias with dvdx > 0 helps
    * the RMSD decrease and go back to the range */
-  m->mfhmin = 1.0;
-  m->mfhmax = 100.0;
+  cfg->mfhmin = 10.0;
+  cfg->mfhmax = 1000.0;
 
-  m->minh = 0;
+  cfg->minh = 0;
 
-  m->fnvrmsd = "vrmsd.dat";
+  cfg->fnvrmsd = "vrmsd.dat";
 
-  m->rmsdmin = 0.08;
-  m->rmsdmax = 0.80;
-  m->rmsddel = 0.005;
+  /* RMSD range */
+  cfg->rmsdmin = 0.10;
+  cfg->rmsdmax = 1.00;
+  cfg->rmsddel = 0.01;
 
-  m->wl_lnf0 = 1e-4;
-  m->wl_flatness = 0.3;
-  m->wl_frac = 0.5;
-  m->invt_c = 1;
+  cfg->wl_lnf0 = 1e-4;
+  cfg->wl_flatness = 0.3;
+  cfg->wl_frac = 0.5;
+  cfg->invt_c = 1;
 
-  m->rhis_dx = 0.002;
-  m->rhis_max = 4.0;
-  m->fnrhis = "rhis.dat";
+  cfg->rhis_dx = 0.002;
+  cfg->rhis_max = 4.0;
+  cfg->fnrhis = "rhis.dat";
 
-  m->fnlog = "rmsd.log";
+  cfg->fnlog = "rmsd.log";
 
-  m->nstlog = 100;
-  m->nstchat = 1000;
-  m->nstrep = 10000;
+  cfg->nstlog = 100;
+  cfg->nstchat = 1000;
+  cfg->nstrep = 10000;
 
-  m->debug = 0;
+  cfg->debug = 0;
 }
 
 
@@ -134,7 +144,7 @@ static int array_select(const char *val, const char **names, int cnt)
 
 
 /* load settings from the configuration file `fn` */
-static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
+static int gmxgocfg_load(gmxgocfg_t *cfg, const char *fn)
 {
   FILE *fp;
   char buf[800], *p, *key, *val;
@@ -180,63 +190,69 @@ static int gmxgomodel_load(gmxgomodel_t *m, const char *fn)
 
     if ( strcmpfuzzy(key, "pdb") == 0
       || strcmpfuzzy(key, "fnpdb") == 0 ) {
-      m->fnpdb = strclone(val);
+      cfg->fnpdb = strclone(val);
     } else if ( strcmpfuzzy(key, "seltype") == 0 ) {
-      m->seltype = array_select(val, seltype_names, SEL_COUNT);
-      //printf("m->seltype %d\n", m->seltype); getchar();
+      cfg->seltype = array_select(val, seltype_names, SEL_COUNT);
+      //printf("cfg->seltype %d\n", cfg->seltype); getchar();
+    } else if ( strcmpfuzzy(key, "passive") == 0 ) {
+      if ( *val ) {
+        cfg->passive = atoi(val);
+      } else {
+        cfg->passive = 1;
+      }
     } else if ( strcmpfuzzy(key, "mfmin") == 0 ) {
-      m->mfmin = atof(val);
+      cfg->mfmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfmax") == 0 ) {
-      m->mfmax = atof(val);
+      cfg->mfmax = atof(val);
     } else if ( strcmpfuzzy(key, "mflmin") == 0 ) {
-      m->mflmin = atof(val);
+      cfg->mflmin = atof(val);
     } else if ( strcmpfuzzy(key, "mflmax") == 0 ) {
-      m->mflmax = atof(val);
+      cfg->mflmax = atof(val);
     } else if ( strcmpfuzzy(key, "mfhmin") == 0 ) {
-      m->mfhmin = atof(val);
+      cfg->mfhmin = atof(val);
     } else if ( strcmpfuzzy(key, "mfhmax") == 0 ) {
-      m->mfhmax = atof(val);
+      cfg->mfhmax = atof(val);
     } else if ( strcmpfuzzy(key, "minh") == 0 ) {
-      m->minh = atof(val);
+      cfg->minh = atof(val);
     } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
-      m->fnvrmsd = strclone(val);
+      cfg->fnvrmsd = strclone(val);
     } else if ( strcmpfuzzy(key, "rmsdmin") == 0 ) {
-      m->rmsdmin = atof(val);
+      cfg->rmsdmin = atof(val);
     } else if ( strcmpfuzzy(key, "rmsdmax") == 0 ) {
-      m->rmsdmax = atof(val);
+      cfg->rmsdmax = atof(val);
     } else if ( strcmpfuzzy(key, "rmsddel") == 0 ) {
-      m->rmsddel = atof(val);
+      cfg->rmsddel = atof(val);
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
-      m->wl_lnf0 = atof(val);
+      cfg->wl_lnf0 = atof(val);
     } else if ( strcmpfuzzy(key, "wl_flatness") == 0 ) {
-      m->wl_flatness = atof(val);
+      cfg->wl_flatness = atof(val);
     } else if ( strcmpfuzzy(key, "wl_frac") == 0 ) {
-      m->wl_frac = atof(val);
+      cfg->wl_frac = atof(val);
     } else if ( strcmpfuzzy(key, "invt_c") == 0 ) {
-      m->invt_c = atof(val);
+      cfg->invt_c = atof(val);
     } else if ( strcmpfuzzy(key, "rhis_dx") == 0 ) {
-      m->rhis_dx = atof(val);
+      cfg->rhis_dx = atof(val);
     } else if ( strcmpfuzzy(key, "rhis_max") == 0 ) {
-      m->rhis_max = atof(val);
+      cfg->rhis_max = atof(val);
     } else if ( strcmpfuzzy(key, "fnrhis") == 0 ) {
-      m->fnrhis = strclone(val);
+      cfg->fnrhis = strclone(val);
     } else if ( strcmpfuzzy(key, "fnlog") == 0 ) {
-      m->fnlog = strclone(val);
+      cfg->fnlog = strclone(val);
     } else if ( strcmpfuzzy(key, "nstlog") == 0 ) {
-      m->nstlog = atoi(val);
+      cfg->nstlog = atoi(val);
     } else if ( strcmpfuzzy(key, "nstchat") == 0 ) {
-      m->nstchat = atoi(val);
+      cfg->nstchat = atoi(val);
     } else if ( strcmpfuzzy(key, "nstrep") == 0 ) {
-      m->nstrep = atoi(val);
+      cfg->nstrep = atoi(val);
     } else if ( strcmpfuzzy(key, "hmc") == 0
              || strcmpfuzzy(key, "dohmc") == 0 ) {
-      m->dohmc = atoi(val);
+      cfg->dohmc = atoi(val);
     } else if ( strcmpfuzzy(key, "biasmf") == 0
              || strcmpfuzzy(key, "bias_mf") == 0 ) {
-      m->bias_mf = atoi(val);
+      cfg->bias_mf = atoi(val);
     } else if ( strcmpfuzzy(key, "debug") == 0
              || strcmpfuzzy(key, "dbg") == 0 ) {
-      m->debug = (*val) ? atoi(val) : 1;
+      cfg->debug = (*val) ? atoi(val) : 1;
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();

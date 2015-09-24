@@ -3,6 +3,11 @@
 
 
 
+
+/* flat histogram sampling */
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
@@ -32,9 +37,11 @@ typedef struct {
   double *cf; /* counts of force */
   double *sf; /* sum of force */
   double *vf; /* bias potential from integrating the mean force */
+  double *w; /* non-flat target distribution */
+  double wtot;
   double tot;
-  double lnf0;
-  double lnf; /* current updating factor lnf */
+  double lnf0; /* initial updating factor */
+  double lnf; /* current updating factor */
   double flatness; /* Wang-Landau threshold for the histogram flatness */
   double frac; /* Wang-Landau reduction factor for lnf */
   double c; /* c/t */
@@ -42,43 +49,38 @@ typedef struct {
 
 
 
+#ifndef xnew
+#define xnew(x, n) { \
+  if ((x = calloc((n), sizeof(*(x)))) == NULL) { \
+    fprintf(stderr, "no memory for " #x " x %d\n", (int) (n)); \
+    exit(1); } }
+#endif
+
+
+
+/* open a Wang-Landau object
+ * `n` is the number of bins
+ * `lnf0` is the initial updating factor
+ * `flatness` is the flatness threshold to switch stages
+ * `frac` is the multiplicative factor to be multiplied to `lnf`
+ *    upon stage switching
+ * `c` is the constant of asymptotic formula for lnf = c/t
+ * `w` is the nonflat target distribution
+ * */
 __inline static wl_t *wl_open0(int n,
     double lnf0, double flatness, double frac,
-    double c, unsigned flags)
+    double c, const double *w, unsigned flags)
 {
   wl_t *wl;
   int i;
 
-  if ( (wl = calloc(1, sizeof(*wl))) == NULL ) {
-    fprintf(stderr, "no memory for WL\n");
-    return NULL;
-  }
+  xnew(wl, 1);
   wl->n = n;
-  if ( (wl->h = calloc(n, sizeof(double))) == NULL ) {
-    fprintf(stderr, "no memory for the WL histogram\n");
-    free(wl);
-    return NULL;
-  }
-  if ( (wl->v = calloc(n, sizeof(double))) == NULL ) {
-    fprintf(stderr, "no memory for the WL potential\n");
-    free(wl);
-    return NULL;
-  }
-  if ( (wl->cf = calloc(n, sizeof(double))) == NULL ) {
-    fprintf(stderr, "no memory for the mean-force counts\n");
-    free(wl);
-    return NULL;
-  }
-  if ( (wl->sf = calloc(n + 1, sizeof(double))) == NULL ) {
-    fprintf(stderr, "no memory for the mean force\n");
-    free(wl);
-    return NULL;
-  }
-  if ( (wl->vf = calloc(n + 1, sizeof(double))) == NULL ) {
-    fprintf(stderr, "no memory for the potential of mean force\n");
-    free(wl);
-    return NULL;
-  }
+  xnew(wl->h,   n);
+  xnew(wl->v,   n);
+  xnew(wl->cf,  n);
+  xnew(wl->sf,  n);
+  xnew(wl->vf,  n);
   for ( i = 0; i < n; i++ ) {
     wl->h[i] = 0.0;
     wl->v[i] = 0.0;
@@ -92,6 +94,38 @@ __inline static wl_t *wl_open0(int n,
   wl->flatness = flatness;
   wl->frac = frac;
   wl->c = c;
+
+  xnew(wl->w, n);
+  if ( w != NULL ) {
+    double wmin = DBL_MAX;
+
+    /* find the minimal weight */
+    for ( i = 0; i < n; i++ ) {
+      if ( w[i] < wmin ) {
+        wmin = w[i];
+      }
+    }
+
+    if ( wmin <= 0 ) {
+      fprintf(stderr, "the target distribution cannot contain zero\n");
+      return NULL;
+    }
+
+    /* copy the weight and normalize it
+     * such that the minimal weight is 1.0 */
+    wl->wtot = 0;
+    for ( i = 0; i < n; i++ ) {
+      wl->w[i] = w[i] / wmin;
+      wl->wtot += wl->w[i];
+    }
+
+  } else {
+    for ( i = 0; i < n; i++ ) {
+      wl->w[i] = 1;
+    }
+    wl->wtot = n;
+  }
+
   wl->flags = flags;
   return wl;
 }
@@ -101,12 +135,12 @@ __inline static wl_t *wl_open0(int n,
 /* open a Wang-Landau object for an integer */
 __inline static wl_t *wl_openi(int nmin, int nmax,
     double lnf0, double flatness, double frac,
-    double c, unsigned flags)
+    double c, const double *w, unsigned flags)
 {
   wl_t *wl;
   int n = nmax - nmin + 1;
 
-  wl = wl_open0(n, lnf0, flatness, frac, c, flags);
+  wl = wl_open0(n, lnf0, flatness, frac, c, w, flags);
   wl->nmin = nmin;
   wl->xmin = nmin;
   wl->dx = 1.0;
@@ -120,13 +154,13 @@ __inline static wl_t *wl_openi(int nmin, int nmax,
 /* open a Wang-Landau object for a floating-point number */
 __inline static wl_t *wl_openf(double xmin, double xmax, double dx,
     double lnf0, double flatness, double frac,
-    double c, unsigned flags)
+    double c, const double *w, unsigned flags)
 {
   wl_t *wl;
   int n;
 
   n = (int) ((xmax - xmin) / dx + 0.5);
-  wl = wl_open0(n, lnf0, flatness, frac, c, flags);
+  wl = wl_open0(n, lnf0, flatness, frac, c, w, flags);
   wl->xmin = xmin;
   wl->dx = dx;
   wl->xmax = xmin + dx * n;
@@ -144,12 +178,13 @@ __inline static void wl_close(wl_t *wl)
   free(wl->cf);
   free(wl->sf);
   free(wl->vf);
+  free(wl->w);
   free(wl);
 }
 
 
 
-/* compute the total of the histogram */
+/* compute the total of the histogram `h` */
 __inline static double wl_gethtot(const double *h, int n)
 {
   double htot = 0;
@@ -218,7 +253,7 @@ __inline static double wl_getvf(wl_t *wl, double x)
 /* limit the mean force
  * if `x < wl->xmin`, limit the force in (flmin, flmax)
  * if `x > wl->xmax`, limit the force in (fhmin, fhmax) */
-__inline static double wl_wrapmf(int flags, double f,
+static double wl_limitmf(int flags, double f,
     double flmin, double flmax, double fhmin, double fhmax)
 {
   if ( flags < 0 ) {
@@ -264,7 +299,7 @@ __inline static double wl_getdvdx_v(wl_t *wl, double x,
   }
   f = (wl->v[i + 1] - wl->v[i]) / wl->dx;
 
-  return wl_wrapmf(flags, f, flmin, flmax, fhmin, fhmax);
+  return wl_limitmf(flags, f, flmin, flmax, fhmin, fhmax);
 }
 
 
@@ -310,27 +345,28 @@ __inline static double wl_getdvdx_mf(wl_t *wl, double x, double minh,
 
   i = wl_getid_mf(wl, x, &flag);
   f = ( wl->cf[i] > minh ) ? wl->sf[i] / wl->cf[i] : 0;
-  return wl_wrapmf(flag, f, flmin, flmax, fhmin, fhmax);
+  return wl_limitmf(flag, f, flmin, flmax, fhmin, fhmax);
 }
 
 
 
 /* retrieve difference of the bias potential, v(x2) - v(x1),
  * from integrating the accumulated mean force
- * we use an approximate formula */
+ * we use an approximate formula
+ * currently only support the flat histogram case */
 __inline static double wl_getdelv_mf(wl_t *wl,
     double x1, double x2, double minh,
     double flmin, double flmax, double fhmin, double fhmax)
 {
   double f1 = wl_getdvdx_mf(wl, x1, minh, flmin, flmax, fhmin, fhmax);
   double f2 = wl_getdvdx_mf(wl, x2, minh, flmin, flmax, fhmin, fhmax);
-
   return (f1 + f2) / 2 * (x2 - x1);
 }
 
 
 
-/* integrate the mean force to get the bias potential */
+/* integrate the mean force to get the bias potential
+ * currently only support the flat histogram case */
 __inline static void wl_intmf(wl_t *wl)
 {
   int i;
@@ -356,11 +392,10 @@ __inline static int wl_addi(wl_t *wl, int i)
     return -1;
   }
   wl->h[i] += 1.0;
-  wl->v[i] += wl->lnf;
+  wl->v[i] += wl->lnf / wl->w[i];
   wl->tot += 1.0;
   return 0;
 }
-
 
 
 
@@ -383,7 +418,7 @@ __inline static int wl_addf(wl_t *wl, double x)
     return -1;
   }
   wl->h[i] += 1.0;
-  wl->v[i] += wl->lnf;
+  wl->v[i] += wl->lnf / wl->w[i];
   wl->tot += 1.0;
   return 0;
 }
@@ -416,13 +451,14 @@ __inline static int wl_addforcef(wl_t *wl, double x, double f)
 
 
 /* compute the histogram flatness from the absolute value */
-__inline static double wl_getflatnessabs(const double *h, int n)
+__inline static double wl_getflatnessabs(const double *h,
+    const double *href, int n)
 {
-  double hmin, hmax;
+  double hmin = DBL_MAX, hmax = 0, x;
   int i;
 
-  hmin = hmax = h[0];
-  for ( i = 1; i < n; i++ ) {
+  for ( i = 0; i < n; i++ ) {
+    x = h[i] / href[i];
     if ( h[i] > hmax ) {
       hmax = h[i];
     } else if ( h[i] < hmin ) {
@@ -435,13 +471,14 @@ __inline static double wl_getflatnessabs(const double *h, int n)
 
 
 /* compute the histogram flatness from the standard deviation */
-__inline static double wl_getflatnessstd(const double *h, int n)
+__inline static double wl_getflatnessstd(const double *h,
+    const double *href, int n)
 {
   double y, sh = 0, shh = 0;
   int i;
 
   for ( i = 0; i < n; i++ ) {
-    y = h[i];
+    y = h[i] / href[i];
     sh += y;
     shh += y * y;
   }
@@ -457,18 +494,19 @@ __inline static double wl_getflatnessstd(const double *h, int n)
 __inline static double wl_getflatness(const wl_t *wl)
 {
   if ( wl->flags & WL_FLATNESSABS ) {
-    return wl_getflatnessabs(wl->h, wl->n);
+    return wl_getflatnessabs(wl->h, wl->w, wl->n);
   } else {
-    return wl_getflatnessstd(wl->h, wl->n);
+    return wl_getflatnessstd(wl->h, wl->w, wl->n);
   }
 }
 
 
 
-/* lnf = 1/t */
+/* compute lnf from c/t
+ * where t is the number of steps per bin */
 __inline static double wl_lnfinvt(const wl_t *wl)
 {
-  return wl->c * wl->n / wl->tot;
+  return wl->c * wl->wtot / wl->tot;
 }
 
 
@@ -528,6 +566,7 @@ __inline static int wl_save(wl_t *wl, const char *fn)
   fprintf(fp, "# %d %d %g %g %g %d %g\n",
       wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot,
       wl->isinvt, wl->lnf);
+
   for ( i = 0; i < wl->n; i++ ) {
     if ( wl->isfloat ) {
       /* floating-point version */
@@ -538,8 +577,9 @@ __inline static int wl_save(wl_t *wl, const char *fn)
     }
 
     mf = (wl->cf[i] > 0) ? wl->sf[i] / wl->cf[i] : 0;
-    fprintf(fp, " %g %g %g %g %g %g\n",
+    fprintf(fp, " %g %g %g %g %g %g %g\n",
         wl->v[i], wl->h[i] / (htot * wl->dx), wl->h[i],
+        wl->w[i],
         (wl->vf[i] + wl->vf[i+1])/2, mf, wl->cf[i]);
   }
   fclose(fp);
