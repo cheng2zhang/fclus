@@ -37,7 +37,8 @@ static int run_hmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
     cago_vv(go, 1.0, m->mddt);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
 
-    /* use hybrid MC to sample a flat histogram along the cluster size */
+    /* use hybrid MC to sample a flat histogram
+     * do this every m->nsthmc (default 1) steps  */
     if ( fmod(t, m->nsthmc) < 0.1 ) {
       hmctot += 1;
       hmcacc += cago_hmc_rmsd(go, wl, hmc, &rmsd);
@@ -127,7 +128,7 @@ int main(int argc, char **argv)
 
   /* open a Wang-Landau object */
   wl = wl_openf(m->rmsdmin, m->rmsdmax, m->rmsddel,
-      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, NULL, 0);
 
   /* change the degrees of freedom, with velocity swaps
    * the angular momenta are no longer conserved

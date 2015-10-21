@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 
   /* open a Wang-Landau object */
   wl = wl_openi(ncmin, ncmax,
-      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, NULL, 0);
 
   /* warm up the system such that nc < ncmax */
   nc = cago_ncontacts(go, go->x, -1, NULL, NULL);

@@ -42,6 +42,7 @@ typedef struct {
   const char *fnpos;
   const char *fnvnc;
   const char *fnvrmsd;
+  const char *fnxymap; /* for implicit HMC along the number of contacts */
   const char *fnrep;
   double fncmin; /* minimal fraction of number of contacts */
   double fncmax; /* maximal fraction of number of contacts */
@@ -90,6 +91,7 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->fnpos = "lj.pos";
   m->fnvnc = "vnc.dat";
   m->fnvrmsd = "vrmsd.dat";
+  m->fnxymap = "xy.dat";
   m->fnrep = NULL;
   m->fncmin = 0.0;
   m->fncmax = 1.0;
@@ -132,6 +134,7 @@ __inline static void cagomodel_help(const cagomodel_t *m)
   fprintf(stderr, "  --pos=:        set the output coordinates file, default: %s\n", m->fnpos);
   fprintf(stderr, "  --vnc=:        set the output file for the NC bias potential, default: %s\n", m->fnvnc);
   fprintf(stderr, "  --vrmsd=:      set the output file for the RMSD bias potential, default: %s\n", m->fnvrmsd);
+  fprintf(stderr, "  --xymap=:      set the output file for the average <NC> vs. the approximate smooth bias potential, default: %s\n", m->fnxymap);
   fprintf(stderr, "  --rep=:        set the output report file, default: %s\n", m->fnrep);
   fprintf(stderr, "  --rmin=:       set the minimal RMSD, default %g\n", m->rmsdmin);
   fprintf(stderr, "  --rmax=:       set the maximal RMSD, default %g\n", m->rmsdmax);
@@ -251,6 +254,8 @@ __inline static int cagomodel_load(cagomodel_t *m, const char *fn)
       m->fnvnc = strclone(val);
     } else if ( strcmpfuzzy(key, "fnvrmsd") == 0 ) {
       m->fnvrmsd = strclone(val);
+    } else if ( strcmpfuzzy(key, "fnxymap") == 0 ) {
+      m->fnxymap = strclone(val);
     } else if ( strcmpfuzzy(key, "fnrep") == 0 ) {
       m->fnrep = strclone(val);
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
@@ -295,7 +300,7 @@ __inline static void cagomodel_doargs(cagomodel_t *m, int argc, char **argv)
   char *p, *q;
 
   /* reset */
-  cagomodel_default(m);
+  //cagomodel_default(m);
 
   /* set the program name */
   m->prog = argv[0];

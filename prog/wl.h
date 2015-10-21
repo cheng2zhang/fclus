@@ -459,10 +459,10 @@ __inline static double wl_getflatnessabs(const double *h,
 
   for ( i = 0; i < n; i++ ) {
     x = h[i] / href[i];
-    if ( h[i] > hmax ) {
-      hmax = h[i];
-    } else if ( h[i] < hmin ) {
-      hmin = h[i];
+    if ( x > hmax ) {
+      hmax = x;
+    } else if ( x < hmin ) {
+      hmin = x;
     }
   }
   return hmax > hmin ? (hmax - hmin) / (hmax + hmin) : 1.0;
@@ -563,6 +563,7 @@ __inline static int wl_save(wl_t *wl, const char *fn)
   /* integrate the mean force */
   wl_intmf(wl);
 
+  /* write the information line */
   fprintf(fp, "# %d %d %g %g %g %d %g\n",
       wl->isfloat, wl->n, wl->xmin, wl->dx, wl->tot,
       wl->isinvt, wl->lnf);
