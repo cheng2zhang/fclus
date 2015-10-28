@@ -31,17 +31,67 @@ install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 System preparation
 ==================
 
+
+1. Making the input PDB
+-----------------------
+
+To make a PDB file for the ideal helix, run the mkhelix.py
+```
+python mkhelix.py --cter -n 20 -o helix20.pdb
+```
+
+
+2. Using the script `simulpdb.py`
+---------------------------------
+
+The python script `simulpdb.py` is a wrapper for GROMACS programs
+to prepare initial files from a single PDB file.
+The script is linked here under the subdirectory `simulpdb`
+
+This step prepare the the following files for GROMACS simulation.
+
+File            | Description
+----------------|------------------------
+`init.gro`      | initial configuration
+`topol.top`     | topology file
+`mdrun.mdp`     | sample MD parameter file
+
 ```
 mkdir init
 cd init
 path/to/simulpdb.py \
   --gmxexe=gromacs/build/root \
   -d 9
+  --ff=amber03
   my.pdb
 cd ..
 ```
 
-Adjust `-d 15` to control the number of water
+The argument `gromacs/build/root` for the option `--gmxexe=`
+is `~/lwork/gmx/gromacs5.0/buildgcc` for the office computer.
+
+The option `-d 9` means that the protein is separated from
+any of periodic mirror image by at least 9 angstroms
+in the simulation box.
+The number can be adjusted, with a larger number means
+more water molecules in the simulation box.
+
+The force field in the above example is AMBER03, `--ff=amber03`.
+If the option is missing the force field is AMBER99SB-ILDN.
+
+
+
+### Notes
+
+The original version of `simulpdb.py` is located under
+```
+WORKROOT/gmx/user/code/python/simulpdb/simulpdb.py
+```
+where WORKROOT is either `~/work` or `~/lwork`.
+
+
+3. Preparation for MD simulations
+----------------------------------
 
 ```
 gromacs/build/root/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr

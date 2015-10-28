@@ -1,0 +1,20 @@
+Overview
+========
+
+Prepares a system for GROMACS simulation from a single PDB.
+
+
+
+Files
+=====
+
+simulpdb.py
+
+
+Test case
+=========
+
+cd test
+../simulpdb.py ala12.pdb -d 9 --gmxexe=~/lwork/gmx/gromacs5.0/buildgcc --ver=5.0
+
+
