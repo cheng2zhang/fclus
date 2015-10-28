@@ -4,8 +4,8 @@ Overview
 This module is intended to sampling a flat histogram along
 
 
-Install
-=======
+Installation
+============
 
 1. Install GROMACS 5.0
 2. Copy this directory to `src/programs/`
@@ -35,20 +35,27 @@ System preparation
 1. Making the input PDB
 -----------------------
 
+Any protein PDB file can be used to as the input.
+
 To make a PDB file for the ideal helix, run the mkhelix.py
 ```
-python mkhelix.py --cter -n 20 -o helix20.pdb
+python mkhelix.py --ter -n 12 -o ala12.pdb
 ```
+
+If only the C-terminal residue NH2 is needed,
+then change `--ter` to `--cter`.
 
 
 2. Using the script `simulpdb.py`
 ---------------------------------
 
+This step converts the input PDB file to GROMACS files.
+
 The python script `simulpdb.py` is a wrapper for GROMACS programs
 to prepare initial files from a single PDB file.
 The script is linked here under the subdirectory `simulpdb`
 
-This step prepare the the following files for GROMACS simulation.
+This step prepare the the following files for MD simulation in GROMACS.
 
 File            | Description
 ----------------|------------------------
@@ -80,6 +87,16 @@ The force field in the above example is AMBER03, `--ff=amber03`.
 If the option is missing the force field is AMBER99SB-ILDN.
 
 
+In the office computer, the test system is prepared under
+`~/lwork/gmx/gromacs5.0/buildgcc/hmctest_ala12`.
+The command is
+```
+~/lwork/gmx/user/code/python/simulpdb/simulpdb.py \
+  --gmxexe=~/lwork/gmx/gromacs5.0/buildgcc \
+  -d 9 --ff=amber03 \
+  ~/lwork/fclus/prog/hmcrmsd/ala12.pdb
+```
+
 
 ### Notes
 
@@ -90,20 +107,76 @@ WORKROOT/gmx/user/code/python/simulpdb/simulpdb.py
 where WORKROOT is either `~/work` or `~/lwork`.
 
 
-3. Preparation for MD simulations
-----------------------------------
+3. Preparation for the MD simulation
+------------------------------------
+
+### Copy files to the running directory
+
+Link or copy the files `init.gro`, `topol.top` and `mdrun.mdp` from the previous step
+to the running directory.
+
+Also copy the reference PDB file, which is `ala12.pdb` in our example,
+and the HMC parameter file, which is `ala12.cfg`, to the running directory.
+
+### Change MD parameters in `md.mdp`
+
+Rename `mdrun.mdp` to `md.mdp` and
+
+ * Increase the number of steps by changing `nsteps=`.
+ * Modify the number of steps for the interval of configuration output `nstxtc=`.
+ * Modify the XTC group, `xtcgroup=Protein` if only protein coordinates are of interest.
+ * Modify the number of steps of logging, `nstlog`
+ * Modify the number of steps of logging
 
 ```
 gromacs/build/root/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
-gromacs/build/root/bin/hmcrmsd -cfg 1LE1.cfg -deffnm md -v -ntmpi 1 -ntomp 2
 ```
 
+For the alanine example in the office computer
+```
+../bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
+```
 
+### Change HMC parameters in `.cfg` file
+
+The following are the most common options in the configuration file
+for the program `hmcrmsd`
+
+ * Change the name of the reference PDB,
+   `PDB = ala12.pdb`.
+
+ * Check the target atom group for the RMSD bias,
+   `RMSD-group = heavy`.
+   The option `heavy` (meaning all non-hydrogen atoms on the protein)
+   can be changed to `CA` (alpha-carbon atoms) or `all` (all atoms on
+   the protein).  The option `all` should be used with caution,
+   because not all PDB files furnish coordinates for hydrogen atoms.
+   Compared to `CA`, the option `heavy` is preferred because as more
+   atoms are included in the RMSD group, the gentler the bias force
+   would be.
+
+ * Change the target RMSD range and bin size
+    `RMSD-min = 0.10`
+    `RMSD-max = 0.70`
+    `RMSD-del = 0.01`
+
+
+4. Run the MD simulation
+------------------------
+
+```
+gromacs/build/root/bin/hmcrmsd -cfg myhmc.cfg -deffnm md -v -ntmpi 1 -ntomp 2
+```
+
+For the alanine example in the office computer
+```
+../bin/hmcrmsd -cfg ala12.cfg -deffnm md -v -ntmpi 1 -ntomp 2
+```
 
 Code template
 ===============
 
-The code is based on GROMACS 5.0.5.
+The code is based on GROMACS 5.0.7.
 The source code is based on
 ```
 src/programs/mdrun

@@ -14,8 +14,8 @@ from math import *
 # number of residues
 nres = 10
 fnout = None
-nter = 0
-cter = 0  # add a residue of NH2 on the C-terminal
+nter = 0  # add an ACE residue at the N-terminal
+cter = 0  # add an NH2 residue at the C-terminal
 verbose = 0
 
 
@@ -25,15 +25,16 @@ def help():
     print "%s [Options]" % sys.argv[0]
     print "  -n :             specify the number of residues"
     print "  -o :             specify the output file, if none, print the output on screen"
-    #print "  --nter, -N:      add N-terminal residue ACE"
+    print "  --nter, -N:      add a N-terminal residue ACE"
     print "  --cter, -C:      add a C-terminal residue NH2"
+    print "  --ter, -T:       add both terminal residues"
     sys.exit(1)
 
 
 def doargs():
     try:
-        opts, args = getopt.gnu_getopt(sys.argv[1:], "hn:o:NcCv:",
-             ["help", "output=", "nter", "cter", "verbose="])
+        opts, args = getopt.gnu_getopt(sys.argv[1:], "hn:o:TNcCv:",
+             ["help", "output=", "ter", "nter", "cter", "verbose="])
     except getopt.GetoptError, err:
         # print help information and exit:
         print str(err) # will print something like "option -a not recognized"
@@ -50,6 +51,8 @@ def doargs():
             nter = 1
         elif o in ("-C", "-c", "--cter"):
             cter = 1
+        elif o in ("-T", "--ter"):
+            cter = nter = 1
         elif o in ("-v",):
             verbose += 1
         elif o in ("--verbose",):
@@ -101,16 +104,30 @@ def mkhelix(nres, fn):
         pos[i] = aa
 
     pdbwriter = [[], 1]
+
+    resid = 1
+
+    # add the N-terminal
+    if nter:
+        aa = pos[0]
+        mkpdbatom(pdbwriter, "CH3", resid, aa["xca"], resname = "ACE")
+        mkpdbatom(pdbwriter, "C",   resid, aa["xc"],  resname = "ACE")
+        mkpdbatom(pdbwriter, "O",   resid, aa["xo"],  resname = "ACE")
+        resid += 1
+
+    # `i` is the internal residue index
+    # `resid` is the output residue index
     for i in range(1, nres + 1):
         aa = pos[i]
-        mkpdbatom(pdbwriter, "N",  i, aa["xn"])
+        mkpdbatom(pdbwriter, "N",  resid, aa["xn"])
         if i > 1 or nter:
-          mkpdbatom(pdbwriter, "H", i, aa["xh"])
-        mkpdbatom(pdbwriter, "CA", i, aa["xca"])
-        mkpdbatom(pdbwriter, "HA", i, aa["xha"])
-        mkpdbatom(pdbwriter, "CB", i, aa["xcb"])
-        mkpdbatom(pdbwriter, "C",  i, aa["xc"])
-        mkpdbatom(pdbwriter, "O",  i, aa["xo"])
+          mkpdbatom(pdbwriter, "H", resid, aa["xh"])
+        mkpdbatom(pdbwriter, "CA", resid, aa["xca"])
+        mkpdbatom(pdbwriter, "HA", resid, aa["xha"])
+        mkpdbatom(pdbwriter, "CB", resid, aa["xcb"])
+        mkpdbatom(pdbwriter, "C",  resid, aa["xc"])
+        mkpdbatom(pdbwriter, "O",  resid, aa["xo"])
+        resid += 1
 
     # add the C-terminal
     if cter:

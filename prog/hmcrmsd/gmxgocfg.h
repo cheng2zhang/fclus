@@ -11,14 +11,14 @@
 
 
 enum {
-  SEL_CA = 0,
-  SEL_HEAVY,
-  SEL_ALL,
-  SEL_CAENDTOEND,
-  SEL_COUNT
+  RMSDGRP_CA = 0,
+  RMSDGRP_HEAVY,
+  RMSDGRP_ALL,
+  RMSDGRP_CAENDTOEND,
+  RMSDGRP_COUNT
 };
 
-const char *seltype_names[] = {
+const char *rmsdgrp_names[] = {
   "CA",
   "heavy",
   "all",
@@ -30,7 +30,7 @@ const char *seltype_names[] = {
 typedef struct {
   const char *fnpdb; /* reference PDB structure */
 
-  int seltype; /* SEL_CA, SEL_HEAVY, SEL_ALL */
+  int rmsdgrp; /* RMSDGRP_CA, RMSDGRP_HEAVY, RMSDGRP_ALL */
 
   int passive; /* only observe the RMSD distribution
                   do not change it */
@@ -79,7 +79,7 @@ static void gmxgocfg_default(gmxgocfg_t *cfg)
 {
   cfg->fnpdb = "1VII.pdb";
 
-  cfg->seltype = SEL_ALL;
+  cfg->rmsdgrp = RMSDGRP_ALL;
 
   cfg->passive = 0;
 
@@ -191,9 +191,10 @@ static int gmxgocfg_load(gmxgocfg_t *cfg, const char *fn)
     if ( strcmpfuzzy(key, "pdb") == 0
       || strcmpfuzzy(key, "fnpdb") == 0 ) {
       cfg->fnpdb = strclone(val);
-    } else if ( strcmpfuzzy(key, "seltype") == 0 ) {
-      cfg->seltype = array_select(val, seltype_names, SEL_COUNT);
-      //printf("cfg->seltype %d\n", cfg->seltype); getchar();
+    } else if ( strcmpfuzzy(key, "seltype") == 0
+             || strcmpfuzzy(key, "RMSD-group") == 0
+             || strcmpfuzzy(key, "rmsdgrp") == 0 ) {
+      cfg->rmsdgrp = array_select(val, rmsdgrp_names, RMSDGRP_COUNT);
     } else if ( strcmpfuzzy(key, "passive") == 0 ) {
       if ( *val ) {
         cfg->passive = atoi(val);

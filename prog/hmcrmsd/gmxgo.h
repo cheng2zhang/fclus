@@ -107,28 +107,28 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
     char atnm[8];
     int resind = mt->atoms.atom[ia].resind;
-    int sel = 0, seltype = go->cfg->seltype;
+    int sel = 0, rmsdgrp = go->cfg->rmsdgrp;
 
     strcpy(atnm, mt->atoms.atomname[ia][0]);
     strstrip(atnm);
 
-    if ( seltype == SEL_CA ) {
+    if ( rmsdgrp == RMSDGRP_CA ) {
       if ( strcmp(atnm, "CA") == 0 ) {
         sel = 1;
       }
-    } else if ( seltype == SEL_HEAVY ) {
+    } else if ( rmsdgrp == RMSDGRP_HEAVY ) {
       if ( atnm[0] != 'H' && atnm[0] != 'D' ) {
         sel = 1;
       }
-    } else if ( seltype == SEL_ALL ) {
+    } else if ( rmsdgrp == RMSDGRP_ALL ) {
       sel = 1;
-    } else if ( seltype == SEL_CAENDTOEND ) {
+    } else if ( rmsdgrp == RMSDGRP_CAENDTOEND ) {
       if ( strcmp(atnm, "CA") == 0
         &&  (resind == 0 || resind == go->nres - 1) ) {
         sel = 1;
       }
     } else {
-      fprintf(stderr, "unknown seltype %d\n", seltype);
+      fprintf(stderr, "unknown rmsdgrp %d\n", rmsdgrp);
       return -1;
     }
 
@@ -679,7 +679,7 @@ static int gmxgo_shift(gmxgo_t *go,
   vcopy(xout[0], xin[0]);
   for ( i = 1; i < go->n; i++ ) {
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
-    if ( go->cfg->seltype == SEL_CA ) {
+    if ( go->cfg->rmsdgrp == RMSDGRP_CA ) {
       dr = vnorm(dx);
       dev = fabs(dr - CACABOND);
       if ( dev > devmax ) {
