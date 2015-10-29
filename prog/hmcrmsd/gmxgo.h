@@ -857,6 +857,8 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
   }
   //fprintf(stderr, "rmsd %g, dvdx %g\n", rmsd, dvdx); getchar();
 
+  /* the following are debugging code
+   * to override the mean force */
   if ( abs(go->cfg->debug) == 15 ) {
     /* In this test, we apply a quadratic potential
      * this test allows us to see if the unit for kT is proper
@@ -904,6 +906,14 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
    **/
   dvdx /= rmsd * go->masstot;
 
+  /* for explicit HMC case, we allow this force
+   * only for out-of-boundary cases */
+  if ( cfg->exhmc
+      && rmsd > go->wl->xmin && rmsd < go->wl->xmax ) {
+    dvdx = 0;
+    go->dvdx = 0;
+  }
+
   for ( i = 0; i < go->n; i++ ) {
     vdiff(go->f[i], go->x[i], go->xf[i]);
     vsmul(go->f[i], -dvdx * go->mass[i]);
@@ -941,7 +951,9 @@ static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 
 /* compute the force from the RMSD bias potential
  * add this force to `f`
- * set the argument ePBC as fr->ePBC */
+ * set the argument ePBC as fr->ePBC
+ * This routine is called immediate after `do_force()`
+ * in `md.c` */
 static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
     int ePBC, matrix box, gmx_int64_t step)
 {
@@ -1015,7 +1027,8 @@ BCAST_ERR:
 
   /* compute the projection of force on RMSD
    * only useful for the mean-force based flat-histogram
-   * it seems that this code is not working */
+   * it seems that this code is not working
+   * so this branch is useless for now */
   if ( cfg->bias_mf )
   {
     /* collect `f` from different nodes to `go->x1` on the master
@@ -1036,7 +1049,10 @@ BCAST_ERR:
     gmxgo_calcmf(go, rmsd);
   }
 
-  /* apply the mean force (additively) */
+  /* add the RMSD bias force to the actual force
+   * currently this call is made even in the case
+   * of explicit HMC in order to handle out of boundary cases
+   * the bias force is zero in normal cases, however */
   if ( !cfg->passive ) {
     gmxgo_scatterf(go, f, 0);
   }
@@ -1193,7 +1209,21 @@ static double gmxgo_raw_rmsd(gmxgo_t *go,
 
 
 /* decide whether to accept the current configuration
- * or return to the previous one */
+ * or return to the previous one
+ *
+ * This function is called after the GROMACS calls
+ * `update_coords()` and `update_constraints()`
+ * near the end of the MD step, so the coordinates
+ * is `state->x` is the updated one, which differs
+ * from the previous coordinates, denoted as `xold`,
+ * which are used for
+ * `do_force()`,
+ * `gmxgo_rmsd_force()`,
+ * `gmxgo_hmcpushxf()`.
+ *
+ * If this function decides to reject the current state,
+ * the system will go back to the state of `xold`.
+ * */
 static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
@@ -1221,14 +1251,24 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     rmsd2 = vrmsd(go->xref, go->xrt, go->xwhole, go->mass, go->n,
         0, NULL, NULL);
 
-    /* compute the RMSD between `xf` and `xwhole`
-     * Note that `xf` is essentially the same as `xrtp` except PBC.
-     * The periodic cell of the first atom of `xf` should match
-     * that of `x` since it is computed in `gmxgo_rmsd_force()`
-     * [after `do_force()`, before `gmxgo_hmcpushxf()`]
-     * of this step */
-    rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->xwhole);
+    if ( cfg->exhmc ) {
+      /* in the explicit HMC scheme, we compute the old RMSD
+       * from the previous configuration `go->x`,
+       * which is the configuration saved in `gmxgo_rmsd_force()`
+       * right after the `do_force()` call in this step */
+      rmsd1 = vrmsd(go->xref, NULL, go->x, go->mass, go->n,
+          0, NULL, NULL);
+    } else {
+      /* compute the RMSD between `xf` and `xwhole`
+       * Note that `xf` is essentially the same as `xrtp` except PBC.
+       * The periodic cell of the first atom of `xf` should match
+       * that of `x` since it is computed in `gmxgo_rmsd_force()`
+       * [after `do_force()`, before `gmxgo_hmcpushxf()`]
+       * of this step */
+      rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->xwhole);
+    }
 
+    /* checking code to see if our assumption on the PBC is correct */
     if ( once ) {
       /* the two whole structures `x` and `xwhole` are supposed to be close,
        * if not, one of them might have been wrapped unintendedly
@@ -1239,7 +1279,11 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       dr0whole = vdist(go->x[0], go->xwhole[0]);
       /* the two fitted structures `xf` and `xrt` are supposed to be close
        *   xrpt --> xf --> xrt */
-      dr0rt = vdist(go->xf[0], go->xrt[0]);
+      if ( cfg->exhmc ) {
+        dr0rt = 0;
+      } else {
+        dr0rt = vdist(go->xf[0], go->xrt[0]);
+      }
 
       if ( dr0whole > 0.1 || dr0rt > 0.5 ) {
         /* the threshold 0.1nm or 1A is generous, can be smaller */
@@ -1280,15 +1324,23 @@ static int gmxgo_hmcselect(gmxgo_t *go,
 
     if ( !acc ) {
       go->hmcrej += 1;
-      fprintf(stderr, "step %s: HMC rejecting a state, rmsd %g -> %g, delv %g\n",
-          gmx_step_str(step, go->sbuf), rmsd1, rmsd2, delv);
+      if ( !cfg->exhmc ) {
+        /* it is rare that implicit HMC rejects a state */
+        fprintf(stderr, "step %s: HMC rejecting a state, rmsd %g -> %g, delv %g\n",
+            gmx_step_str(step, go->sbuf), rmsd1, rmsd2, delv);
+      }
     }
     go->hmctot += 1;
 
     /* backup the structures */
     memcpy(go->xwholep, go->xwhole, go->n * sizeof(go->xwhole[0]));
-    memcpy(go->xrtp, go->xrt, go->n * sizeof(go->xrt[0]));
+    if ( !cfg->exhmc ) {
+      memcpy(go->xrtp, go->xrt, go->n * sizeof(go->xrt[0]));
+    }
     once = 1;
+
+    /* TODO: we may need to scramble velocities
+     * especially for explicit HMC */
   }
 
 BCAST_ERR:

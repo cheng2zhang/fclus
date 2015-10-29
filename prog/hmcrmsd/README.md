@@ -340,7 +340,8 @@ Code analysis
 
 ### `md.c`
 
-This file contains the most important code
+This file contains the most important code.
+The outline is shown below.
 
 * MD loop starts on line 593
 * `dd_partition_system()`, line 685
@@ -360,11 +361,11 @@ This file contains the most important code
     * `pme_receive_force_ener()`, line 2057
       get force from PME nodes
 
-* `gmxgo_rmsd_force()`, line 788
+* [+] `gmxgo_rmsd_force()`, line 788
   o collect the current coordinates
   o compute the force from the RMSD bias and add it to the total force `f`
 
-* `gmxgo_hmcpushxf()`, line 793
+* [+] `gmxgo_hmcpushxf()`, line 793
   o push the position and force.
 
 * `do_md_trajectory_writing()`, line 998
@@ -396,10 +397,10 @@ This file contains the most important code
     + change `x`; `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
     + however, PBC is not applied! The molecule is not necessarily whole.
 
-* `gmxgo_hmcpushv()`, line 1299
+* [+] `gmxgo_hmcpushv()`, line 1299
   o push the velocity
 
-* `gmxgo_hmcselect()`, line 1438
+* [+] `gmxgo_hmcselect()`, line 1438
   o decide whether to accept or reject the state `x`.
 
 * `dd_collect_state()`, line 1525

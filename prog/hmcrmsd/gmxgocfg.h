@@ -37,6 +37,8 @@ typedef struct {
 
   int dohmc; /* use HMC to reject unwanted configurations */
 
+  int exhmc; /* use explicit HMC scheme */
+
   int bias_mf; /* use mean force to estimate the bias potential */
 
   double mfmin;
@@ -84,6 +86,8 @@ static void gmxgocfg_default(gmxgocfg_t *cfg)
   cfg->passive = 0;
 
   cfg->dohmc = 1;
+
+  cfg->exhmc = 0;
 
   cfg->bias_mf = 0;
 
@@ -248,6 +252,11 @@ static int gmxgocfg_load(gmxgocfg_t *cfg, const char *fn)
     } else if ( strcmpfuzzy(key, "hmc") == 0
              || strcmpfuzzy(key, "dohmc") == 0 ) {
       cfg->dohmc = atoi(val);
+    } else if ( strcmpfuzzy(key, "exhmc") == 0
+             || strcmpfuzzy(key, "xhmc") == 0
+             || strcmpfuzzy(key, "explicit-hmc") == 0
+             || strcmpfuzzy(key, "hmc-explicit") == 0 ) {
+      cfg->exhmc = atoi(val);
     } else if ( strcmpfuzzy(key, "biasmf") == 0
              || strcmpfuzzy(key, "bias_mf") == 0 ) {
       cfg->bias_mf = atoi(val);
