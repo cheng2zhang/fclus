@@ -10,6 +10,7 @@
 #include "util.h"
 
 
+
 enum {
   RMSDGRP_CA = 0,
   RMSDGRP_HEAVY,
@@ -25,6 +26,7 @@ const char *rmsdgrp_names[] = {
   "CA-end-to-end",
   "count"
 };
+
 
 
 typedef struct {
@@ -56,6 +58,8 @@ typedef struct {
   double rmsdmin; /* minimal RMSD in angstroms */
   double rmsdmax;
   double rmsddel;
+
+  double wr_exponent; /* `a` in distribution density, rho(rmsd) ~ 1/rmsd^a */
 
   double wl_lnf0;
   double wl_flatness;
@@ -113,6 +117,7 @@ static void gmxgocfg_default(gmxgocfg_t *cfg)
   cfg->rmsdmax = 1.00;
   cfg->rmsddel = 0.01;
 
+  cfg->wr_exponent = 0;
   cfg->wl_lnf0 = 1e-4;
   cfg->wl_flatness = 0.3;
   cfg->wl_frac = 0.5;
@@ -145,6 +150,7 @@ static int array_select(const char *val, const char **names, int cnt)
 
   return -1;
 }
+
 
 
 /* load settings from the configuration file `fn` */
@@ -227,6 +233,8 @@ static int gmxgocfg_load(gmxgocfg_t *cfg, const char *fn)
       cfg->rmsdmax = atof(val);
     } else if ( strcmpfuzzy(key, "rmsddel") == 0 ) {
       cfg->rmsddel = atof(val);
+    } else if ( strcmpfuzzy(key, "wr_exponent") == 0 ) {
+      cfg->wr_exponent = atof(val);
     } else if ( strcmpfuzzy(key, "wl_lnf0") == 0 ) {
       cfg->wl_lnf0 = atof(val);
     } else if ( strcmpfuzzy(key, "wl_flatness") == 0 ) {

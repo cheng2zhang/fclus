@@ -204,6 +204,8 @@ key = value
 The format for `key` is case-insentitive, and it allows some hyphenations.
 Thus `RMSDmin` is equivalent to `RMSD-min` and `rmsdmin`.
 
+A comment line starts with `#` or `;`.
+
 Below is a list of common options.
 
 ## Most common options
@@ -236,6 +238,13 @@ for the program `hmcrmsd`
     ```
     Generally, `RMSD-max` should increase with the protein size.
     The idea is to cover the RMSD range for transition.
+
+  * Change the target RMSD distribution to 1/RMSD^a,
+    with exponent given by
+    ```
+    wr-exponent = 1.0
+    ```
+    The default exponent is 0.0, meaning a flat histogram.
 
 
 ## Advanced options
@@ -414,12 +423,26 @@ The following options are also deleted for simplicity.
 Code analysis
 -------------
 
+### Review of integrators
+
+#### leapfrog integrators
+
+ v += (f/m) dt
+ x += v dt
+
+#### velocity-verlet integrators
+
+ v += (f/m) (dt/2)      etrtVELOCITY2
+ x += v dt              etrtPOSITIION
+ v += (f/m) (dt/2)      etrtVELOCITY1
+
 ### `md.c`
 
 This file contains the most important code.
 The outline is shown below.
 The symbol `[+]` denotes the modification
 made for the program `hmcrmsd`.
+The outline is made specifically for the leapfrog algorithm.
 
 * MD loop starts on line 593
 * `dd_partition_system()`, line 685
@@ -446,6 +469,12 @@ made for the program `hmcrmsd`.
 * [+] `gmxgo_hmcpushxf()`, line 793
   o push the position and force.
 
+* for VV, `update_coords( etrtVELOCITY1 )`, line 831
+  o second half VV step of the previous MD step
+  o `update_coords( etrtVELOCITY1 )`
+  o `do_update_vv_vel()`
+  o v += (f/m) dt/2
+
 * `do_md_trajectory_writing()`, line 998
   o The function call collects x, v, f so that
     the master node has the complete coordinates now.
@@ -458,15 +487,27 @@ made for the program `hmcrmsd`.
   o calls `vrescale_tcoupl()` defined in `gromacs/mdlib/coupling.c`
     +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
     +  it doesn't touch the actual velocity array.
+  o for VV, update the velocity
+    for leapfrog, leave the velocity as is, will be done latter
+        in `update_coords( etrtPOSITION )`
 
-* `update_coords()`, line 1222
-  o update x, v for the local state
+* for VV, `update_coords( etrtVELOCITY2 )`, line 1199
+  o first half VV step of this MD step
+  o `update_coords( etrtVELOCITY2 )`
+  o v += (f/m) dt/2
+
+* `update_coords( etrtPOSITION )`, line 1222
   o defined in `gromacs/mdlib/update.c`
-  o calls `do_update_md()` in the same file,
+  o for leapfrog
+    + update x, v for the local state
+    + calls `do_update_md()` in the same file,
     + the normal branch starts from line 233
     + `v = v * ekind->tcstat[i].lambda + f * dt`
     + `xprime = x + v * dt`
     + `x` is usually not changed yet
+  o for VV,
+    + update x as x += v dt
+    + calls `do_update_vv_pos()`
 
 * `update_constraints()`, line 1227
   o defined in `gromacs/mdlib/update.c`
@@ -504,7 +545,9 @@ The following prints the flags
 ```
 
 ### Personal notes for potential modifications
+
  *  set the default `nstglobalcomm` to 1 in `mdrun.cpp`?
+ *  enforcing Andersen thermostat
 
 
 

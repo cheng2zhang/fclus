@@ -37,8 +37,11 @@ typedef struct {
 
   gmxvcomm_t *gvc;
   gmxgocfg_t cfg[1];
+
   double kT;
+  double *wr;
   wl_t *wl;
+
   hist_t *rhis; /* histogram */
   t_commrec *cr;
   double dvdx;
@@ -396,6 +399,26 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 
 
 
+/* build the target distribution function */
+static double *gmxgo_mkwr(double xmin, double xmax, double dx,
+    double exponent)
+{
+  int i, n;
+  double x, *wr;
+
+  n = (int) ( (xmax - xmin) / dx + 0.5 );
+  snew(wr, n);
+  for ( i = 0; i < n; i++ ) {
+    x = xmin + (i + 0.5) * dx;
+    /* no need to normalize the weight here,
+     * it will be done by the WL module */
+    wr[i] = pow(x, -exponent);
+  }
+  return wr;
+}
+
+
+
 /* initialize HMC state variables,
  * total number of atoms, position, velocity, force */
 static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
@@ -479,9 +502,14 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
       exit(1);
     }
 
+    /* initialize the target distribution */
+    go->wr = gmxgo_mkwr(cfg->rmsdmin, cfg->rmsdmax, cfg->rmsddel,
+        cfg->wr_exponent);
+
+    /* open a Wang-Landau object */
     go->wl = wl_openf(cfg->rmsdmin, cfg->rmsdmax, cfg->rmsddel,
         cfg->wl_lnf0, cfg->wl_flatness, cfg->wl_frac, cfg->invt_c,
-        NULL, 0);
+        go->wr, 0);
     if ( go->wl == NULL ) {
       exit(1);
     }
@@ -508,6 +536,7 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 static void gmxgo_close(gmxgo_t *go)
 {
   if ( MASTER(go->cr) ) {
+    sfree(go->wr);
     wl_close(go->wl);
     hist_close(go->rhis);
   }

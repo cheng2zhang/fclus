@@ -112,7 +112,11 @@ __inline static wl_t *wl_open0(int n,
     }
 
     /* copy the weight and normalize it
-     * such that the minimal weight is 1.0 */
+     * such that the _minimal_ weight is 1.0
+     * The idea is that is the relative weight of a bin is 2
+     * it is equivalent to two bins.
+     * In this way, the total time t in 1/t scheme can be
+     * generalized from T/n to T/wtot */
     wl->wtot = 0;
     for ( i = 0; i < n; i++ ) {
       wl->w[i] = w[i] / wmin;
