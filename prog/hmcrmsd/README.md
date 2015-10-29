@@ -1,11 +1,23 @@
 Overview
 ========
 
-This module is intended to sampling a flat histogram along
+The directory contains a program `hmcrmsd`,
+which is a molecular dynamics (MD) program
+intended to sampling a flat histogram along
+the root-mean-squared deviation (RMSD) from
+a reference structure.
+
+The program is a slight modification of the GROMACS
+MD engine `mdrun`.  Thus, its use is similar.
+The user should be able to compile GROMACS from the source.
+Then, the files under this directory can be used to
+supplement the GROMACS source code.
 
 
 Installation
 ============
+
+The source code under this directory is an independent module for GROMACS.
 
 1. Install GROMACS 5.0
 2. Copy this directory to `src/programs/`
@@ -24,9 +36,6 @@ set_target_properties(hmcrmsd PROPERTIES
 install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 ```
 
-5. To change running parameters, edit `hmcrmsd.cfg` and copy to the running directory.
-
-
 
 System preparation
 ==================
@@ -37,7 +46,7 @@ System preparation
 
 Any protein PDB file can be used to as the input.
 
-To make a PDB file for the ideal helix, run the mkhelix.py
+To make a PDB file for an ideal helix, run the mkhelix.py
 ```
 python mkhelix.py --ter -n 12 -o ala12.pdb
 ```
@@ -137,32 +146,20 @@ For the alanine example in the office computer
 ../bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
 ```
 
-### Change HMC parameters in `.cfg` file
+### HMC parameters
 
-The following are the most common options in the configuration file
-for the program `hmcrmsd`
+The HMC parameters are controlled by the `.cfg` file.
+See the special section below for details.
 
- * Change the name of the reference PDB,
-   `PDB = ala12.pdb`.
-
- * Check the target atom group for the RMSD bias,
-   `RMSD-group = heavy`.
-   The option `heavy` (meaning all non-hydrogen atoms on the protein)
-   can be changed to `CA` (alpha-carbon atoms) or `all` (all atoms on
-   the protein).  The option `all` should be used with caution,
-   because not all PDB files furnish coordinates for hydrogen atoms.
-   Compared to `CA`, the option `heavy` is preferred because as more
-   atoms are included in the RMSD group, the gentler the bias force
-   would be.
-
- * Change the target RMSD range and bin size
-    `RMSD-min = 0.10`
-    `RMSD-max = 0.70`
-    `RMSD-del = 0.01`
 
 
 4. Run the MD simulation
 ------------------------
+
+Running the program `hmcrmsd` is almost the same as running
+the GROMACS MD engine `mdrun`, the only difference is that
+we need to include the flag `-cfg myhmc.cfg` to specify the
+file for HMC parameters.
 
 ```
 gromacs/build/root/bin/hmcrmsd -cfg myhmc.cfg -deffnm md -v -ntmpi 1 -ntomp 2
@@ -173,16 +170,160 @@ For the alanine example in the office computer
 ../bin/hmcrmsd -cfg ala12.cfg -deffnm md -v -ntmpi 1 -ntomp 2
 ```
 
-Code template
-===============
 
-The code is based on GROMACS 5.0.7.
-The source code is based on
+
+Parameters in `.cfg` file
+=========================
+
+
+## Most common options
+
+The following are the most common options in the configuration file
+for the program `hmcrmsd`
+
+  * Change the name of the reference PDB,
+    `PDB = ala12.pdb`.
+
+  * Check the target atom group for the RMSD bias,
+    `RMSD-group = heavy`.
+    The option `heavy` (meaning all non-hydrogen atoms on the protein)
+    can be changed to `CA` (alpha-carbon atoms) or `all` (all atoms on
+    the protein).  The option `all` should be used with caution,
+    because not all PDB files furnish coordinates for hydrogen atoms.
+    Compared to `CA`, the option `heavy` is preferred because as more
+    atoms are included in the RMSD group, the gentler the bias force
+    would be.
+
+  * Change the target RMSD range and bin size
+    `RMSD-min = 0.10`
+    `RMSD-max = 0.70`
+    `RMSD-del = 0.01`
+    Generally, `RMSD-max` should increase with the protein size.
+    The idea is to cover the RMSD range for transition.
+
+
+## Advanced options
+
+The following options are less important.  We usually don't need to
+worry about them too much.  But in case something goes wrong, they
+may have to be modified somewhat.
+
+  * Wang-Landau parameter.  The potential energy surface
+    is continuously updated on-the-fly.  The magnitude of updating
+    is initially set to a value of `lnf0`, which can be changed by
+    `WL-lnf0 = 1e-3`
+    The parameter should be large enough to quickly achieve
+    an initial flat distribution along RMSD.  This would give
+    the simulator some hope for the simulation.  However, it should
+    not be too large as it can blow up the system.
+    In the long run the parameter must be reduced to approach a more
+    equilibrium-style simulation.
+    The reduction of the updating magnitude of `lnf` is done
+    stagewise. Particularly, in the initial stages, we will periodically
+    change if the distribution along RMSD is flat enough, that is if
+    the flatness is less than the value specified by
+    `WL-flatness = 0.3`
+    we will reduce `lnf` by a factor of
+    `WL-frac = 0.5`
+    In the long run, the above strategy is no long effective,
+    and we will simply use the formula of `lnf = C/t`
+    to change the updating factor, where `t` is the number of
+    steps per bin, and the value of `C` is given by
+    `Invt-C = 1`
+
+  * Valid range of the mean force,
+    ```
+    mfmin = -2000
+    mfmax = 2000
+    ```
+    The minimal and maximal mean-force value along RMSD.
+    The GROMACS unit (kJ/mol/nm) is used.
+
+  * Valid range of the mean force at the left boundary,
+    ```
+    mflmin = -2000
+    mflmax = -100
+    ```
+    These are the valid mean force range for `RMSD < RMSD-min`.
+    In the above example, we only allow a negative mean force
+    so that the RMSD of the system would be pushed to the desired
+    range.
+
+  * Similarly, we have parameters for the valid range the mean force
+    at the right boundary
+    ```
+    mfhmin = 100
+    mfhmax = 2000
+    ```
+
+## Input/output options
+
+  * The computed potential of mean force (PMF) is saved in the file
+    ```
+    fnvrmsd = vrmsd.dat
+    ```
+    The first column is the RMSD, the second the PMF.
+    The third column is the normalized histogram.
+    The fourth column is the unnormalized histogram.
+    To plot the PMF using GNUplot, use
+    ```
+    plot "vrmsd.dat" u 1:2 w l
+    ```
+    This file is saved every
+    ```
+    nstrep = 10000
+    ```
+    MD steps.
+
+  * The time series of the RMSD is saved in the file
+    ```
+    fnlog = rmsd.log
+    ```
+    which is saved every
+    ```
+    nstlog = 100
+    ```
+    MD steps.
+
+  * The frequency of print command-line information is controlled by
+    ```
+    nstchat = 1000
+    ```
+    which can be reduced when running on a supercomputer.
+
+
+## Testing/debugging options
+
+The following options are meant to for debugging.
+
+
+
+Command line options
+=========================
+
+  * `-cpi md.cpt`  This options, same as that for `mdrun`,
+    is used to continue a simulation
+
+
+
+
+Source code
+===========
+
+Below is a brief note on the source code.
+
+Code template
+-------------
+
+The source code is based on GROMACS 5.0.7.
+Particularly, it was created by copying the directory
 ```
 src/programs/mdrun
 ```
+of the GROMACS source code tree.
 
-`repl_ex.c`, `repl_ex.h`, `membed.h` are deleted for simplicity.
+However, `repl_ex.c`, `repl_ex.h`, `membed.h`
+are deleted for simplicity.
 
 The following options are also deleted for simplicity.
 
@@ -194,25 +335,19 @@ The following options are also deleted for simplicity.
 * FAHCORE
 
 
-Modifications
-=============
-
- *  set the default `nstglobalcomm` to 1 in `mdrun.cpp`
-
-
-
 Code analysis
-=============
+-------------
 
-md.c
-----
+### `md.c`
 
-* MD loop starts on line 582
-* `dd_partition_system()`, line 674
+This file contains the most important code
+
+* MD loop starts on line 593
+* `dd_partition_system()`, line 685
   o bMasterState is usually FALSE
   o usually go into branch 3, line 9531 in mdlib/domdec.c.
 
-* `do_force()`, line 768
+* `do_force()`, line 779
   o Defined in `sim_util.c`
   o `bStateChanged` is TRUE
     * `gmx_pme_send_coordinates()`, line 1738
@@ -225,12 +360,18 @@ md.c
     * `pme_receive_force_ener()`, line 2057
       get force from PME nodes
 
+* `gmxgo_rmsd_force()`, line 788
+  o collect the current coordinates
+  o compute the force from the RMSD bias and add it to the total force `f`
 
-* `do_md_trajectory_writing()`, line 977
+* `gmxgo_hmcpushxf()`, line 793
+  o push the position and force.
+
+* `do_md_trajectory_writing()`, line 998
   o The function call collects x, v, f so that
     the master node has the complete coordinates now.
 
-* `update_tcouple()`, line 1168
+* `update_tcouple()`, line 1190
   o update temperature coupling
     + every node does it (even nonmaster)
     + does it only `inputrec->nsttcouple` steps
@@ -239,7 +380,7 @@ md.c
     +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
     +  it doesn't touch the actual velocity array.
 
-* `update_coords()`, line 1200
+* `update_coords()`, line 1222
   o update x, v for the local state
   o defined in `gromacs/mdlib/update.c`
   o calls `do_update_md()` in the same file,
@@ -248,24 +389,29 @@ md.c
     + `xprime = x + v * dt`
     + `x` is usually not changed yet
 
-* `update_constraints()`, line 1205
+* `update_constraints()`, line 1227
   o defined in `gromacs/mdlib/update.c`
   o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
     + coordinates are only partially communicated
-    + `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
+    + change `x`; `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
     + however, PBC is not applied! The molecule is not necessarily whole.
 
-* `dd_collect_state()`, line 1430
+* `gmxgo_hmcpushv()`, line 1299
+  o push the velocity
 
-* `dd_partition_system()`, line 1436
+* `gmxgo_hmcselect()`, line 1438
+  o decide whether to accept or reject the state `x`.
+
+* `dd_collect_state()`, line 1525
+
+* `dd_partition_system()`, line 1531
   o `bNeedRepartition`
 
-* MD loop ends on line 1576
+* MD loop ends on line 1671
 
-snippets
---------
+### snippets
 
-### print state->flags
+#### print `state->flags`
 
 The following prints the flags
 ```
@@ -277,3 +423,9 @@ The following prints the flags
       fprintf(stderr, "%d: %s\n", est, est_names[est]);
 }
 ```
+
+### Personal notes for potential modifications
+ *  set the default `nstglobalcomm` to 1 in `mdrun.cpp`?
+
+
+

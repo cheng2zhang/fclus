@@ -25,9 +25,13 @@ typedef struct {
   double (*xf)[D]; /* fit structure */
   double (*x1)[D]; /* x1[0..n-1] */
   double (*x2)[D]; /* x2[0..n-1] */
+  double (*xwhole)[D];
+  double (*xwholep)[D];
+  double (*xrt)[D];
+  double (*xrtp)[D];
 
   int nres; /* number of residues */
-  int *resid;
+  int *resid; /* resid[0..n-1] is the PDB residue ID */
   char **resnm;
   char **atnm;
 
@@ -169,7 +173,8 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
 
 
 
-/* extract the coordinates of the special atoms */
+/* extract the coordinates of the special atoms
+ * from the GROMACS topology */
 static int gmxgo_build(gmxgo_t *go, gmx_mtop_t *mtop, t_commrec *cr)
 {
   if ( MASTER(cr) ) {
@@ -194,7 +199,7 @@ static int gmxgo_build(gmxgo_t *go, gmx_mtop_t *mtop, t_commrec *cr)
 
 
 
-/* load the reference coordinates */
+/* load the reference coordinates from a PDB file */
 static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 {
   FILE *fp;
@@ -207,6 +212,8 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 
   natm = 0;
   ncap = gmxgo_blksz;
+  /* the size of the following arrays are increased in multiples
+   * of gmxgo_blksz */
   snew(resid, ncap);
   snew(xref,  ncap);
   snew(atnm,  ncap);
@@ -217,11 +224,14 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
     return -1;
   }
 
-  /* 1. load raw PDB information */
+  /* 1. load all atom information from the PDB file */
   while ( fgets(s, sizeof s, fp) ) {
-    /* a model is finished, we implicitly include ENDMDL */
-    if ( strncmp(s, "TER", 3) == 0 || strncmp(s, "END", 3) == 0 )
+    /* stop when the first model is finished,
+     * we implicitly include ENDMDL */
+    if ( strncmp(s, "TER", 3) == 0
+      || strncmp(s, "END", 3) == 0 ) {
       break;
+    }
 
     /* PDB format specification
      * http://www.wwpdb.org/documentation/file-format-content/format33/sect9.html#ATOM
@@ -233,7 +243,7 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
     if ( s[16] != ' ' && s[16] != 'A' )
       continue;
 
-    /* reallocate memory if possible */
+    /* reallocate memory if needed */
     if ( natm >= ncap ) {
       ncap += gmxgo_blksz;
       srenew(resid, ncap);
@@ -275,15 +285,19 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 
   /* 2. match raw PDB information to the GROMACS topology */
   err = 0;
-  /* the array `used` tracks if each PDB entry is used */
+
+  /* `used[i]` tracks if the `i`th PDB ATOM entry is used */
   snew(used,  natm);
   for ( i = 0; i < natm; i++ ) used[i] = 0;
 
+  /* `matched[id]` tracks if the `id`th needed atom has found
+   * a correspondence in the PDB ATOM entries */
   snew(matched, go->n);
   for ( id = 0; id < go->n; id++ ) matched[id] = 0;
 
   for ( id = 0; id < go->n; id++ ) {
-    /* try to find the matching atom from the PDB file */
+    /* try to find the matching atom from the PDB file
+     * for the `id`th needed atom */
     for ( i = 0; i < natm; i++ ) {
       if ( resid[i] == go->resid[id]
         && strcmp(resnm[i], go->resnm[id]) == 0
@@ -313,8 +327,8 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
     go->xref[id][1] = xref[i][1];
     go->xref[id][2] = xref[i][2];
 
-    /* make this PDB entry is used, so we avoid
-     * this in subsequent fuzzy matching */
+    /* mark this PDB entry as used, so we can avoid
+     * it in subsequent fuzzy matching */
     used[i] = 1;
   }
 
@@ -329,7 +343,7 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
       len = strlen(go->atnm[id]) - 1;
 
       /* we do fuzzy matching only if the last character
-       * of the atom name is a number */
+       * of the atom name is a number, like HA2 */
       if ( !isdigit(go->atnm[id][len]) ) {
         err = 2;
       } else {
@@ -382,14 +396,16 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
 
 
 
-/* initialize */
+/* initialize HMC state variables,
+ * total number of atoms, position, velocity, force */
 static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
 {
   int ib, n = 0;
   gmx_molblock_t *mb = mtop->molblock;
   t_commrec *cr = go->cr;
 
-  /* count the number of atoms */
+  /* count the total number of atoms
+   * including those the water */
   for ( ib = 0; ib < mtop->nmolblock; ib++ ) {
     n += mb[ib].nmol * mb[ib].natoms_mol;
   }
@@ -450,6 +466,10 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
   snew(go->xf, go->n);
   snew(go->x1, go->n);
   snew(go->x2, go->n);
+  snew(go->xwhole, go->n);
+  snew(go->xwholep, go->n);
+  snew(go->xrt, go->n);
+  snew(go->xrtp, go->n);
 
   /* load the reference */
   if ( MASTER(cr) ) {
@@ -503,6 +523,10 @@ static void gmxgo_close(gmxgo_t *go)
   sfree(go->xf);
   sfree(go->x1);
   sfree(go->x2);
+  sfree(go->xwhole);
+  sfree(go->xwholep);
+  sfree(go->xrt);
+  sfree(go->xrtp);
   sfree(go->stx);
   sfree(go->stv);
   sfree(go->stf);
@@ -572,7 +596,7 @@ static int gmxgo_gatherx(gmxgo_t *go, rvec *x,
 
 
 
-/* distribute the force additively */
+/* add the bias force `go->f` to the actual force `f` */
 static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 {
   gmxvcomm_t *gvc = go->gvc;
@@ -631,7 +655,8 @@ static int gmxgo_scatterf(gmxgo_t *go, rvec *f, int doid)
 
 
 
-/* dump basic information */
+/* dump basic information
+ * including the current RMSD */
 __inline static void gmxgo_dump(gmxgo_t *go,
     double (*x)[D], int ePBC, matrix box, gmx_int64_t step)
 {
@@ -643,6 +668,7 @@ __inline static void gmxgo_dump(gmxgo_t *go,
 
   rmsd = vrmsd(go->xref, go->xf, go->x, go->mass, go->n,
       0, NULL, NULL);
+  /* print out the current RMSD */
   fprintf(stderr, "step %s, RMSD %gA:\n",
       gmx_step_str(step, go->sbuf), rmsd * 10);
 
@@ -664,6 +690,58 @@ __inline static void gmxgo_dump(gmxgo_t *go,
 
 
 
+/* save the current position to file
+ * `fn0` is the prefix of the file name */
+__inline static int gmxgo_writepdb(gmxgo_t *go,
+    double (*x)[D], const char *fn0, gmx_int64_t step)
+{
+  int i;
+  char fn[128];
+  FILE *fp;
+
+  /* construct a file name with the step number */
+  sprintf(fn, "%s_step%s.pdb", fn0, gmx_step_str(step, go->sbuf));
+
+  if ( (fp = fopen(fn, "w")) == NULL ) {
+    fprintf(stderr, "cannot write %s\n", fn);
+    return -1;
+  }
+
+  for ( i = 0; i < go->n; i++ ) {
+    fprintf(fp, "ATOM  %5d  %-3s %3s  %4d    %8.3f%8.3f%8.3f  1.00  1.00          %2c  \n",
+        i + 1, go->atnm[i], go->resnm[i], go->resid[i],
+        x[i][0] * 10, x[i][1] * 10, x[i][2] * 10, go->atnm[i][0]);
+  }
+
+  fclose(fp);
+  return 0;
+}
+
+
+
+/* check the connectivity, that is if all
+ * atoms from the same and nearby residues
+ * are less than dismax */
+static int gmxgo_checkconn(gmxgo_t *go, double (*x)[D],
+    double dismax)
+{
+  int i, j, ir, jr, n = go->n;
+  double r2, dis2 = dismax * dismax;
+
+  for ( i = 0; i < n - 1; i++ ) {
+    ir = go->resid[i];
+    for ( j = i + 1; j < n; j++ ) {
+      jr = go->resid[j];
+      if ( jr > ir + 1 ) break;
+      r2 = vdist2(x[i], x[j]);
+      if ( r2 > dis2 ) return -1;
+    }
+  }
+  return 0;
+}
+
+
+
 /* shift the coordinates to make the molecule whole
  * only the master needs to call this */
 static int gmxgo_shift(gmxgo_t *go,
@@ -678,6 +756,11 @@ static int gmxgo_shift(gmxgo_t *go,
 
   vcopy(xout[0], xin[0]);
   for ( i = 1; i < go->n; i++ ) {
+    /* we assume that the atoms i and i - 1 are close,
+     * and their distance is much smaller than
+     * half of the box size.
+     * This is true for alpha-carbon atoms.
+     * Is it true in general? */
     pbc_dx_d(pbc, xin[i], xin[i - 1], dx);
     if ( go->cfg->rmsdgrp == RMSDGRP_CA ) {
       dr = vnorm(dx);
@@ -687,32 +770,47 @@ static int gmxgo_shift(gmxgo_t *go,
         id = i;
       }
     }
+    /* attach the coordinates of i to those of i - 1 */
     vadd(xout[i], xout[i - 1], dx);
   }
 
-  err = (devmax > CACABOND_DEV);
-  if ( err ) {
-    pbc_dx_d(pbc, xin[id], xin[id - 1], dx);
-    dr = vnorm(dx);
-    fprintf(stderr, "step %s: broken peptide bond %d-%d, dr %g, "
-        "(%g, %g, %g); (%g, %g, %g) - (%g, %g, %g), dev %g\n",
-        gmx_step_str(step, go->sbuf), id - 1, id, dr,
-        dx[0], dx[1], dx[2],
-        xin[id - 1][0], xin[id - 1][1], xin[id - 1][2],
-        xin[id][0], xin[id][1], xin[id][2], devmax);
-    gmxgo_dump(go, xin, ePBC, box, step);
-    hist_save(go->rhis, go->cfg->fnrhis);
-    wl_save(go->wl, go->cfg->fnvrmsd);
+  if ( go->cfg->rmsdgrp == RMSDGRP_CA ) {
+    err = (devmax > CACABOND_DEV);
+    if ( err ) {
+      pbc_dx_d(pbc, xin[id], xin[id - 1], dx);
+      dr = vnorm(dx);
+      fprintf(stderr, "step %s: broken peptide bond %d-%d, dr %g, "
+          "(%g, %g, %g); (%g, %g, %g) - (%g, %g, %g), dev %g\n",
+          gmx_step_str(step, go->sbuf), id - 1, id, dr,
+          dx[0], dx[1], dx[2],
+          xin[id - 1][0], xin[id - 1][1], xin[id - 1][2],
+          xin[id][0], xin[id][1], xin[id][2], devmax);
+      gmxgo_dump(go, xin, ePBC, box, step);
+      hist_save(go->rhis, go->cfg->fnrhis);
+      wl_save(go->wl, go->cfg->fnvrmsd);
+    }
+    //fprintf(stderr, "step %d, max dev %gA\n", (int) step, devmax*10);
+  } else {
+    /* atoms from the same or nearby residue should not be over 9A apart */
+    err = gmxgo_checkconn(go, xout, 0.9);
+    if ( err ) {
+      fprintf(stderr, "system broken at step %s\n",
+          gmx_step_str(step, go->sbuf));
+      gmxgo_writepdb(go, xout, "xbadconn", step);
+    }
   }
 
-  //fprintf(stderr, "step %d, max dev %gA\n", (int) step, devmax*10);
   return err;
 }
 
 
 
 /* compute the projection of the force `f` along rmsd
- * used in mean-force based flat-histogram sampling */
+ * used in mean-force based flat-histogram sampling
+ *
+ * NOTE: the mean-force based method is not working
+ * so this function is unused now
+ * */
 static double gmxgo_projectf(gmxgo_t *go, double (*f)[D],
     double rmsd, double kT, double (*x)[D], double (*xf)[D])
 {
@@ -1100,7 +1198,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
 {
-  double rmsd1, rmsd2, delv, dr0;
+  double rmsd1, rmsd2, delv, dr0whole, dr0rt;
   int err = 0, acc = 1;
   gmxgocfg_t *cfg = go->cfg;
   t_commrec *cr = go->cr;
@@ -1111,30 +1209,56 @@ static int gmxgo_hmcselect(gmxgo_t *go,
   gmxgo_gatherx(go, state->x, go->x1, 1);
 
   if ( MASTER(cr) ) {
-    /* remove the periodic boundary condition
-     * to make the coordinates whole */
-    err = gmxgo_shift(go, go->x1, go->x2, ePBC, box, step);
+    static int once;
+
+    /* remove the periodic boundary condition of `x1`
+     * to make the coordinates whole, save the latter in `xwhole` */
+    err = gmxgo_shift(go, go->x1, go->xwhole, ePBC, box, step);
     if ( err != 0 ) goto BCAST_ERR;
 
-    /* transform `xref` to `x1` to fit `x2`
-     * compute the RMSD between `x1` and `x2` */
-    rmsd2 = vrmsd(go->xref, go->x1, go->x2, go->mass, go->n,
+    /* rotate and translate `xref` to `xrt` to best fit `xwhole`
+     * and compute the RMSD between `xrt` and `xwhole` */
+    rmsd2 = vrmsd(go->xref, go->xrt, go->xwhole, go->mass, go->n,
         0, NULL, NULL);
 
-    /* comupte the RMSD between `xf` and `x2` */
-    rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->x2);
+    /* compute the RMSD between `xf` and `xwhole`
+     * Note that `xf` is essentially the same as `xrtp` except PBC.
+     * The periodic cell of the first atom of `xf` should match
+     * that of `x` since it is computed in `gmxgo_rmsd_force()`
+     * [after `do_force()`, before `gmxgo_hmcpushxf()`]
+     * of this step */
+    rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->xwhole);
 
-    /* the two fitted structures are supposed to be close
-     * if not, one of them might have been wrapped unintendedly */
-    dr0 = vdist(go->xf[0], go->x1[0]);
-    if ( dr0 > 0.1 ) {
-      /* the threshold 0.1nm or 1A is generous, can be smaller */
-      fprintf(stderr, "The first special atoms of the two "
-          "fitted structures differ by %gA\n", dr0 * 10);
-      goto BCAST_ERR;
+    if ( once ) {
+      /* the two whole structures `x` and `xwhole` are supposed to be close,
+       * if not, one of them might have been wrapped unintendedly
+       * Note `xwholep` is supposed to be same as `x`, the time evolution is
+       *   xwholep --> x --> x1 --> xwhole
+       * where in the first step, x might have been wrapped because of
+       * the periodic boundary condition */
+      dr0whole = vdist(go->x[0], go->xwhole[0]);
+      /* the two fitted structures `xf` and `xrt` are supposed to be close
+       *   xrpt --> xf --> xrt */
+      dr0rt = vdist(go->xf[0], go->xrt[0]);
+
+      if ( dr0whole > 0.1 || dr0rt > 0.5 ) {
+        /* the threshold 0.1nm or 1A is generous, can be smaller */
+        fprintf(stderr, "\nWarning. step %s: the first special atoms of the two "
+            "whole/fitted structures differ by %gA (whole), %gA (fit)\n",
+            gmx_step_str(step, go->sbuf), dr0whole * 10, dr0rt * 10);
+        /* xwholep == x, xrtp == xf */
+        gmxgo_writepdb(go, go->xwholep, "xwholep", step);
+        gmxgo_writepdb(go, go->xwhole,  "xwhole",  step);
+        gmxgo_writepdb(go, go->xrtp,    "xrtp",    step);
+        gmxgo_writepdb(go, go->xrt,     "xrt",     step);
+        gmxgo_writepdb(go, go->xf,      "xf",      step);
+        gmxgo_writepdb(go, go->x,       "x",       step);
+        gmxgo_writepdb(go, go->x1,      "x1",      step);
+      }
     }
 
     if ( cfg->bias_mf ) {
+      /* this branch is not currently used */
       delv = wl_getdelv_mf(go->wl, rmsd1, rmsd2, cfg->minh,
           cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
     } else {
@@ -1160,6 +1284,11 @@ static int gmxgo_hmcselect(gmxgo_t *go,
           gmx_step_str(step, go->sbuf), rmsd1, rmsd2, delv);
     }
     go->hmctot += 1;
+
+    /* backup the structures */
+    memcpy(go->xwholep, go->xwhole, go->n * sizeof(go->xwhole[0]));
+    memcpy(go->xrtp, go->xrt, go->n * sizeof(go->xrt[0]));
+    once = 1;
   }
 
 BCAST_ERR:
