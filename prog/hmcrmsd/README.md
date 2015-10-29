@@ -5,11 +5,11 @@ The directory contains a program `hmcrmsd`,
 which is a molecular dynamics (MD) program
 intended to sampling a flat histogram along
 the root-mean-squared deviation (RMSD) from
-a reference structure.
+a reference structure of a protein.
 
-The program is a slight modification of the GROMACS
+The program is a modification of the GROMACS
 MD engine `mdrun`.  Thus, its use is similar.
-The user should be able to compile GROMACS from the source.
+The user should be able to compile GROMACS source.
 Then, the files under this directory can be used to
 supplement the GROMACS source code.
 
@@ -46,13 +46,29 @@ System preparation
 
 Any protein PDB file can be used to as the input.
 
-To make a PDB file for an ideal helix, run the mkhelix.py
+To make a PDB file for an ideal helix,
+run the python `mkhelix.py` under this directory.
 ```
-python mkhelix.py --ter -n 12 -o ala12.pdb
+python mkhelix.py -n 12 --ter -o ala12.pdb
 ```
 
-If only the C-terminal residue NH2 is needed,
-then change `--ter` to `--cter`.
+The option `-n 12` specifies the number of amino acid
+residues. The default residue is alanine (ALA).
+
+The option `--ter` adds a residue `ACE` on the N-terminal
+at the beginning of the amino-acid chain
+(an amino acid chain goes as `N-CA-CO-N-CA-CO-...`),
+and a residue `NH2` on the C-terminal
+at the end of the chain.
+If only the N-terminal residue ACE is needed,
+then change `--ter` to `--nter`;
+if only the C-terminal residue NH2 is needed
+then change `--ter` to `--cter`;
+if the option is missing, no terminal residue is added.
+
+The script is runnable, meanning that on a Linux machine,
+the `python` at the beginning of the command can be dropped.
+
 
 
 2. Using the script `simulpdb.py`
@@ -72,10 +88,11 @@ File            | Description
 `topol.top`     | topology file
 `mdrun.mdp`     | sample MD parameter file
 
+Here is a set of typical commands of using the script
 ```
 mkdir init
 cd init
-path/to/simulpdb.py \
+python path/to/simulpdb.py \
   --gmxexe=gromacs/build/root \
   -d 9
   --ff=amber03
@@ -88,7 +105,7 @@ is `~/lwork/gmx/gromacs5.0/buildgcc` for the office computer.
 
 The option `-d 9` means that the protein is separated from
 any of periodic mirror image by at least 9 angstroms
-in the simulation box.
+(0.9 nm) in the simulation box.
 The number can be adjusted, with a larger number means
 more water molecules in the simulation box.
 
@@ -100,7 +117,7 @@ In the office computer, the test system is prepared under
 `~/lwork/gmx/gromacs5.0/buildgcc/hmctest_ala12`.
 The command is
 ```
-~/lwork/gmx/user/code/python/simulpdb/simulpdb.py \
+python ~/lwork/gmx/user/code/python/simulpdb/simulpdb.py \
   --gmxexe=~/lwork/gmx/gromacs5.0/buildgcc \
   -d 9 --ff=amber03 \
   ~/lwork/fclus/prog/hmcrmsd/ala12.pdb
@@ -113,7 +130,7 @@ The original version of `simulpdb.py` is located under
 ```
 WORKROOT/gmx/user/code/python/simulpdb/simulpdb.py
 ```
-where WORKROOT is either `~/work` or `~/lwork`.
+where `WORKROOT` is either `~/work` or `~/lwork`.
 
 
 3. Preparation for the MD simulation
@@ -176,16 +193,33 @@ Parameters in `.cfg` file
 =========================
 
 
+The parameters of the program `hmcrmsd` are controlled by
+the configuration file, such as `ala12.cfg`.
+This is text file using a format similar to that of the GROMACS `.mdp` file.
+
+Each line of the file specifies an option
+```
+key = value
+```
+The format for `key` is case-insentitive, and it allows some hyphenations.
+Thus `RMSDmin` is equivalent to `RMSD-min` and `rmsdmin`.
+
+Below is a list of common options.
+
 ## Most common options
 
 The following are the most common options in the configuration file
 for the program `hmcrmsd`
 
   * Change the name of the reference PDB,
-    `PDB = ala12.pdb`.
+    ```
+    PDB = ala12.pdb
+    ```
 
   * Check the target atom group for the RMSD bias,
-    `RMSD-group = heavy`.
+    ```
+    RMSD-group = heavy
+    ```
     The option `heavy` (meaning all non-hydrogen atoms on the protein)
     can be changed to `CA` (alpha-carbon atoms) or `all` (all atoms on
     the protein).  The option `all` should be used with caution,
@@ -195,9 +229,11 @@ for the program `hmcrmsd`
     would be.
 
   * Change the target RMSD range and bin size
-    `RMSD-min = 0.10`
-    `RMSD-max = 0.70`
-    `RMSD-del = 0.01`
+    ```
+    RMSD-min = 0.10
+    RMSD-max = 0.70
+    RMSD-del = 0.01
+    ```
     Generally, `RMSD-max` should increase with the protein size.
     The idea is to cover the RMSD range for transition.
 
@@ -206,30 +242,41 @@ for the program `hmcrmsd`
 
 The following options are less important.  We usually don't need to
 worry about them too much.  But in case something goes wrong, they
-may have to be modified somewhat.
+may have to look into them.
 
-  * Wang-Landau parameter.  The potential energy surface
-    is continuously updated on-the-fly.  The magnitude of updating
-    is initially set to a value of `lnf0`, which can be changed by
-    `WL-lnf0 = 1e-3`
+  * Wang-Landau parameters.
+    The potential energy surface is continuously updated on-the-fly.
+    The magnitude of updating is initially set to a value of `lnf0`,
+    given by
+    ```
+    WL-lnf0 = 1e-3
+    ```
     The parameter should be large enough to quickly achieve
     an initial flat distribution along RMSD.  This would give
-    the simulator some hope for the simulation.  However, it should
-    not be too large as it can blow up the system.
+    the simulator some hope for the simulation.
+    However, it should not be too large as it can blow up the system.
     In the long run the parameter must be reduced to approach a more
     equilibrium-style simulation.
-    The reduction of the updating magnitude of `lnf` is done
-    stagewise. Particularly, in the initial stages, we will periodically
-    change if the distribution along RMSD is flat enough, that is if
-    the flatness is less than the value specified by
-    `WL-flatness = 0.3`
-    we will reduce `lnf` by a factor of
-    `WL-frac = 0.5`
+    The reduction of the updating magnitude of `lnf` is done stagewise.
+    Particularly, in the initial stages, we will periodically
+    check if the distribution along RMSD is flat enough, that is if
+    the histogram flatness, measured by ratio of the standard deviation
+    of the histogram heights to the average height,
+    is less than the value specified by
+    ```
+    WL-flatness = 0.3
+    ```
+    If this is so, we reduce `lnf` by a factor of
+    ```
+    WL-frac = 0.5
+    ```
     In the long run, the above strategy is no long effective,
     and we will simply use the formula of `lnf = C/t`
     to change the updating factor, where `t` is the number of
     steps per bin, and the value of `C` is given by
-    `Invt-C = 1`
+    ```
+    Invt-C = 1
+    ```
 
   * Valid range of the mean force,
     ```
@@ -285,16 +332,43 @@ may have to be modified somewhat.
     ```
     MD steps.
 
-  * The frequency of print command-line information is controlled by
+  * The frequency of printing command-line messages is controlled by
     ```
     nstchat = 1000
     ```
     which can be reduced when running on a supercomputer.
 
 
+
 ## Testing/debugging options
 
-The following options are meant to for debugging.
+
+
+The following options are meant to for debugging and future development.
+This means that most of the options do NOT work.  So do not use them!
+
+  * Enabling explicit HMC
+    ```
+    explicit-HMC = 1
+    ```
+    This option enables the explicit HMC algorithm.
+    This means no RMSD bias force, and the flat distribution
+    is entirely enforced by Metropolis acceptance criterion.
+    However, if the RMSD drifts out of the desired range,
+    the RMSD bias force is activated to pull it back into
+    the desired range.
+
+  * Enabling mean-force based histogram flattenning
+    ```
+    bias-mf = 1
+    ```
+    Instead of using the Wang-Landau based method, use a
+    mean-force based method to a achieve a flat histogram.
+    This method does not work, because
+    1) No exact mean-force is available.
+    2) Large mean-force fluctuation.
+    3) Possible programming bugs.
+
 
 
 
@@ -302,8 +376,10 @@ Command line options
 =========================
 
   * `-cpi md.cpt`  This options, same as that for `mdrun`,
-    is used to continue a simulation
-
+    is used to continue a simulation.
+    When this option is used, the bias potential,
+    updating magnitude, and RMSD histogram are inherited
+    from the previous simulation.
 
 
 
@@ -342,6 +418,8 @@ Code analysis
 
 This file contains the most important code.
 The outline is shown below.
+The symbol `[+]` denotes the modification
+made for the program `hmcrmsd`.
 
 * MD loop starts on line 593
 * `dd_partition_system()`, line 685

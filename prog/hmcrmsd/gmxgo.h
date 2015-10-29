@@ -835,28 +835,34 @@ static double gmxgo_projectf(gmxgo_t *go, double (*f)[D],
 
 
 
-/* compute the mean force `go->mf` of the current `rmsd`
+/* compute the force `go->f` of the bias potential
+ * for the current `rmsd`
  * compute dV(R)/dR and dV(R)/dx_i, with R being the RMSD
  * and V(R) being the bias potential
  * does not apply to the actual force */
-static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
+static int gmxgo_calcbiasf(gmxgo_t *go, double rmsd)
 {
   int i;
   double dvdx;
   gmxgocfg_t *cfg = go->cfg;
 
   /* 1. compute dV(R)/dR */
+  /* Note that the potential V(x) from the WL module is
+   * dimensionless, so we have to multiply it by kT later */
   if ( cfg->bias_mf ) {
     /* compute the gradient from the bias potential */
     dvdx = wl_getdvdx_mf(go->wl, rmsd, cfg->minh,
         cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
   } else {
-    /* compute the gradient from the bias mean force */
+    /* compute the gradient from the bias mean force
+     * Note, the mean-force method is currently unusable
+     * only for testing. */
     dvdx = wl_getdvdx_v(go->wl, rmsd,
         cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
   }
   //fprintf(stderr, "rmsd %g, dvdx %g\n", rmsd, dvdx); getchar();
 
+#if 0
   /* the following are debugging code
    * to override the mean force */
   if ( abs(go->cfg->debug) == 15 ) {
@@ -885,7 +891,9 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
       dvdx = 100.0 * (rmsd - 0.8);
     }
   }
+#endif
 
+  /* multiply the mean force by kB T, where kB is the Boltzmann constant */
   dvdx *= go->kT;
 
   /* apply the limits */
@@ -915,6 +923,7 @@ static int gmxgo_calcmf(gmxgo_t *go, double rmsd)
   }
 
   for ( i = 0; i < go->n; i++ ) {
+    /* f_i = -[ (dV/dR) / (M R) ] m_i (x_i xref_i) */
     vdiff(go->f[i], go->x[i], go->xf[i]);
     vsmul(go->f[i], -dvdx * go->mass[i]);
   }
@@ -950,8 +959,17 @@ static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 
 
 /* compute the force from the RMSD bias potential
- * add this force to `f`
+ * and add this bias force to the actual `f`
+ *
+ * This function does the following.
+ * 1. collect coordinates of the special atom and remove PBC
+ * 2. compute the rmsd, and update the bias potential
+ *    using the Wang-Landau scheme
+ * 3. compute the RMSD bias force
+ * 4. add the bias force to the actual force `f`
+ *
  * set the argument ePBC as fr->ePBC
+ *
  * This routine is called immediate after `do_force()`
  * in `md.c` */
 static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
@@ -1026,9 +1044,8 @@ BCAST_ERR:
   if ( err ) return err;
 
   /* compute the projection of force on RMSD
-   * only useful for the mean-force based flat-histogram
-   * it seems that this code is not working
-   * so this branch is useless for now */
+   * only used for the mean-force based histogram flattenning
+   * Note, this code is not working, just for testing */
   if ( cfg->bias_mf )
   {
     /* collect `f` from different nodes to `go->x1` on the master
@@ -1045,8 +1062,10 @@ BCAST_ERR:
   }
 
   if ( MASTER(cr) ) {
-    /* compute the force from the RMSD bias potential */
-    gmxgo_calcmf(go, rmsd);
+    /* compute the force from the RMSD bias potential
+     * this call is needed even for explicit HMC in order
+     * to handle out-of-boundary cases */
+    gmxgo_calcbiasf(go, rmsd);
   }
 
   /* add the RMSD bias force to the actual force
