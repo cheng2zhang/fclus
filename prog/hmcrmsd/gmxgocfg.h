@@ -77,6 +77,7 @@ typedef struct {
   int nstrep;
 
   int debug;
+  int lucky; /* feeling lucky */
 } gmxgocfg_t;
 
 
@@ -134,6 +135,7 @@ static void gmxgocfg_default(gmxgocfg_t *cfg)
   cfg->nstrep = 10000;
 
   cfg->debug = 0;
+  cfg->lucky = 0;
 }
 
 
@@ -271,6 +273,8 @@ static int gmxgocfg_load(gmxgocfg_t *cfg, const char *fn)
     } else if ( strcmpfuzzy(key, "debug") == 0
              || strcmpfuzzy(key, "dbg") == 0 ) {
       cfg->debug = (*val) ? atoi(val) : 1;
+    } else if ( strcmpfuzzy(key, "lucky") == 0 ) {
+      cfg->lucky = (*val) ? atoi(val) : 1;
     } else {
       fprintf(stderr, "Warning: unknown option %s = %s\n", key, val);
       getchar();

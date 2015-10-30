@@ -20,6 +20,12 @@ Installation
 The source code under this directory is an independent module for GROMACS.
 
 1. Install GROMACS 5.0
+```
+git clone git://git.gromacs.org/gromacs.git gromacs5.0
+cd gromacs5.0
+git checkout release-5-0
+```
+
 2. Copy this directory to `src/programs/`
 3. Move `hmcrmsd_main.hpp` to `src/programs/hmcrmsd_main.cpp`. Note the change of the extension.
 4. Append the following code to src/programs/CMakeLists.txt
@@ -348,6 +354,12 @@ may have to look into them.
     which can be reduced when running on a supercomputer.
 
 
+## Power user options
+
+  * Feeling lucky to skip tests
+    ```
+    lucky = 1
+    ```
 
 ## Testing/debugging options
 
@@ -384,13 +396,26 @@ This means that most of the options do NOT work.  So do not use them!
 Command line options
 =========================
 
-  * `-cpi md.cpt`  This options, same as that for `mdrun`,
+Command line options are mostly the same as those for GROMACS `mdrun`
+
+  * `-cfg my.cfg`
+    This option is only for `hmcrmsd`, it specifies the HMC-specific parameters
+
+  * `-cpi md.cpt`
+    This option, same as that for `mdrun`,
     is used to continue a simulation.
     When this option is used, the bias potential,
     updating magnitude, and RMSD histogram are inherited
     from the previous simulation.
 
+  * `-ntmpi 2`
+    This option specifies the number of MPI threads.
+    These threads pretend to be MPI nodes, and they
+    participate in domain decomposition.
 
+  * `-ntomp 2`
+    This option specifies the number of OMP threads,
+    these threads do not participate in domain decomposition.
 
 Source code
 ===========
@@ -445,11 +470,14 @@ made for the program `hmcrmsd`.
 The outline is made specifically for the leapfrog algorithm.
 
 * MD loop starts on line 593
+
 * `dd_partition_system()`, line 685
+
   o bMasterState is usually FALSE
   o usually go into branch 3, line 9531 in mdlib/domdec.c.
 
 * `do_force()`, line 779
+
   o Defined in `sim_util.c`
   o `bStateChanged` is TRUE
     * `gmx_pme_send_coordinates()`, line 1738
@@ -463,23 +491,28 @@ The outline is made specifically for the leapfrog algorithm.
       get force from PME nodes
 
 * [+] `gmxgo_rmsd_force()`, line 788
+
   o collect the current coordinates
   o compute the force from the RMSD bias and add it to the total force `f`
 
 * [+] `gmxgo_hmcpushxf()`, line 793
+
   o push the position and force.
 
 * for VV, `update_coords( etrtVELOCITY1 )`, line 831
+
   o second half VV step of the previous MD step
   o `update_coords( etrtVELOCITY1 )`
   o `do_update_vv_vel()`
   o v += (f/m) dt/2
 
 * `do_md_trajectory_writing()`, line 998
+
   o The function call collects x, v, f so that
     the master node has the complete coordinates now.
 
 * `update_tcouple()`, line 1190
+
   o update temperature coupling
     + every node does it (even nonmaster)
     + does it only `inputrec->nsttcouple` steps
@@ -492,11 +525,13 @@ The outline is made specifically for the leapfrog algorithm.
         in `update_coords( etrtPOSITION )`
 
 * for VV, `update_coords( etrtVELOCITY2 )`, line 1199
+
   o first half VV step of this MD step
   o `update_coords( etrtVELOCITY2 )`
   o v += (f/m) dt/2
 
 * `update_coords( etrtPOSITION )`, line 1222
+
   o defined in `gromacs/mdlib/update.c`
   o for leapfrog
     + update x, v for the local state
@@ -510,6 +545,7 @@ The outline is made specifically for the leapfrog algorithm.
     + calls `do_update_vv_pos()`
 
 * `update_constraints()`, line 1227
+
   o defined in `gromacs/mdlib/update.c`
   o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
     + coordinates are only partially communicated
@@ -520,14 +556,18 @@ The outline is made specifically for the leapfrog algorithm.
   o push the velocity
 
 * [+] `gmxgo_hmcselect()`, line 1438
+
   o decide whether to accept or reject the state `x`.
 
 * `dd_collect_state()`, line 1525
 
 * `dd_partition_system()`, line 1531
+
   o `bNeedRepartition`
 
 * MD loop ends on line 1671
+
+
 
 ### snippets
 
@@ -547,7 +587,7 @@ The following prints the flags
 ### Personal notes for potential modifications
 
  *  set the default `nstglobalcomm` to 1 in `mdrun.cpp`?
- *  enforcing Andersen thermostat
+ *  enforcing Andersen thermostat for explict-HMC runs?
 
 
 

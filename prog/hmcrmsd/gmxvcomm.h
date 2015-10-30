@@ -95,7 +95,7 @@ static int gmxvcomm_gatherid(gmxvcomm_t *g)
   t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(g->cr) ) return 0;
 
   cr = g->cr;
   dd = cr->dd;
@@ -156,7 +156,7 @@ static int gmxvcomm_gatherv(gmxvcomm_t *g)
   t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(g->cr) ) return 0;
 
   cr = g->cr;
   dd = cr->dd;
@@ -198,7 +198,7 @@ static int gmxvcomm_scatterv(gmxvcomm_t *g)
   t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( g == NULL || !DOMAINDECOMP(cr) ) return 0;
+  if ( g == NULL || !DOMAINDECOMP(g->cr) ) return 0;
 
   cr = g->cr;
   dd = cr->dd;
@@ -241,7 +241,7 @@ static int gmxvcomm_where(gmxvcomm_t *g, int id)
   t_commrec *cr;
   gmx_domdec_t *dd;
 
-  if ( g == NULL || !DOMAINDECOMP(cr) ) {
+  if ( g == NULL || !DOMAINDECOMP(g->cr) ) {
     return 0;
   }
 

@@ -46,6 +46,8 @@ typedef struct {
   t_commrec *cr;
   double dvdx;
 
+  double rmsd;
+
   /* HMC state variables */
   int stn, stncap;
   rvec *stx;
@@ -67,7 +69,7 @@ typedef struct {
 
 
 /* block size used for dynamic allocation */
-const int gmxgo_blksz = 32;
+const int gmxgo_blksz = 64;
 
 
 
@@ -435,7 +437,7 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
 
   if ( DOMAINDECOMP(cr) ) {
     /* we allow some margin */
-    n = (int) ((n + 3.0 * sqrt(n)) / cr->nnodes);
+    n = (int) ((n + 5.0 * sqrt(n)) / cr->nnodes);
   }
 
   go->stncap = n;
@@ -803,6 +805,9 @@ static int gmxgo_shift(gmxgo_t *go,
     vadd(xout[i], xout[i - 1], dx);
   }
 
+  if ( go->cfg->lucky ) return err;
+
+  /* validity tests */
   if ( go->cfg->rmsdgrp == RMSDGRP_CA ) {
     err = (devmax > CACABOND_DEV);
     if ( err ) {
@@ -1027,6 +1032,8 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
      * also compute the RMSD between `go->xf` and `go->x` */
     rmsd = vrmsd(go->xref, go->xf, go->x, go->mass, go->n,
         0, NULL, NULL);
+    /* save this value, to be reused for explicit HMC in hmcselect */
+    go->rmsd = rmsd;
 
     /* add the current RMSD to WL, update the bias potential */
     wl_addf(go->wl, rmsd);
@@ -1068,6 +1075,7 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
 
 BCAST_ERR:
   if ( PAR(cr) ) {
+    gmx_barrier(cr);
     gmx_bcast(sizeof(err), &err, cr);
   }
   if ( err ) return err;
@@ -1110,18 +1118,33 @@ BCAST_ERR:
 
 
 
+#include "gmx_omp_nthreads.h"
+
 /* copy n vectors */
 static void gmxgo_vcopy(rvec *dest, rvec *src, int n)
 {
-  int i, d = 0;
+  int th, nth, start_th, end_th;
 
-  //memcpy(dest, src, sizeof(rvec) * n);
-  for ( i = 0; i < n; i++ ) {
-    for ( d = 0; d < DIM; d++ ) {
-      dest[i][d] = src[i][d];
+  nth = gmx_omp_nthreads_get(emntUpdate);
+
+#pragma omp parallel for num_threads(nth) schedule(static)
+
+  for ( th = 0; th < nth; th++ ) {
+    int i, start_th, end_th;
+    real *pdest, *psrc;
+
+    start_th = n * DIM * th / nth;
+    end_th   = n * DIM * (th + 1) / nth;
+
+    pdest = (real *) dest;
+    psrc = (real *) src;
+
+    for ( i = start_th; i < end_th; i++ ) {
+      pdest[i] = psrc[i];
     }
   }
 }
+
 
 
 /* push the current x and f
@@ -1133,7 +1156,7 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
 {
   int i, n;
   t_commrec *cr = go->cr;
-
+  
   if ( go->cfg->passive ) return 0;
 
   /* determine the number of home atoms */
@@ -1144,7 +1167,7 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
       fprintf(stderr, "hmcpushxf: step %s, expanding state variable %d -> %d\n",
           gmx_step_str(step, go->sbuf), go->stncap, n);
     }
-    go->stncap = n;
+    go->stncap = n + gmxgo_blksz;
     srenew(go->stx, n);
     srenew(go->stv, n);
     srenew(go->stf, n);
@@ -1168,7 +1191,10 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
 
   go->stn = n;
   gmxgo_vcopy(go->stx, state->x, n);
-  gmxgo_vcopy(go->stf, f,        n);
+  if ( !go->cfg->lucky ) {
+    /* there is no need to push force */
+    gmxgo_vcopy(go->stf, f,        n);
+  }
 
   return 0;
 }
@@ -1193,7 +1219,7 @@ static int gmxgo_hmcpushv(gmxgo_t *go,
       fprintf(stderr, "hmcpushv: step %s, expanding state variable %d -> %d\n",
           gmx_step_str(step, go->sbuf), go->stncap, n);
     }
-    go->stncap = n;
+    go->stncap = n + gmxgo_blksz;
     srenew(go->stx, n);
     srenew(go->stv, n);
     srenew(go->stf, n);
@@ -1233,7 +1259,11 @@ static int gmxgo_hmcpop(gmxgo_t *go,
 
   gmxgo_vcopy(state->x, go->stx, n);
   gmxgo_vcopy(state->v, go->stv, n);
-  gmxgo_vcopy(f,        go->stf, n);
+  if ( !go->cfg->lucky ) {
+    /* the force will be recomputed in the next step
+     * on there is no need to pop it */
+    gmxgo_vcopy(f,        go->stf, n);
+  }
 
   return 0;
 }
@@ -1304,8 +1334,12 @@ static int gmxgo_hmcselect(gmxgo_t *go,
        * from the previous configuration `go->x`,
        * which is the configuration saved in `gmxgo_rmsd_force()`
        * right after the `do_force()` call in this step */
+      rmsd1 = go->rmsd;
+      /*
       rmsd1 = vrmsd(go->xref, NULL, go->x, go->mass, go->n,
           0, NULL, NULL);
+      fprintf(stderr, "rmsd %g %g\n", rmsd1, go->rmsd); getchar();
+      */
     } else {
       /* compute the RMSD between `xf` and `xwhole`
        * Note that `xf` is essentially the same as `xrtp` except PBC.
@@ -1387,8 +1421,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     }
     once = 1;
 
-    /* TODO: we may need to scramble velocities
-     * especially for explicit HMC */
+    /* TODO: we may need to scramble velocities for explicit HMC */
   }
 
 BCAST_ERR:
@@ -1401,7 +1434,7 @@ BCAST_ERR:
     gmxgo_hmcpop(go, state, f, reversev);
   }
 
-  if ( PAR(cr) ) {
+  if ( !cfg->lucky && PAR(cr) ) {
     gmx_barrier(cr);
   }
 
