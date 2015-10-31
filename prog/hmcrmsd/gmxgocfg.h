@@ -71,6 +71,7 @@ typedef struct {
   char *fnrhis;
 
   char *fnlog;
+  char *fnmtseed;
 
   int nstlog;
   int nstchat;
@@ -129,6 +130,7 @@ static void gmxgocfg_default(gmxgocfg_t *cfg)
   cfg->fnrhis = "rhis.dat";
 
   cfg->fnlog = "rmsd.log";
+  cfg->fnmtseed = "mtseed.dat";
 
   cfg->nstlog = 100;
   cfg->nstchat = 1000;

@@ -42,6 +42,18 @@ set_target_properties(hmcrmsd PROPERTIES
 install(TARGETS hmcrmsd DESTINATION ${BIN_INSTALL_DIR} COMPONENT hmcrmsd)
 ```
 
+On stampede
+--------------
+
+```
+cd work/gmx/gromacs5.0
+mkdir buildicc && cd buildicc
+module load intel/15.0.2 fftw3 cmake boost-mpi vmd
+cmake .. -DCMAKE_CC_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc
+```
+
+Note to load these modules when 
+
 
 System preparation
 ==================
@@ -102,6 +114,7 @@ python path/to/simulpdb.py \
   --gmxexe=gromacs/build/root \
   -d 9
   --ff=amber03
+  --sver=5.0
   my.pdb
 cd ..
 ```
@@ -118,6 +131,8 @@ more water molecules in the simulation box.
 The force field in the above example is AMBER03, `--ff=amber03`.
 If the option is missing the force field is AMBER99SB-ILDN.
 
+The option `--ver=5.0` tells the script the GROMACS version.
+
 
 In the office computer, the test system is prepared under
 `~/lwork/gmx/gromacs5.0/buildgcc/hmctest_ala12`.
@@ -125,9 +140,12 @@ The command is
 ```
 python ~/lwork/gmx/user/code/python/simulpdb/simulpdb.py \
   --gmxexe=~/lwork/gmx/gromacs5.0/buildgcc \
-  -d 9 --ff=amber03 \
+  -d 12 --ff=amber03 --sver=5.0 \
   ~/lwork/fclus/prog/hmcrmsd/ala12.pdb
 ```
+
+Note `-d 9` creates a box of roughly 2000 water molecules,
+`-d 12` creates a box of roughly 3000 water molecules.
 
 
 ### Notes
@@ -158,7 +176,8 @@ Rename `mdrun.mdp` to `md.mdp` and
  * Modify the number of steps for the interval of configuration output `nstxtc=`.
  * Modify the XTC group, `xtcgroup=Protein` if only protein coordinates are of interest.
  * Modify the number of steps of logging, `nstlog`
- * Modify the number of steps of logging
+ * Modify the number of steps of energy output, `nstenergy`
+ * Change the random number seed, `gen_seed`
 
 ```
 gromacs/build/root/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
@@ -166,8 +185,13 @@ gromacs/build/root/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
 
 For the alanine example in the office computer
 ```
-../bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
+~/lwork/gmx/gromacs5.0/buildgcc/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
 ```
+or on stampede
+```
+~/work/gmx/gromacs5.0/buildicc/bin/gmx grompp -f md.mdp -c init.gro -o md.tpr
+```
+
 
 ### HMC parameters
 
@@ -192,7 +216,9 @@ For the alanine example in the office computer
 ```
 ../bin/hmcrmsd -cfg ala12.cfg -deffnm md -v -ntmpi 1 -ntomp 2
 ```
-
+```
+~/work/gmx/gromacs5.0/buildicc/bin/hmcrmsd -cfg ala12.cfg -deffnm md -v -ntmpi 1 -ntomp 2
+```
 
 
 Parameters in `.cfg` file

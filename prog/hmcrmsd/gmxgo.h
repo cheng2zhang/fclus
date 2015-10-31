@@ -8,6 +8,7 @@
 #include "mat.h"
 #include "wl.h"
 #include "hist.h"
+#include <time.h>
 #include "mtrand.h"
 #include "gmxvcomm.h"
 #include "gmxgocfg.h"
@@ -524,6 +525,9 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
       wl_load(go->wl, cfg->fnvrmsd);
       hist_load(go->rhis, cfg->fnrhis);
     }
+  
+    mtload(cfg->fnmtseed, time(NULL));
+
     fprintf(stderr, "parallel %d, domain-decomposition %d\n",
         PAR(cr), DOMAINDECOMP(cr));
   }
@@ -1070,6 +1074,7 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
     if ( step > 0 && step % cfg->nstrep == 0 ) {
       wl_save(go->wl, cfg->fnvrmsd);
       hist_save(go->rhis, cfg->fnrhis);
+      mtsave(cfg->fnmtseed);
     }
   }
 
