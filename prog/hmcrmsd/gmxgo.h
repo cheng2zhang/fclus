@@ -1156,7 +1156,7 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
 {
   int i, n;
   t_commrec *cr = go->cr;
-  
+
   if ( go->cfg->passive ) return 0;
 
   /* determine the number of home atoms */
