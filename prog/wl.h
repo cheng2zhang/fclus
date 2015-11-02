@@ -80,7 +80,7 @@ __inline static wl_t *wl_open0(int n,
   xnew(wl->v,   n);
   xnew(wl->cf,  n);
   xnew(wl->sf,  n);
-  xnew(wl->vf,  n);
+  xnew(wl->vf,  n + 1);
   for ( i = 0; i < n; i++ ) {
     wl->h[i] = 0.0;
     wl->v[i] = 0.0;
@@ -88,6 +88,7 @@ __inline static wl_t *wl_open0(int n,
     wl->sf[i] = 0.0;
     wl->vf[i] = 0.0;
   }
+  wl->vf[n] = 0.0;
   wl->lnf = wl->lnf0 = lnf0;
   wl->tot = 0;
   wl->isinvt = 0;

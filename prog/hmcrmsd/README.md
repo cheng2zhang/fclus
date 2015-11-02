@@ -52,7 +52,7 @@ module load intel/15.0.2 fftw3 cmake boost-mpi vmd
 cmake .. -DCMAKE_CC_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc
 ```
 
-Note to load these modules when 
+Note to load these modules when
 
 
 System preparation

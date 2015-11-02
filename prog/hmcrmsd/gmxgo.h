@@ -4,6 +4,7 @@
 
 
 /* Go model */
+#include "util.h"
 #define D 3
 #include "mat.h"
 #include "wl.h"
@@ -108,11 +109,11 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
   go->n = 0;
   go->masstot = 0;
   ncap = gmxgo_blksz;
-  snew(go->index, ncap);
-  snew(go->mass,  ncap);
-  snew(go->resid, ncap);
-  snew(go->resnm, ncap);
-  snew(go->atnm,  ncap);
+  xnew(go->index, ncap);
+  xnew(go->mass,  ncap);
+  xnew(go->resid, ncap);
+  xnew(go->resnm, ncap);
+  xnew(go->atnm,  ncap);
 
   for ( ia = 0; ia < mt->atoms.nr; ia++ ) {
     char atnm[8];
@@ -146,11 +147,11 @@ static int gmxgo_build_master(gmxgo_t *go, gmx_mtop_t *mtop)
       /* reallocate the memory */
       if ( go->n >= ncap ) {
         ncap += gmxgo_blksz;
-        srenew(go->index, ncap);
-        srenew(go->mass,  ncap);
-        srenew(go->resid, ncap);
-        srenew(go->resnm, ncap);
-        srenew(go->atnm,  ncap);
+        xrenew(go->index, ncap);
+        xrenew(go->mass,  ncap);
+        xrenew(go->resid, ncap);
+        xrenew(go->resnm, ncap);
+        xrenew(go->atnm,  ncap);
       }
 
       go->index[go->n] = id + ia;
@@ -192,8 +193,8 @@ static int gmxgo_build(gmxgo_t *go, gmx_mtop_t *mtop, t_commrec *cr)
      * see gmxlib/network.c */
     gmx_bcast(sizeof(int), &go->n, cr);
     if ( !MASTER(cr) ) {
-      snew(go->index, go->n);
-      snew(go->mass, go->n);
+      xnew(go->index, go->n);
+      xnew(go->mass, go->n);
     }
     gmx_bcast(sizeof(go->index[0]) * go->n, go->index, cr);
     gmx_bcast(sizeof(go->mass[0]) * go->n, go->mass, cr);
@@ -220,10 +221,10 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
   ncap = gmxgo_blksz;
   /* the size of the following arrays are increased in multiples
    * of gmxgo_blksz */
-  snew(resid, ncap);
-  snew(xref,  ncap);
-  snew(atnm,  ncap);
-  snew(resnm, ncap);
+  xnew(resid, ncap);
+  xnew(xref,  ncap);
+  xnew(atnm,  ncap);
+  xnew(resnm, ncap);
 
   if ( (fp = fopen(fnpdb, "r")) == NULL ) {
     fprintf(stderr, "cannot read %s\n", fnpdb);
@@ -252,10 +253,10 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
     /* reallocate memory if needed */
     if ( natm >= ncap ) {
       ncap += gmxgo_blksz;
-      srenew(resid, ncap);
-      srenew(xref,  ncap);
-      srenew(atnm,  ncap);
-      srenew(resnm, ncap);
+      xrenew(resid, ncap);
+      xrenew(xref,  ncap);
+      xrenew(atnm,  ncap);
+      xrenew(resnm, ncap);
     }
 
     /* copy the atom name */
@@ -293,12 +294,12 @@ static int gmxgo_loadxref(gmxgo_t *go, const char *fnpdb)
   err = 0;
 
   /* `used[i]` tracks if the `i`th PDB ATOM entry is used */
-  snew(used,  natm);
+  xnew(used,  natm);
   for ( i = 0; i < natm; i++ ) used[i] = 0;
 
   /* `matched[id]` tracks if the `id`th needed atom has found
    * a correspondence in the PDB ATOM entries */
-  snew(matched, go->n);
+  xnew(matched, go->n);
   for ( id = 0; id < go->n; id++ ) matched[id] = 0;
 
   for ( id = 0; id < go->n; id++ ) {
@@ -410,7 +411,7 @@ static double *gmxgo_mkwr(double xmin, double xmax, double dx,
   double x, *wr;
 
   n = (int) ( (xmax - xmin) / dx + 0.5 );
-  snew(wr, n);
+  xnew(wr, n);
   for ( i = 0; i < n; i++ ) {
     x = xmin + (i + 0.5) * dx;
     /* no need to normalize the weight here,
@@ -443,9 +444,9 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
 
   go->stncap = n;
   go->stn = 0;
-  snew(go->stx, n);
-  snew(go->stv, n);
-  snew(go->stf, n);
+  xnew(go->stx, n);
+  xnew(go->stv, n);
+  xnew(go->stf, n);
   go->hmcrej = 0;
   go->hmctot = 0;
 }
@@ -459,7 +460,7 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 {
   gmxgo_t *go;
 
-  snew(go, 1);
+  xnew(go, 1);
 
   go->cr = cr;
 
@@ -486,16 +487,16 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
     go->gvc = NULL;
   }
 
-  snew(go->x, go->n);
-  snew(go->f, go->n);
-  snew(go->xref, go->n);
-  snew(go->xf, go->n);
-  snew(go->x1, go->n);
-  snew(go->x2, go->n);
-  snew(go->xwhole, go->n);
-  snew(go->xwholep, go->n);
-  snew(go->xrt, go->n);
-  snew(go->xrtp, go->n);
+  xnew(go->x, go->n);
+  xnew(go->f, go->n);
+  xnew(go->xref, go->n);
+  xnew(go->xf, go->n);
+  xnew(go->x1, go->n);
+  xnew(go->x2, go->n);
+  xnew(go->xwhole, go->n);
+  xnew(go->xwholep, go->n);
+  xnew(go->xrt, go->n);
+  xnew(go->xrtp, go->n);
 
   /* load the reference */
   if ( MASTER(cr) ) {
@@ -525,7 +526,7 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
       wl_load(go->wl, cfg->fnvrmsd);
       hist_load(go->rhis, cfg->fnrhis);
     }
-  
+
     mtload(cfg->fnmtseed, time(NULL));
 
     fprintf(stderr, "parallel %d, domain-decomposition %d\n",
@@ -542,30 +543,30 @@ static gmxgo_t *gmxgo_open(gmx_mtop_t *mtop, t_commrec *cr,
 static void gmxgo_close(gmxgo_t *go)
 {
   if ( MASTER(go->cr) ) {
-    sfree(go->wr);
+    free(go->wr);
     wl_close(go->wl);
     hist_close(go->rhis);
   }
 
-  sfree(go->index);
-  sfree(go->mass);
+  free(go->index);
+  free(go->mass);
   if ( go->gvc != NULL ) {
     gmxvcomm_close(go->gvc);
   }
-  sfree(go->x);
-  sfree(go->f);
-  sfree(go->xref);
-  sfree(go->xf);
-  sfree(go->x1);
-  sfree(go->x2);
-  sfree(go->xwhole);
-  sfree(go->xwholep);
-  sfree(go->xrt);
-  sfree(go->xrtp);
-  sfree(go->stx);
-  sfree(go->stv);
-  sfree(go->stf);
-  sfree(go);
+  free(go->x);
+  free(go->f);
+  free(go->xref);
+  free(go->xf);
+  free(go->x1);
+  free(go->x2);
+  free(go->xwhole);
+  free(go->xwholep);
+  free(go->xrt);
+  free(go->xrtp);
+  free(go->stx);
+  free(go->stv);
+  free(go->stf);
+  free(go);
 }
 
 
@@ -1169,13 +1170,13 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
 
   if ( n > go->stncap ) {
     if ( MASTER(cr) ) {
-      fprintf(stderr, "hmcpushxf: step %s, expanding state variable %d -> %d\n",
+      fprintf(stderr, "hmcpushxf: step %s, expanding HMC state variables %d -> %d\n",
           gmx_step_str(step, go->sbuf), go->stncap, n);
     }
     go->stncap = n + gmxgo_blksz;
-    srenew(go->stx, n);
-    srenew(go->stv, n);
-    srenew(go->stf, n);
+    xrenew(go->stx, go->stncap);
+    xrenew(go->stv, go->stncap);
+    xrenew(go->stf, go->stncap);
   }
 
 #if 0
@@ -1219,18 +1220,13 @@ static int gmxgo_hmcpushv(gmxgo_t *go,
   /* determine the number of home atoms */
   n = PAR(cr) ? cr->dd->nat_home : state->natoms;
 
-  if ( n > go->stncap ) {
-    if ( MASTER(cr) ) {
-      fprintf(stderr, "hmcpushv: step %s, expanding state variable %d -> %d\n",
-          gmx_step_str(step, go->sbuf), go->stncap, n);
-    }
-    go->stncap = n + gmxgo_blksz;
-    srenew(go->stx, n);
-    srenew(go->stv, n);
-    srenew(go->stf, n);
+  /* push v happens after push x, f, so the number of atoms
+   * should have been determined */
+  if ( go->stn != n ) {
+    fprintf(stderr, "step %s, number of atoms mismatch, stn %d, n %d, parallel %d\n",
+        gmx_step_str(step, go->sbuf), go->stn, n, PAR(cr));
   }
 
-  go->stn = n;
   gmxgo_vcopy(go->stv, state->v, n);
   return 0;
 }
@@ -1356,7 +1352,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     }
 
     /* checking code to see if our assumption on the PBC is correct */
-    if ( once ) {
+    if ( !cfg->lucky && once ) {
       /* the two whole structures `x` and `xwhole` are supposed to be close,
        * if not, one of them might have been wrapped unintendedly
        * Note `xwholep` is supposed to be same as `x`, the time evolution is
