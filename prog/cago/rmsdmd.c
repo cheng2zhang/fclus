@@ -77,16 +77,15 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
   hmc_t *hmc;
   double t, rmsd = 0;
   double hmcacc = 0, hmctot = DBL_MIN;
-  double *fdat;
+  double *fdat, dvtot;
 
   /* make a hybrid Monte-Carlo object */
   hmc = cago_ihmc_rmsd_init(go, &fdat);
 
   for ( t = 1; t <= m->nsteps; t++ ) {
-    hmctot += 1;
     hmcacc += cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
         wl, m->mflmin, m->mflmax, m->mfhmin, m->mfhmax,
-        m->temp, hmc, fdat);
+        m->temp, t, m->nsthmc, hmc, fdat, &dvtot, &hmctot);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
 
     if ( fmod(t, m->nstrep) < 0.1 ) {
@@ -94,9 +93,10 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
       cago_writepos(go, go->x, go->v, m->fnpos);
       wl_save(wl, m->fnvrmsd);
       rmsd = hmc->fdat[0];
-      printf("%g: ep %g, rmsd %g, hmcacc %.2f%%, flatness %.2f%%, lnf %g\n",
+      printf("%g: ep %g, rmsd %g, hmcacc %.2f%% (rej. %g), flatness %.2f%%, lnf %g\n",
           t, go->epot, rmsd,
-          100.0 * hmcacc / hmctot, 100.0 * flatness, wl->lnf);
+          100.0 * hmcacc / hmctot, hmctot - hmcacc,
+          100.0 * flatness, wl->lnf);
     }
   }
 
@@ -114,6 +114,7 @@ int main(int argc, char **argv)
   wl_t *wl;
 
   cagomodel_default(m);
+  m->temp = 1.05;
   m->invt_c = 5.0;
   m->nstrep = 100000;
   cagomodel_doargs(m, argc, argv);

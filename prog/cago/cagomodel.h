@@ -96,16 +96,16 @@ __inline static void cagomodel_default(cagomodel_t *m)
   m->fncmin = 0.0;
   m->fncmax = 1.0;
   m->rmsdmin = 1.0;
-  m->rmsdmax = 6.0;
+  m->rmsdmax = 8.0;
   m->rmsddel = 0.05;
   m->wl_lnf0 = 1e-4;
   m->wl_flatness = 0.3;
   m->wl_frac = 0.5;
   m->invt_c = 1.0;
-  m->mflmin = 0.1;
+  m->mflmin = -1.0;
   m->mflmax = 1e10;
-  m->mfhmin = -1e10;
-  m->mfhmax = -0.1;
+  m->mfhmin = 0.1;
+  m->mfhmax = 1e10;
   m->changeseed = 0;
   m->nvswaps = 1;
 }

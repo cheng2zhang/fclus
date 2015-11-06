@@ -268,6 +268,7 @@ static double wl_limitmf(int flags, double f,
       f = flmax;
     }
   }
+
   if ( flags > 0 ) {
     if ( f < fhmin ) {
       f = fhmin;
