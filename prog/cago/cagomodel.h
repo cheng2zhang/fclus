@@ -67,6 +67,7 @@ typedef struct {
 __inline static void cagomodel_default(cagomodel_t *m)
 {
   memset(m, 0, sizeof(*m));
+  /* trp-cage: 1L2Y */
   m->fnpdb = "pdb/1L2Y.pdb";
   m->kb = 200.0;
   m->ka = 40.0;

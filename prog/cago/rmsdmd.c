@@ -77,13 +77,13 @@ static int run_ihmc_rmsd(cago_t *go, wl_t *wl, cagomodel_t *m)
   hmc_t *hmc;
   double t, rmsd = 0;
   double hmcacc = 0, hmctot = DBL_MIN;
-  double *fdat, dvtot;
+  double *fdat, dvtot = 0;
 
   /* make a hybrid Monte-Carlo object */
   hmc = cago_ihmc_rmsd_init(go, &fdat);
 
   for ( t = 1; t <= m->nsteps; t++ ) {
-    hmcacc += cago_vv_rmsd(go, 1.0, m->mddt, go->x1,
+    hmcacc += cago_vv_rmsd(go, 1.0, m->mddt,
         wl, m->mflmin, m->mflmax, m->mfhmin, m->mfhmax,
         m->temp, t, m->nsthmc, hmc, fdat, &dvtot, &hmctot);
     go->ekin = cago_vrescale(go, go->v, m->temp, m->thdt);
@@ -114,7 +114,6 @@ int main(int argc, char **argv)
   wl_t *wl;
 
   cagomodel_default(m);
-  m->temp = 1.05;
   m->invt_c = 5.0;
   m->nstrep = 100000;
   cagomodel_doargs(m, argc, argv);

@@ -21,7 +21,7 @@
 #define WL_FLATNESSABS 0x0010 /* use (hmax-hmin)/(hmax+hmin) for flatness */
 #define WL_VERBOSE     0x0001
 
-#define WL_VMAX        DBL_MAX
+#define WL_VMAX        1e9
 
 
 

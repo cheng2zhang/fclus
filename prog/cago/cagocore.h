@@ -41,7 +41,11 @@ typedef struct {
   double (*v)[3];
   double (*f)[3];
   double (*x1)[3];
+  double (*xf)[3];  /* fit coordinates */
+  double (*xo)[3];  /* old coordinates */
+  double (*xof)[3]; /* old fit coordinates */
   double ekin, epot;
+  double rmsd, rmsdo;
 } cago_t;
 
 
@@ -300,6 +304,14 @@ __inline static cago_t *cago_open(const char *fnpdb,
     go->mtot += go->m[i];
   }
 
+  xnew(go->f,   go->n);
+  xnew(go->v,   go->n);
+  xnew(go->x,   go->n);
+  xnew(go->x1,  go->n);
+  xnew(go->xf,  go->n);
+  xnew(go->xo,  go->n);
+  xnew(go->xof, go->n);
+
   go->kb = kb;
   go->ka = ka;
   go->kd1 = kd1;
@@ -320,6 +332,9 @@ __inline static void cago_close(cago_t *go)
   free(go->v);
   free(go->f);
   free(go->x1);
+  free(go->xf);
+  free(go->xo);
+  free(go->xof);
   free(go->iscont);
   free(go->bref);
   free(go->aref);
@@ -509,11 +524,6 @@ __inline static int cago_initmd(cago_t *go,
 {
   int i, n = go->n;
   double s, dx[3];
-
-  xnew(go->f, n);
-  xnew(go->v, n);
-  xnew(go->x, n);
-  xnew(go->x1, n);
 
   /* initialize position */
   if (open) { /* open chain */
