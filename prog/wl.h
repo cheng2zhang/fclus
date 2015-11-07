@@ -535,13 +535,13 @@ __inline static int wl_updatelnf(wl_t *wl)
     nlnf = wl->lnf * wl->frac;
     lnfinvt = wl_lnfinvt(wl);
     if ( nlnf < lnfinvt && lnfinvt < wl->lnf0 ) {
-      fprintf(stderr, "changing lnf from %g to %g(1/t), flatness %g%%\n",
+      fprintf(stderr, "changing lnf from %g to %g (1/t), flatness %g%%\n",
           wl->lnf, lnfinvt, flatness*100);
       wl->isinvt = 1;
       wl->lnf = lnfinvt;
     } else {
-      fprintf(stderr, "changing lnf from %g to %g (1/t %g), flatness %g%%\n",
-          wl->lnf, nlnf, lnfinvt, flatness*100);
+      fprintf(stderr, "changing lnf from %g to %g (1/t %g, lnf0 %g), flatness %g%%\n",
+          wl->lnf, nlnf, lnfinvt, wl->lnf0, flatness*100);
       wl->lnf = nlnf;
       wl_clearh(wl->h, wl->n);
     }

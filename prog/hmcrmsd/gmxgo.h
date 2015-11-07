@@ -71,7 +71,7 @@ typedef struct {
 
 
 /* block size used for dynamic allocation */
-const int gmxgo_blksz = 64;
+const int gmxgo_blksz = 256;
 
 
 
@@ -438,15 +438,17 @@ static void gmxgo_inithmc(gmxgo_t *go, gmx_mtop_t *mtop)
   }
 
   if ( DOMAINDECOMP(cr) ) {
+    int n1 = (n + cr->nnodes) / cr->nnodes;
     /* we allow some margin */
-    n = (int) ((n + 5.0 * sqrt(n)) / cr->nnodes);
+    n1 = (int) (n1 + 10.0 * sqrt(n1));
+    if ( n1 < n ) n = n1;
   }
 
-  go->stncap = n;
+  go->stncap = (n + gmxgo_blksz - 1) / gmxgo_blksz * gmxgo_blksz;
   go->stn = 0;
-  xnew(go->stx, n);
-  xnew(go->stv, n);
-  xnew(go->stf, n);
+  xnew(go->stx, go->stncap);
+  xnew(go->stv, go->stncap);
+  xnew(go->stf, go->stncap);
   go->hmcrej = 0;
   go->hmctot = 0;
 }
@@ -1169,11 +1171,10 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
   n = PAR(cr) ? cr->dd->nat_home : state->natoms;
 
   if ( n > go->stncap ) {
-    if ( MASTER(cr) ) {
-      fprintf(stderr, "hmcpushxf: step %s, expanding HMC state variables %d -> %d\n",
-          gmx_step_str(step, go->sbuf), go->stncap, n);
-    }
-    go->stncap = n + gmxgo_blksz;
+    int n0 = go->stncap;
+    go->stncap = (n + gmxgo_blksz - 1) / gmxgo_blksz * gmxgo_blksz;
+    fprintf(stderr, "hmcpushxf: step %s, node %d/%d, expanding HMC state variables %d -> %d (%d)\n",
+        gmx_step_str(step, go->sbuf), cr->nodeid, cr->nnodes, n0, go->stncap, n);
     xrenew(go->stx, go->stncap);
     xrenew(go->stv, go->stncap);
     xrenew(go->stf, go->stncap);
@@ -1293,7 +1294,7 @@ static double gmxgo_raw_rmsd(gmxgo_t *go,
  * This function is called after the GROMACS calls
  * `update_coords()` and `update_constraints()`
  * near the end of the MD step, so the coordinates
- * is `state->x` is the updated one, which differs
+ * in `state->x` are the new ones, which differ
  * from the previous coordinates, denoted as `xold`,
  * which are used for
  * `do_force()`,
@@ -1307,7 +1308,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     t_state *state, rvec *f, int reversev,
     int ePBC, matrix box, gmx_int64_t step)
 {
-  double rmsd1, rmsd2, delv, dr0whole, dr0rt;
+  double rmsd1, rmsd2, rmsd3, rmsd4, delv, dr0whole, dr0rt;
   int err = 0, acc = 1;
   gmxgocfg_t *cfg = go->cfg;
   t_commrec *cr = go->cr;
@@ -1331,8 +1332,9 @@ static int gmxgo_hmcselect(gmxgo_t *go,
         0, NULL, NULL);
 
     if ( cfg->exhmc ) {
-      /* in the explicit HMC scheme, we compute the old RMSD
+      /* in the explicit HMC scheme, we use the old RMSD
        * from the previous configuration `go->x`,
+       * that is, RMSD(go->x, go->xf).
        * which is the configuration saved in `gmxgo_rmsd_force()`
        * right after the `do_force()` call in this step */
       rmsd1 = go->rmsd;
@@ -1342,13 +1344,20 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       fprintf(stderr, "rmsd %g %g\n", rmsd1, go->rmsd); getchar();
       */
     } else {
-      /* compute the RMSD between `xf` and `xwhole`
+      /* compute the RMSD between `xf` (old reference) and `xwhole` (new position)
        * Note that `xf` is essentially the same as `xrtp` except PBC.
        * The periodic cell of the first atom of `xf` should match
        * that of `x` since it is computed in `gmxgo_rmsd_force()`
        * [after `do_force()`, before `gmxgo_hmcpushxf()`]
        * of this step */
       rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->xwhole);
+
+      /* compute the RMSD between `xrt` (new reference) and `xwholep` (old position)
+       * symmetric to rmsd2 */
+      rmsd4 = go->rmsd;
+
+      /* compute the RMSD between `xrt` (new reference) and `xwholep` (old position) */
+      rmsd3 = gmxgo_raw_rmsd(go, go->xrt, go->xwholep);
     }
 
     /* checking code to see if our assumption on the PBC is correct */
@@ -1390,6 +1399,16 @@ static int gmxgo_hmcselect(gmxgo_t *go,
           cfg->mflmin, cfg->mflmax, cfg->mfhmin, cfg->mfhmax);
     } else {
       delv = wl_getdelv_v(go->wl, rmsd1, rmsd2);
+      if ( !cfg->exhmc ) {
+        delv -= wl_getdelv_v(go->wl, rmsd3, rmsd4);
+        /* we don't want trouble for boundary cases */
+        if ( ( rmsd1 <= go->wl->xmin || rmsd1 >= go->wl->xmax )
+          || ( rmsd2 <= go->wl->xmin || rmsd2 >= go->wl->xmax )
+          || ( rmsd3 <= go->wl->xmin || rmsd3 >= go->wl->xmax )
+          || ( rmsd4 <= go->wl->xmin || rmsd4 >= go->wl->xmax ) ) {
+          delv = 0;
+        }
+      }
     }
 
     acc = 1;
