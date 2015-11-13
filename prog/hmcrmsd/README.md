@@ -1,7 +1,7 @@
 Overview
 ========
 
-The directory contains a program `hmcrmsd`,
+This directory contains a program `hmcrmsd`,
 which is a molecular dynamics (MD) program
 intended to sampling a flat histogram along
 the root-mean-squared deviation (RMSD) from
