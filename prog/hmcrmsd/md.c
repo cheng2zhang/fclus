@@ -586,6 +586,8 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         multisim_nsteps = get_multisim_nsteps(cr, ir->nsteps);
     }
 
+    /* CZ: force temperature coupling at every step */
+    if ( EI_VV(ir->eI) ) ir->nsttcouple = 1;
 
     /* and stop now if we should */
     bLastStep = ((ir->nsteps >= 0 && step_rel > ir->nsteps) ||
@@ -1110,7 +1112,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         {
             if (!bInitStep)
             {
-                update_tcouple(step, ir, state, ekind, &MassQ, mdatoms);
+                update_tcouple(step - 1, ir, state, ekind, &MassQ, mdatoms);
             }
             if (ETC_ANDERSEN(ir->etc)) /* keep this outside of update_tcouple because of the extra info required to pass */
             {
@@ -1133,6 +1135,12 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
             gmx_iterate_init(&iterate, TRUE);
             /* for iterations, we save these vectors, as we will be redoing the calculations */
             copy_coupling_state(state, bufstate, ekind, ekind_save, &(ir->opts));
+        }
+
+        /* for velocity Verlet integrator, we push at the end of a full step */
+        if ( go->cfg->dohmc && EI_VV(ir->eI) ) {
+          gmxgo_hmcpushv(go, state, step);
+          gmxgo_hmcselect(go, state, f, 1, fr->ePBC, state->box, step);
         }
 
         bFirstIterate = TRUE;
@@ -1231,7 +1239,8 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                                    FALSE, bCalcVir, state->veta);
 
                 /* we push the velocity here because of the following reason
-                 * for the leapfrog integrator, the procedure is
+                 * for the leapfrog integrator, the flow is shown below
+                 *
                  *  1. neighbor search and domain decomposition
                  *  2. compute force          [ in do_force() ]
                  *    A. position x, and force f are pushed here for HMC
@@ -1253,26 +1262,26 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                  * recover the pushed v' back to v, which fits natually into
                  * the velocity rescaling scheme, as shown below
                  *
-                 *  --(step a2)--> x1,  v1,  f1  [push x1, f1]
-                 *  --(step a4)--> x1,  v2*, f1
-                 *  --(step a5)--> x2*, v2*, f1
-                 *  --(step a6)--> x2,  v2,  f1  [push v2]
+                 *  --(step a2)--> x1,  v1    [push x1]
+                 *  --(step a4)--> x1,  v2*
+                 *  --(step a5)--> x2*, v2*
+                 *  --(step a6)--> x2,  v2    [push v2]
                  * ---------------------------------
                  *   normal MD propagation
                  * ---------------------------------
-                 *  --(step b2)--> x2,  v2,  f2  [push x2, f2]
-                 *  --(step b4)--> x2,  v3*, f2
-                 *  --(step b5)--> x3*, v3*, f2
-                 *  --(step b6)--> x3,  v3,  f2  [push v3]
+                 *  --(step b2)--> x2,  v2    [push x2]
+                 *  --(step b4)--> x2,  v3*
+                 *  --(step b5)--> x3*, v3*
+                 *  --(step b6)--> x3,  v3    [push v3]
                  * ----------------------------------
                  *   HMC pop x2, -v3, f2
-                 *   roughly recover the state after b4
-                 *   with the inverse and normalized v3
+                 *   roughly recovers the state after b4
+                 *   with the inverted and normalized v3
                  * ----------------------------------
-                 *  --(step c2)--> x2, -v3,  f2
-                 *  --(step c4)--> x2, -v2#, f2  [reversing b4, roughly the state after b2]
-                 *  --(step c5)--> x1#,-v2#, f2  [reversing a5, roughly the state after a4, except the force]
-                 *  --(step c6)--> x1, -v2,  f2
+                 *  --(step c2)--> x2, -v3
+                 *  --(step c4)--> x2, -v2#   [reversing b4, roughly the state after b2]
+                 *  --(step c5)--> x1#,-v2#   [reversing a5, roughly the state after a4, except the force]
+                 *  --(step c6)--> x1, -v2
                  *
                  * For the forward propagation
                  *  In step a5,
@@ -1295,7 +1304,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                  * in the next step.  But this seems to be an overkill,
                  * unless the current scheme fails.
                  * */
-                if ( go->cfg->dohmc ) {
+                if ( go->cfg->dohmc && !EI_VV(ir->eI) ) {
                   gmxgo_hmcpushv(go, state, step);
                 }
 
@@ -1341,7 +1350,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
                 }
                 if (!bOK)
                 {
-                    gmx_fatal(FARGS, "Constraint error: Shake, Lincs or Settle could not solve the constrains");
+                    gmx_fatal(FARGS, "Constraint error: Shake, Lincs or Settle could not solve the constraints");
                 }
 
                 if (fr->bSepDVDL && fplog && do_log)
@@ -1434,7 +1443,7 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         /* ################# END UPDATE STEP 2 ################# */
         /* #### We now have r(t+dt) and v(t+dt/2)  ############# */
 
-        if ( go->cfg->dohmc ) {
+        if ( go->cfg->dohmc && !EI_VV(ir->eI) ) {
           gmxgo_hmcselect(go, state, f, 1, fr->ePBC, state->box, step);
         }
 

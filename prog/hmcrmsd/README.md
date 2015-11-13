@@ -495,12 +495,16 @@ The symbol `[+]` denotes the modification
 made for the program `hmcrmsd`.
 The outline is made specifically for the leapfrog algorithm.
 
+### for leapfrog
+
+
 * MD loop starts on line 593
 
 * `dd_partition_system()`, line 685
 
   o bMasterState is usually FALSE
   o usually go into branch 3, line 9531 in mdlib/domdec.c.
+
 
 * `do_force()`, line 779
 
@@ -516,26 +520,23 @@ The outline is made specifically for the leapfrog algorithm.
     * `pme_receive_force_ener()`, line 2057
       get force from PME nodes
 
+
 * [+] `gmxgo_rmsd_force()`, line 788
 
   o collect the current coordinates
   o compute the force from the RMSD bias and add it to the total force `f`
 
+
 * [+] `gmxgo_hmcpushxf()`, line 793
 
   o push the position and force.
 
-* for VV, `update_coords( etrtVELOCITY1 )`, line 831
-
-  o second half VV step of the previous MD step
-  o `update_coords( etrtVELOCITY1 )`
-  o `do_update_vv_vel()`
-  o v += (f/m) dt/2
 
 * `do_md_trajectory_writing()`, line 998
 
   o The function call collects x, v, f so that
     the master node has the complete coordinates now.
+
 
 * `update_tcouple()`, line 1190
 
@@ -546,15 +547,9 @@ The outline is made specifically for the leapfrog algorithm.
   o calls `vrescale_tcoupl()` defined in `gromacs/mdlib/coupling.c`
     +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
     +  it doesn't touch the actual velocity array.
-  o for VV, update the velocity
-    for leapfrog, leave the velocity as is, will be done latter
+  o for leapfrog, leave the velocity as is, will be done latter
         in `update_coords( etrtPOSITION )`
 
-* for VV, `update_coords( etrtVELOCITY2 )`, line 1199
-
-  o first half VV step of this MD step
-  o `update_coords( etrtVELOCITY2 )`
-  o v += (f/m) dt/2
 
 * `update_coords( etrtPOSITION )`, line 1222
 
@@ -566,30 +561,157 @@ The outline is made specifically for the leapfrog algorithm.
     + `v = v * ekind->tcstat[i].lambda + f * dt`
     + `xprime = x + v * dt`
     + `x` is usually not changed yet
-  o for VV,
-    + update x as x += v dt
-    + calls `do_update_vv_pos()`
+
 
 * `update_constraints()`, line 1227
 
+  o mainly `x = xprime` with modifications
   o defined in `gromacs/mdlib/update.c`
   o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
     + coordinates are only partially communicated
     + change `x`; `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
     + however, PBC is not applied! The molecule is not necessarily whole.
 
+
 * [+] `gmxgo_hmcpushv()`, line 1299
   o push the velocity
+
 
 * [+] `gmxgo_hmcselect()`, line 1438
 
   o decide whether to accept or reject the state `x`.
 
+
 * `dd_collect_state()`, line 1525
+
 
 * `dd_partition_system()`, line 1531
 
   o `bNeedRepartition`
+
+
+* MD loop ends on line 1671
+
+
+
+### For velocity Verlet
+
+* [+] line 590
+  o enforce T-coupling at every step.
+
+* MD loop starts on line 593
+
+* `dd_partition_system()`, line 685
+
+  o bMasterState is usually FALSE
+  o usually go into branch 3, line 9531 in mdlib/domdec.c.
+
+
+* `do_force()`, line 779
+
+  o Defined in `sim_util.c`
+  o `bStateChanged` is TRUE
+    * `gmx_pme_send_coordinates()`, line 1738
+    * `dd_move_x()`, line 1751
+      o copy coordinates, `buf[n]`, line 705 in domdec.c
+    * `ns()`, line 1828
+    * `do_force_lowlevel()`, line 1925
+      o gmx_pme_do();
+    * `dd_move_f()`, line 1983
+    * `pme_receive_force_ener()`, line 2057
+      get force from PME nodes
+
+
+* [+] `gmxgo_rmsd_force()`, line 788
+
+  o collect the current coordinates
+  o compute the force from the RMSD bias and add it to the total force `f`
+
+
+* [+] `gmxgo_hmcpushxf()`, line 793
+
+  o push the position and force.
+
+
+* `update_coords( etrtVELOCITY1 )`, line 831
+
+  o second half VV step of the previous MD step
+  o `update_coords( etrtVELOCITY1 )`
+  o `do_update_vv_vel()`
+  o v += (f/m) dt/2
+
+
+* `do_md_trajectory_writing()`, line 998
+
+  o The function call collects x, v, f so that
+    the master node has the complete coordinates now.
+
+
+* `update_tcouple()`, line 1113
+
+  o update temperature coupling for the previous MD step.
+  o for VV, update the velocity in place
+  o [+] modified the step index by -1
+
+* ################### The previous step completes now #################
+
+* `update_tcouple()`, line 1190
+
+  o update temperature coupling
+    + every node does it (even nonmaster)
+    + does it only `inputrec->nsttcouple` steps
+  o defined in `gromacs/mdlib/update.c` as a wrapper
+  o calls `vrescale_tcoupl()` defined in `gromacs/mdlib/coupling.c`
+    +  `vrescale_tcoupl()` only sets `ekind->tcstat[i].lambda`
+    +  it doesn't touch the actual velocity array.
+  o for VV, update the velocity
+
+
+* `update_coords( etrtVELOCITY2 )`, line 1199
+
+  o first half VV step of this MD step
+  o `update_coords( etrtVELOCITY2 )`
+  o v += (f/m) dt/2
+
+
+* `update_coords( etrtPOSITION )`, line 1222
+
+  o defined in `gromacs/mdlib/update.c`
+  o xprime = x + v dt
+  o calls `do_update_vv_pos()`
+
+
+* `update_constraints()`, line 1227
+
+  o mainly `x = xprime` with modifications
+  o defined in `gromacs/mdlib/update.c`
+  o calls `constrain()`, defined in `gromacs/mdlib/constr.c`
+    + coordinates are only partially communicated
+    + change `x`; `xprime` is applied to `x`: `copy_rvec(upd->xp[i], state->x[i]);`
+    + however, PBC is not applied! The molecule is not necessarily whole.
+
+
+* [+] `gmxgo_hmcpushv()`, line 1299
+  o push the velocity
+
+
+* `update_coords(etrtPOSITION)`, line 1326
+
+  o update position for VVAK
+
+
+* [+] `gmxgo_hmcselect()`, line 1438
+
+  o decide whether to accept or reject the state `x`.
+
+
+* `dd_collect_state()`, line 1525
+
+
+* `dd_partition_system()`, line 1531
+
+  o `bNeedRepartition`
+
 
 * MD loop ends on line 1671
 

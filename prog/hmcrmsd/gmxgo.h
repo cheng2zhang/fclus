@@ -1198,10 +1198,7 @@ static int gmxgo_hmcpushxf(gmxgo_t *go,
 
   go->stn = n;
   gmxgo_vcopy(go->stx, state->x, n);
-  if ( !go->cfg->lucky ) {
-    /* there is no need to push force */
-    gmxgo_vcopy(go->stf, f,        n);
-  }
+  gmxgo_vcopy(go->stf, f,        n);
 
   return 0;
 }
@@ -1261,11 +1258,7 @@ static int gmxgo_hmcpop(gmxgo_t *go,
 
   gmxgo_vcopy(state->x, go->stx, n);
   gmxgo_vcopy(state->v, go->stv, n);
-  if ( !go->cfg->lucky ) {
-    /* the force will be recomputed in the next step
-     * on there is no need to pop it */
-    gmxgo_vcopy(f,        go->stf, n);
-  }
+  gmxgo_vcopy(f,        go->stf, n);
 
   return 0;
 }
@@ -1327,7 +1320,7 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     if ( err != 0 ) goto BCAST_ERR;
 
     /* rotate and translate `xref` to `xrt` to best fit `xwhole`
-     * and compute the RMSD between `xrt` and `xwhole` */
+     * and compute the RMSD between `xrt` (new reference) and `xwhole` (new position) */
     rmsd2 = vrmsd(go->xref, go->xrt, go->xwhole, go->mass, go->n,
         0, NULL, NULL);
 
@@ -1352,9 +1345,11 @@ static int gmxgo_hmcselect(gmxgo_t *go,
        * of this step */
       rmsd1 = gmxgo_raw_rmsd(go, go->xf, go->xwhole);
 
-      /* compute the RMSD between `xrt` (new reference) and `xwholep` (old position)
+      /* compute the RMSD between `xf` (old reference) and `xwholep` (old position)
        * symmetric to rmsd2 */
-      rmsd4 = go->rmsd;
+      //rmsd4 = go->rmsd;
+      rmsd4 = vrmsd(go->xref, go->x1, go->xwholep, go->mass, go->n,
+          0, NULL, NULL);
 
       /* compute the RMSD between `xrt` (new reference) and `xwholep` (old position) */
       rmsd3 = gmxgo_raw_rmsd(go, go->xrt, go->xwholep);
@@ -1400,7 +1395,10 @@ static int gmxgo_hmcselect(gmxgo_t *go,
     } else {
       delv = wl_getdelv_v(go->wl, rmsd1, rmsd2);
       if ( !cfg->exhmc ) {
+        /* for implicit HMC */
         delv -= wl_getdelv_v(go->wl, rmsd3, rmsd4);
+        delv *= 0.5;
+        
         /* we don't want trouble for boundary cases */
         if ( ( rmsd1 <= go->wl->xmin || rmsd1 >= go->wl->xmax )
           || ( rmsd2 <= go->wl->xmin || rmsd2 >= go->wl->xmax )
@@ -1428,8 +1426,8 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       go->hmcrej += 1;
       if ( !cfg->exhmc ) {
         /* it is rare that implicit HMC rejects a state */
-        fprintf(stderr, "step %s: HMC rejecting a state, rmsd %g -> %g, delv %g\n",
-            gmx_step_str(step, go->sbuf), rmsd1, rmsd2, delv);
+        fprintf(stderr, "step %s: HMC rejecting a state, rmsd %g -> %g, [3: %g -> 4: %g] delv %g\n",
+            gmx_step_str(step, go->sbuf), rmsd1, rmsd2, rmsd3, rmsd4, delv);
       }
     }
     go->hmctot += 1;

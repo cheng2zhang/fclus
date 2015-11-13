@@ -169,8 +169,8 @@ static int domd(model_t *m)
   for ( t = 0; t < m->nsteps; t++ ) {
     double x0, xi0, v0, f0, ep0, ek0;
 
-    x0 = x;
-    xi0 = xi;
+    x0 = x; /* save the old x */
+    xi0 = xi; /* save the old reference point */
     v0 = v;
     f0 = f;
     ep0 = ep;
@@ -192,10 +192,14 @@ static int domd(model_t *m)
      * due to the reference coordinate */
     if ( m->dohmc && fabs(xi - xi0) > 1e-3 ) {
       double de, r;
+      double ep1, ep2;
       int acc = 1;
 
       //de = ep - 0.5 * (x - xi0) * (x - xi0);
-      de = ep + (0.5 * v * v) - (ep0 + ek0);
+      //de = ep + (0.5 * v * v) - (ep0 + ek0);
+      ep2 = 0.5 * (x - xi0) * (x - xi0);
+      ep1 = 0.5 * (x0 - xi) * (x0 - xi);
+      de = 0.5 * (ep - ep0 - ep2 + ep1);
 
       if ( de > 0 ) {
         r = rand01();
