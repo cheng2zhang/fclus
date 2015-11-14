@@ -260,7 +260,7 @@ __inline static int cago_vv_rmsd(cago_t *go, double fs, double dt,
   /* get the potential of RMSD(xo, xnf) */
   dv3 = wl_getvf(wl, rmsd3);
 
-  dv = (dv2 - dv1) - (dv0 - dv3);
+  dv = 0.5 * ((dv2 - dv1) - (dv0 - dv3));
 
   /* if out-of boundary cases occur the above
    * calculations are inaccurate */

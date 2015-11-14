@@ -1396,9 +1396,11 @@ static int gmxgo_hmcselect(gmxgo_t *go,
       delv = wl_getdelv_v(go->wl, rmsd1, rmsd2);
       if ( !cfg->exhmc ) {
         /* for implicit HMC */
-        delv -= wl_getdelv_v(go->wl, rmsd3, rmsd4);
-        delv *= 0.5;
-        
+        if ( once ) {
+          delv -= wl_getdelv_v(go->wl, rmsd3, rmsd4);
+          delv *= 0.5;
+        }
+
         /* we don't want trouble for boundary cases */
         if ( ( rmsd1 <= go->wl->xmin || rmsd1 >= go->wl->xmax )
           || ( rmsd2 <= go->wl->xmin || rmsd2 >= go->wl->xmax )

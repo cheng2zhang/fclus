@@ -7,16 +7,16 @@
 
 /* methods of computing the acceptance probability */
 enum {
-  HMCACC_FOUR_POTENTIAL = 0,
-  HMCACC_TOTAL_ENERGY,
-  HMCACC_WORK,
-  HMCACC_COUNT
+  HMCQ_FOUR_POTENTIAL = 0,
+  HMCQ_TOTAL_ENERGY,
+  HMCQ_WORK,
+  HMCQ_COUNT
 };
 
-const char *hmcacc_names[][ALIAS_MAX] = {
-  {"4", "4-pot", "4-potential", "four", "four-potential", ""},
-  {"e", "tote", "totene", "total-energy", ""},
-  {"w", "work", ""}
+const char *hmcQ_names[][ALIAS_MAX] = {
+  {"U", "4", "4-pot", "4-potential", "four", "four-potential", ""},
+  {"E", "totE", "totene", "total-energy", ""},
+  {"W", "work", ""}
 };
 
 
@@ -44,7 +44,7 @@ typedef struct {
   double xmax;
   double dx;
   int nstblk;     /* block of MD steps between HMC trials */
-  int hmcacc;     /* method of computing the acceptance probability */
+  int hmcQ;       /* method of computing the heat for the acceptance probability */
   int integrator; /* MD integrator */
   int vflip;
   const char *prog;
@@ -63,7 +63,7 @@ static void model_default(model_t *m)
   m->xmax = 10;
   m->dx = 0.05;
   m->nstblk = 1;
-  m->hmcacc = HMCACC_FOUR_POTENTIAL;
+  m->hmcQ = HMCQ_FOUR_POTENTIAL;
   m->integrator = INTEGRATOR_VV;
   m->vflip = 1;
   m->fnhis = "hist.dat";
@@ -81,7 +81,7 @@ static void model_help(const model_t *m)
   fprintf(stderr, "  --thdt=%-6.3f:       set the thermostat time step\n", m->thdt);
   fprintf(stderr, "  --xc=%-7.3f:        set the partition position\n", m->xpart);
   fprintf(stderr, "  --block=%-4d:        set the number of MD steps between HMC trials\n", m->nstblk);
-  fprintf(stderr, "  --hmcacc=%s:          set the method of computing the acceptance probability, `4` (four-potential),`e` (total energy), `w` (work)\n", hmcacc_names[0][0]);
+  fprintf(stderr, "  --hmcQ=%s:            set the method of computing the heat for the acceptance probability, `4` (four-potential),`e` (total energy), `w` (work)\n", hmcQ_names[0][0]);
   fprintf(stderr, "  --novi=%d:            do not flip velocity\n", m->vflip);
   exit(1);
 }
@@ -147,8 +147,8 @@ static int model_doargs(model_t *m, int argc, char **argv)
       } else if ( strcmp(p, "nstblk") == 0
                || strcmp(p, "block") == 0 ) {
         m->nstblk = atoi(q);
-      } else if ( strcmp(p, "hmcacc") == 0 ) {
-        m->hmcacc = select_opt(q, hmcacc_names, HMCACC_COUNT);
+      } else if ( strcmpfuzzy(p, "hmcQ") == 0 ) {
+        m->hmcQ = select_opt(q, hmcQ_names, HMCQ_COUNT);
       } else if ( strcmp(p, "int") == 0
                || strcmp(p, "integrator") == 0 ) {
         m->integrator = select_opt(q, integrator_names, INTEGRATOR_COUNT);
@@ -236,6 +236,7 @@ static int domd(model_t *m)
   double x = 0.01, v = 0, f = 0, dt = m->dt;
   double ep, xi;
   double *hist;
+  double hmcrej = 0, hmctot = 0;
 
   nhis = (int) ( m->xmax * 2 / m->dx ) + 1;
   xnew(hist, nhis);
@@ -287,11 +288,11 @@ static int domd(model_t *m)
       double ep2, ep3;
       int acc = 1;
 
-      if ( m->hmcacc == HMCACC_WORK ) {
+      if ( m->hmcQ == HMCQ_WORK ) {
         /* use the work formula to compute
          * the acceptance probability */
         de = ep - ep0 + (x - x0) * (f + f0) * 0.5;
-      } else if ( m->hmcacc == HMCACC_TOTAL_ENERGY ) {
+      } else if ( m->hmcQ == HMCQ_TOTAL_ENERGY ) {
         /* use the total energy change to compute
          * the acceptance probability */
         de = dee;
@@ -319,7 +320,9 @@ static int domd(model_t *m)
         x = x0;
         xi = xi0;
         f = f0;
+        hmcrej += 1;
       }
+      hmctot += 1;
     }
 #if 0
     /* velocity rescaling to adjust the velocity */
@@ -334,6 +337,7 @@ static int domd(model_t *m)
     }
   }
 
+  fprintf(stderr, "hmcrej %g/%g\n", hmcrej, hmctot);
   savehis(m, hist, nhis);
   free(hist);
   return 0;

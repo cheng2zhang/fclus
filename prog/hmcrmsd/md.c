@@ -586,8 +586,13 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
         multisim_nsteps = get_multisim_nsteps(cr, ir->nsteps);
     }
 
-    /* CZ: force temperature coupling at every step */
-    if ( EI_VV(ir->eI) ) ir->nsttcouple = 1;
+    /* CZ: force temperature coupling at every step
+     * this may be unnecessary, but it is required by reversibility
+     * when using VV, we probably wish for a reversible trajectory
+     * or set it to 1.0 helps */
+    if ( EI_VV(ir->eI) ) {
+      ir->nsttcouple = 1;
+    }
 
     /* and stop now if we should */
     bLastStep = ((ir->nsteps >= 0 && step_rel > ir->nsteps) ||
@@ -791,6 +796,13 @@ double mdhmcrmsd(FILE *fplog, t_commrec *cr, int nfile, const t_filenm fnm[],
           fprintf(stderr, "step %s: gmxgo_rmsd_force failed\n", gmx_step_str(step, go->sbuf));
           exit(1);
         }
+
+        /* push coordinates and force for HMC
+         * In the VV case, we are still in previous half-step
+         * so the pushed coordinates and force are those
+         * at the beginning of the current step
+         * In the leapfrog case, this is done before the
+         * velocity update */
         if ( go->cfg->dohmc ) {
           gmxgo_hmcpushxf(go, state, f, step);
         }
