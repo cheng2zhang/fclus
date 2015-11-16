@@ -48,11 +48,11 @@ On stampede
 ```
 cd work/gmx/gromacs5.0
 mkdir buildicc && cd buildicc
-module load intel/15.0.2 fftw3 cmake boost-mpi vmd
+module load intel/15.0.2 fftw3 cmake boost-mpi vmd git
 cmake .. -DCMAKE_CC_COMPILER=icc -DCMAKE_CXX_COMPILER=icpc
 ```
 
-Note to load these modules when
+Note to load these modules when recompiling the source.
 
 
 System preparation

@@ -1,18 +1,21 @@
 prj=hmc
 
-figs=ljmix1
-pdffigs=$(patsubst %,fig/%.pdf, $(figs))
-epsfigs=$(patsubst %,fig/%.eps, $(figs))
-figgps=$(patsubst %,fig/%.gp, $(figs))
+ver=0.1
 
-latexpdfs = hmc.pdf short.pdf
-latexsrcs = $(patsubst %.pdf,%.tex, $(latexpdfs))
+figgps=$(wildcard fig/*.gp)
+pdffigs=$(patsubst %.gp,%.pdf, $(figgps))
+epsfigs=$(patsubst %.gp,%.eps, $(figgps))
 
-bibfiles = liquid.bib simul.bib
+texpdf = $(prj).pdf $(prj)_notes.pdf
 
-all: $(latexpdfs)
+alltexpdf = $(patsubst %.tex,%.pdf, $(wildcard $(prj)*.tex))
 
-$(latexpdfs): %.pdf: %.tex $(bibfiles) $(pdffigs) Makefile
+regular: $(texpdf)
+
+all: $(alltexpdf)
+
+$(alltexpdf) : %.pdf : %.tex simul.bib $(pdffigs) Makefile
+	make -C fig
 	pdflatex $<
 	bibtex $*
 	pdflatex $<
@@ -22,12 +25,38 @@ $(pdffigs): $(epsfigs) $(figgps)
 	make -C fig
 
 clean:
-	$(RM) -rf *.log *.aux *.blg *Notes.bib *.bbl *~
+	$(RM) -rf *.aux *.bbl *.blg *.dvi *.log *Notes.bib *~
 	rstrip.py -Rlv
 
-$(prj).zip: $(latexsrcs) $(latexpdfs) \
-  		$(epsfigs) $(pdffigs) $(figgps) \
-		Makefile \
+zip: $(prj)docV$(ver).zip
+
+# make a zip for the current version
+
+$(prj)docV$(ver).zip:
+	mkdir -p old/V$(ver)
+	rsync -avz $(prj).tex old/V$(ver)/$(prj)_annotatedV$(ver).tex
+	rsync -avz $(prj)_notes.tex old/V$(ver)/$(prj)_notesV$(ver).tex
+	rsync -avz Makefile old/V$(ver)/
+	rsync -avz README.md old/V$(ver)/
+	rsync -avz deannote.py old/V$(ver)/
+	rsync -avz rmbiburl.py old/V$(ver)/
+	python rmbiburl.py -i simul.bib -o old/V$(ver)/simul.bib
+	cd old/V$(ver) && \
+	  ln -sf ../../fig* .
+	cd old/V$(ver) && \
+	  python deannote.py -v -c -i $(prj)_annotatedV$(ver).tex -o $(prj)V$(ver).tex
+	make all -C old/V$(ver)/
+	cd old/V$(ver) && \
+	  zip -r ../../$(prj)docV$(ver).zip *.tex *.pdf simul.bib *.py \
+	       CHANGES.txt review1.txt gMOS.bst \
+	       $(epsfigs) $(pdffigs) $(figgps) figclr Makefile README.md
+
+
+$(prj)doc.zip: $(prj).tex $(prj).pdf \
+  	       $(prj)_notes.tex $(prj)_notes.pdf \
+  	       simul.bib \
+	       $(epsfigs) $(pdffigs) $(figgps) \
+	       Makefile README.md
 	zip -r $@ $^
 
 zip: $(prj).zip

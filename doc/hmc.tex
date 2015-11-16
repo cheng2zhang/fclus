@@ -4,18 +4,31 @@
 
 
 \usepackage{amsmath}
-\usepackage{graphicx}
-
-
-\newcommand{\vct}[1]{\mathbf{#1}}
-\newcommand{\vx}{\vct{x}}
-%\newcommand{\vr}{\vct{r}}
-\newcommand{\vv}{\vct{v}}
-\newcommand{\Q}{\mathcal{Q}}
-
-
-
+\usepackage{bm}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{tikz}
+\usepackage{subfigure}
 \begin{document}
+
+
+
+
+\newcommand{\vct}[1]{\bm{\mathrm{#1}}}
+\newcommand{\vx}{\vct{x}}
+\newcommand{\vy}{\vct{y}}
+\newcommand{\Z}{\mathcal{Z}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\Ham}{\mathcal{H}}
+\newcommand{\W}{\mathcal{W}}
+\newcommand{\A}{\mathcal{A}}
+
+% annotation macros
+\newcommand{\repl}[2]{{\color{gray} [#1] }{\color{blue} #2}}
+\newcommand{\add}[1]{{\color{blue} #1}}
+\newcommand{\del}[1]{{\color{gray} [#1]}}
+\newcommand{\note}[1]{{\color{OliveGreen}\small [\textbf{Comment.} #1]}}
+
+\newcommand{\hl}[1]{{\color{red} #1}}
 
 
 
@@ -30,10 +43,10 @@ is a technique to incorporate Metropolis acceptance
 into a molecular dynamics (MD) simulation.
 %
 Here, we use it to sample a flat distribution
-along an arbitrary quantity $Q$.
+along an arbitrary quantity $A$.
 %
 The method
-does not require $Q$ to be differentiable,
+does not require $A$ to be differentiable,
 which makes it applicable to
 a complex reaction coordinate.
 
@@ -41,9 +54,11 @@ Consider a canonical ensemble,
 the unbiased distribution
 is given by
 \begin{align}
-  \rho_0(Q)
+  \rho_0(A)
 =
-  Z^{-1} \int \delta[Q - \Q(\vct{r})] \, e^{-\beta U(\vct{r})} \, d\vct{r},
+  \int
+    \delta[A - \mathcal A(\vct{r})]
+    \, \frac{ e^{-\beta U(\vct{r})} } { Z } \, d\vct{r},
 \end{align}
 where,
 $\beta = 1/(k_B T)$ is the inverse temperature,
@@ -53,30 +68,30 @@ and $\delta(\dots)$ is $\delta$-function.
 %
 One can readily verify that this distribution is properly normalized as
 \[
-  \int \rho_0(Q) \, dQ = 1.
+  \int \rho_0(A) \, dA = 1.
 \]
 %
 If we run a regular MC or MD simulation in the canonical ensemble,
-the distribution of $Q$ is given by $\rho_0(Q)$.
+the distribution of $A$ is given by $\rho_0(A)$.
 
 Let us now consider the sampling of a biased distribution
 \begin{equation}
-  \rho(Q) \propto \rho_0(Q) \, e^{-w(Q)}.
+  \rho(A) \propto \rho_0(A) \, e^{-w(A)}.
 \label{eq:rhoQbiased}
 \end{equation}
 This can be accomplished by HMC by repeating the following steps
 \begin{enumerate}
   \item Perform $k$ MD steps with a stochastic thermostat,
         and let the system evolute
-        from the state $(\vct{r}, \vv)$ to $(\vct{r}', \vv')$.
+        from the state $(\vct{r}, \vct v)$ to $(\vct{r}', \vct v')$.
         We set $k = 1$ in this study.
 
-  \item Compute $\Delta w \equiv w[\Q(\vct{r}')] - w[\Q(\vct{r})]$,
+  \item Compute $\Delta w \equiv w[\mathcal A(\vct{r}')] - w[\mathcal A(\vct{r})]$,
         and generate a uniform random number $r$ between $0$ and $1$.
 
   \item If $r < \min\{e^{-\Delta w}, 1\}$, do nothing,
-        that is, remain in the state $(\vct{r}', \vv')$.
-        Otherwise, change the current state to $(\vct{r}, -\vv)$
+        that is, remain in the state $(\vct{r}', \vct v')$.
+        Otherwise, change the current state to $(\vct{r}, -\vct v)$
         (notice the reversal of velocity).
 \end{enumerate}
 
@@ -93,11 +108,11 @@ to increase the randomness.
 %
 For example, we can randomly swap two the velocity of two atoms:
 \[
-  (\vv_i, \vv_j)
+  (\vct v_i, \vct v_j)
  \rightarrow
   \left(
-     \sqrt{ \frac{ m_j } {m_i}  } \vv_j,
-     \sqrt{ \frac{ m_i } {m_j}  } \vv_i
+     \sqrt{ \frac{ m_j } {m_i}  } \vct v_j,
+     \sqrt{ \frac{ m_i } {m_j}  } \vct v_i
   \right).
 \]
 Note that if such a swap is used,
@@ -114,18 +129,18 @@ no global momentum is conserved.
 
 
 We now pursue a special case of Eq. \eqref{eq:rhoQbiased},
-that is, a flat distribution of $Q$.
+that is, a flat distribution of $A$.
 \[
-  \rho(Q) = \mbox{constant},
+  \rho(A) = \mbox{constant},
 \]
-which requires $w(Q) = \ln \rho_0(Q) + \mbox{constant}$.
+which requires $w(A) = \ln \rho_0(A) + \mbox{constant}$.
 
 
 To do so, we used the Wang-Landau algorithm\cite{
 wang2001, wang2001pre}.
 %
-We first step up a few bins along $Q$:
-$(Q_i, Q_{i+1})$,
+We first step up a few bins along $A$:
+$(A_i, A_{i+1})$,
 and start from a zero bias potential
 $w_i \equiv 0$.
 %
@@ -144,9 +159,9 @@ Equation \eqref{eq:wlupdate} encourages
 the system to move out of bin $i$.
 %
 Using such an updating scheme,
-one can sample a flat distribution along $Q$.
+one can sample a flat distribution along $A$.
 %
-The error of $w(Q)$, however, increases with
+The error of $w(A)$, however, increases with
 the updating factor $\ln f$.
 %
 Thus, once a relative flat histogram is achieved

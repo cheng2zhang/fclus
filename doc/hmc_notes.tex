@@ -1,0 +1,360 @@
+%\documentclass[reprint,superscriptaddress]{revtex4-1}
+\documentclass[aip,jcp,preprint,notitlepage, superscriptaddress]{revtex4-1}
+\usepackage{amsmath}
+\usepackage{bm}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage{tikz}
+\usepackage{hyperref}
+
+\hypersetup{
+    colorlinks,
+    linkcolor={red!30!black},
+    citecolor={blue!50!black},
+    urlcolor={blue!80!black}
+}
+
+\begin{document}
+
+
+\newcommand{\vct}[1]{\bm{\mathrm{#1}}}
+\newcommand{\vx}{\vct{x}}
+\newcommand{\vy}{\vct{y}}
+\newcommand{\Z}{\mathcal{Z}}
+\newcommand{\E}{\mathcal{E}}
+\newcommand{\Ham}{\mathcal{H}}
+\newcommand{\W}{\mathcal{W}}
+\newcommand{\A}{\mathcal{A}}
+
+% annotation macros
+\newcommand{\repl}[2]{{\color{gray} [#1] }{\color{blue} #2}}
+\newcommand{\add}[1]{{\color{blue} #1}}
+\newcommand{\del}[1]{{\color{gray} [#1]}}
+\newcommand{\note}[1]{{\color{OliveGreen}\small [\textbf{Comment.} #1]}}
+
+\newcommand{\hl}[1]{{\color{red} #1}}
+
+
+
+
+\section{MD integrators}
+
+
+\subsection{Overview}
+
+
+
+Commonly used MD integrators are symplectic and reversible.
+%
+In each MD step,
+the integrator changes the coordinates and momenta slight.
+%
+The small change can be considered as a map
+in the phase space of $(\vct q, \vct p)$
+(which is actually a \emph{symplectic manifold}).
+%
+A symplectic transformation is a map
+from $(\vct q(t), \vct p(t))$
+to $\vct q(t + \Delta t), \vct p(t + \Delta t)$
+that conserves the total area projections
+onto the $n$ individual sub phase planes $(q_i, p_i)$.
+%
+We can show that a symplectic transformation
+preserves the form of Hamilton's equations,
+which means that it is equivalent to
+a canonical transformation in classical mechanics.
+
+
+The natural time evolution of a Hamiltonian,
+that is, the map from $(\vct q(t), \vct p(t))$
+to $(\vct q(t+\Delta t), \vct p(t+\Delta t))$,
+can also be considered as a canonical, hence symplectic, transformation.
+%
+The converse problem is more interesting,
+given a canonical transformation,
+can we find the Hamiltonian that that generates the flow?
+%
+For the canonical transformation associated to an MD integrator,
+this Hamiltonian is called the ``shadow''
+(or modified) Hamiltonian,
+and it remains a constant along the trajectory
+(within the limit of floating-point).
+%
+This properties is extremely useful,
+because it gives a measure of long time stability.
+
+
+
+\subsection{Review of canonical transformations}
+
+
+
+There are several equivalent definition of canonical transformations.
+%
+\begin{enumerate}
+
+\item
+It preserves the form of Hamilton equations
+for \emph{any} Hamiltonian $H$,
+i.e.,
+$$
+\begin{aligned}
+\dot {\mathbf q} &=  \frac{ \partial H }{ \partial \vct p }, \\
+\dot {\mathbf p} &= -\frac{ \partial H }{ \partial \vct q }.
+\end{aligned}
+$$
+
+This condition is equivalent to the symplectic conditoin,
+which is also equivalent to saying that the Poisson brackets
+$$
+\{ f, g \}_{\vct q, \vct p} =
+\sum_i
+\frac{ \partial f } {\partial q_i}  \frac{ \partial g } { \partial p_i }
+-
+\frac{ \partial f } {\partial p_i}  \frac{ \partial g } { \partial q_i }
+$$
+of any two function $f$ and $g$ are the same
+when evaluated for $(\vct q(t), \vct p(t))$
+or for $(\vct q(t+\Delta t), \vct p(t+\Delta t))$.
+
+\item
+It preserves the 2-form
+$\omega^2 = d\vct p \wedge d\vct q = \sum_i dp_i \wedge dq_i$.
+%
+This result can be interpreted geometrically.
+%
+Two tangent vectors
+$(d\vct q_1, d\vct p_1)$ and $(d\vct q_2, d\vct p_2)$
+in the $(\vct q, \vct p)$ phase space,
+spans a parallelogram.
+%
+The total oriented area of the projections
+of the parallelogram onto the $n$ $(q_i, p_i)$ planes,
+is a constant.
+%
+This area is computed by $d\vct p \wedge d\vct q$.
+
+This property implies the better-known Liouville volume theorem,
+that is, the volume element is a conserved by the Hamiltonian flow.
+%
+Note that the conservation of total projected area
+implies the conservation of the volume element
+(or $dp_1 \wedge dq_1 \wedge \cdots \wedge dp_n \wedge dq_n$,
+which can be shown to be proportional to
+the $n$th exterior power of $\omega^2$),
+but the converse is not true.
+
+
+\item
+A canonical transformation $(\vct p, \vct q) \rightarrow (\vct P, \vct Q)$
+can be generate by a generating functions.
+%
+There are four classes of generating functions.
+%
+Take the first class $F_1(\vct q, \vct Q)$ for example,
+$$
+dF_1 = \vct p \, d\vct q - \vct P \, d\vct Q.
+$$
+If the canonical transformation is a natural time evolution,
+then $F_1 = -\Delta S = -\int_{t}^{t + \Delta t} L \, d\tau$
+is the negative difference of the action $S$,
+which is an integral of the Lagrangian.
+
+
+\end{enumerate}
+
+
+
+\subsection{Generating functions}
+
+
+Here, we will try to find the generating functions
+of the leapfrog and velocity Verlet integrators.
+%
+These exercises will 1) show explicitly that
+the MD integrators indeed transform coordinates and momenta
+canonically, or symplectically;
+2) gives the $F_1 = -\Delta S$ the action.
+%
+We shall use scalar notions below for convenience,
+the vector versions are straightforward.
+
+
+
+\subsubsection{Coordinate update step}
+
+
+Let us start with something simple.  For a coordinate update step, we have
+%
+\begin{equation}
+\begin{aligned}
+Q &= q + \frac{p}{m} \, \Delta t, \\
+P &= p.
+\end{aligned}
+\label{eq:qstep}
+\end{equation}
+%
+The generating function $F_1$ satisfies
+$$
+dF_1 = p \, dq - P \, dQ = p \, dq - d (P \, Q) + Q \, dP.
+$$
+or, more conveniently, by switching to the second-class generating function
+$$
+dF_2 = d (F_1 + P \,Q) = p \, dq + Q \, dP,
+$$
+where $F_2$ is a function of $q$ and $P$.
+
+Then, using \eqref{eq:qstep}, we get
+$$
+dF_2
+= P dq + \left(q + \frac{P}{m}\Delta t\right) dP.
+$$
+This equation is satisfied by
+$$
+F_2 = P \, q + \frac{P^2}{2 \, m} \, \Delta t,
+$$
+which means the corresponding $F_1$ is given by
+$$
+F_1 = F_2 - P Q = -\frac{P^2}{2 \, m} \, \Delta t.
+$$
+Since this quantity is the negative of $\Delta S$,
+we find that the equivalent Lagrangian during $\Delta t$ is
+the kinetic energy $L = K = \frac{ P^2 }{2 \, m}$.
+
+
+
+\subsubsection{Momentum update step}
+
+
+For a momentum update step, we have
+%
+\begin{equation}
+\begin{aligned}
+Q &= q, \\
+P &= p - \frac{ \partial U(Q) } { \partial Q } \Delta t.
+\end{aligned}
+\end{equation}
+%
+Let us find the equivalent $F_2$.
+%
+$$
+dF_2 = p \, dq + Q \, dP
+= \left( P + \frac{\partial U(q) }{ \partial q} \, \Delta t\right) \, dq + q \, dP.
+$$
+This equation is satisfied by $F_2 = P \, q + U(q) \Delta t$,
+and correspondingly
+$$
+F_1 = F_2 - P\, Q = U(q) \Delta t,
+$$
+Since this quantity is $-\Delta S$,
+the equivalent Lagrangian during the update is
+the negative potential energy $L = -U(q)$.
+
+
+\subsubsection{Leapfrog integrator (velocity first)}
+
+
+In a velocity-first leapfrog step,
+%
+\begin{equation}
+\begin{aligned}
+P &= p - \frac{ \partial U(q) } { \partial q } \Delta t, \\
+Q &= q + \frac{P}{m} \Delta t.
+\end{aligned}
+\end{equation}
+%
+Let us find the equivalent $F_2$.
+%
+$$
+dF_2 = p \, dq + Q \, dP
+= \left( P + \frac{\partial U(q) }{ \partial q} \, \Delta t\right) \, dq
+ + \left( q + \frac{ P }{m} \Delta t \right) \, dP.
+$$
+This equation is satisfied by
+$$
+F_2 = P \, q + \left[ U(q) + \frac{P^2}{2m} \right] \Delta t,
+$$
+and correspondingly
+$$
+F_1 = F_2 - P\, Q = \left[ U(q) - \frac{P^2}{2m} \right] \Delta t,
+$$
+This expression resembles the true Lagrangian $L = K - U$.
+The kinetic and potential energies are, however, evaluated at two different points.
+
+
+
+
+\subsubsection{Leapfrog integrator (position first)}
+
+
+In a position-first leapfrog step,
+%
+\begin{equation}
+\begin{aligned}
+Q &= q + \frac{p}{m} \Delta t, \\
+P &= p - \frac{ \partial U(Q) } { \partial Q } \Delta t.
+\end{aligned}
+\end{equation}
+%
+For this, let us use a different generating function $F_4$.
+Recall that
+$$
+dF_1 =  p \, dq - P \, dQ = d (p \, q) - q \, dp - P \, dQ.
+$$
+So
+$$
+dF_4 = d(F_1 - p \, q) = -q \, dp - P \, dQ
+$$
+%
+In our case
+$$
+dF_4
+=
+ - \left( Q - \frac{ p }{ m } \, \Delta t\right) \, dp
+ - \left( p - \frac{ \partial U(Q) } { \partial Q } \Delta t \right) \, dQ.
+$$
+This equation is satisfied by
+$$
+F_4 = -Q \, p + \left[ U(Q) + \frac{p^2}{2m} \right] \Delta t,
+$$
+and correspondingly
+$$
+F_1 = F_4 + p \, q = \left[ U(q) - \frac{p^2}{2m} \right] \Delta t.
+$$
+
+
+\subsection{Velocity-Verlet integrator}
+
+
+An velocity Verlet step is equivalent to
+a velocity-first leapfrog step of time $\Delta/2$
+followed by
+a position-first leapfrog step of time $\Delta/2$.
+%
+\begin{equation}
+\begin{aligned}
+P     &= p_1 - \frac{ \partial U(q_1) } { \partial q_1 } \frac{ \Delta t }{ 2 }, \\
+q_2   &= q_1 + \frac{P}{m} \Delta t, \\
+p_2   &= P - \frac{ \partial U(q_2) } { \partial q_2 } \frac{ \Delta t } { 2 }.
+\end{aligned}
+\end{equation}
+%
+We can then simply combine the generating functions
+of the two types of velocity Verlet steps.
+$$
+\begin{aligned}
+F_1
+&=
+\left[
+\frac{ U(q_1) + U(q_2) } { 2 }
+- \frac{ P^2 }{ 2 m }
+\right] \, \Delta t \\
+&=
+\frac{ U(q_1) + U(q_2) } { 2 } \, \Delta t
+- \frac{1}{2} \, m \, \frac{ (q_2 - q_1)^2 }{ \Delta t }.
+\end{aligned}
+$$
+
+
+
+\bibliography{simul}
+\end{document}
