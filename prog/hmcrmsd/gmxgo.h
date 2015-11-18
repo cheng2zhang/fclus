@@ -548,6 +548,10 @@ static void gmxgo_close(gmxgo_t *go)
     free(go->wr);
     wl_close(go->wl);
     hist_close(go->rhis);
+    if ( go->fplog != NULL ) {
+      fclose(go->fplog);
+      go->fplog = NULL;
+    }
   }
 
   free(go->index);
@@ -988,7 +992,16 @@ static void gmxgo_chat(gmxgo_t *go, gmx_int64_t step, double rmsd)
 static void gmxgo_log(gmxgo_t *go, gmx_int64_t step, double rmsd)
 {
   if ( go->fplog == NULL ) {
-    go->fplog = fopen(go->cfg->fnlog, (go->isctn ? "a" : "w"));
+    const char *flag = "w";
+
+    if ( go->isctn ) {
+      /* try to read the file to test if it exists */
+      if ( (go->fplog = fopen(go->cfg->fnlog, "r")) != NULL ) {
+        flag = "a";
+        fclose(go->fplog);
+      }
+    }
+    go->fplog = fopen(go->cfg->fnlog, flag);
   }
 
   if ( go->fplog != NULL ) {
@@ -1068,10 +1081,10 @@ static int gmxgo_rmsd_force(gmxgo_t *go, t_state *state, int doid, rvec *f,
         //getchar();
       }
 #endif
+    }
 
-      if ( step > 0 && step % cfg->nstlog == 0 ) {
-        gmxgo_log(go, step, rmsd);
-      }
+    if ( step > 0 && step % cfg->nstlog == 0 ) {
+      gmxgo_log(go, step, rmsd);
     }
 
     if ( step > 0 && step % cfg->nstrep == 0 ) {
