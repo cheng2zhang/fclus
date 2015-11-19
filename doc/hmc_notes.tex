@@ -33,7 +33,7 @@
 
 \newcommand{\hl}[1]{{\color{red} #1}}
 
-
+\tableofcontents
 
 
 \section{MD integrators}
@@ -353,6 +353,127 @@ F_1
 - \frac{1}{2} \, m \, \frac{ (q_2 - q_1)^2 }{ \Delta t }.
 \end{aligned}
 $$
+
+
+
+\section{Wang-Landau algorithm}
+
+
+
+\subsection{Inverse time prescription}
+
+We now turn to the issue of optimally assign the updating magnitude.
+
+Asymptotically, we should have
+\begin{equation}
+\ln f = \frac{C}{t},
+\label{eq:lnfinvt}
+\end{equation}
+where $t$ is to be interpreted as the number of simulation steps.
+%
+The effect of the optimal $\ln f$ should be independent of the correlation time $\tau$.
+That is, for two systems with different correlation times, $\tau_1$ and $\tau_2$,
+the updating behavior should look similarly
+when their time scales are divided by the respective correlation times.
+%
+Since the number of steps that a system has to stay within a bin before making a transition
+should be proportional to the correlation time,
+the amount of $\ln f$ accumulated within this period
+is proportional to $\ln f \tau$.
+%
+This value should be the same among systems with different correlation times.
+%
+Thus,
+\begin{equation}
+  (\ln f) \, \tau = \mathcal F(t/\tau).
+\label{eq:lnf_general}
+\end{equation}
+
+
+We note that the only choice
+such that $\ln f$ does not depend on $\tau$ explicitly
+is $\mathcal F(x) = C/x$, which is \eqref{eq:lnfinvt}.
+Below we shall show that this is indeed the asymptotical form.
+
+
+We now try to determine the asymptotical functional form of
+$\mathcal F(t)$ for long times $t$.
+%
+Without loss of generality,
+we can assume perfect sampling, with $\tau = 1$.
+%
+Consider a long period of $t$, during which
+the bin $i$ is visited by $n_i$.  If the number of bins is large,
+$n_i$ satisfies a Poisson distribution, and
+$\langle n_i \rangle = \langle \Delta n_i^2 \rangle = (w_i/w_\mathrm{tot}) \, t$,
+where $w_i$ is the weight of bin $i$ such that the minimum among all bins is $1.0$
+and $\sum_i w_i = w_\mathrm{tot}$).
+
+
+Now during this period, the bias potential at bin $i$
+is increased by $\delta V_i = n_i \, \ln f / w_i$.
+It is readily seen that the mean
+$$
+\langle \delta V_i \rangle
+=
+\ln f \, \frac{ t } { w_\mathrm{tot} },
+$$
+which is a constant independent of the bin index.
+%
+This uniform shift of the bias potential is trivial,
+and only the standard deviation affects the precision.
+%
+$$
+\mathrm{var} (\delta V_i)
+=
+\langle \Delta (\delta V_i)^2 \rangle
+=
+\left( \frac{\ln f}{w_i} \right)^2 \langle \Delta n_i^2 \rangle
+=
+\left( \frac{\ln f}{w_i} \right)^2 \frac{w_i}{w_\mathrm{tot}} t.
+$$
+%
+For long times, the systematic error of $V_i$ should have been damped out
+by the updating procedure, so the above result also gives
+the variance of the estimated bias potential
+\begin{equation}
+  \mathrm{var} ( V_i)
+=
+\left( \frac{\ln f}{w_i} \right)^2 \frac{w_i}{w_\mathrm{tot}} t.
+\label{eq:Vi_lnf}
+\end{equation}
+
+
+
+For long times $t$, $\ln f$ is sufficiently small,
+and the updating does not affect the correlation time $\tau$,
+i.e., we are in the regime of equilibrium sampling.
+%
+Thus, the bias potential can be optimally found from inverting the observed histogram
+$V_i = \ln n_i$, and the variance is
+\begin{equation}
+\mathrm{var} (V_i)
+=
+\frac{ \langle n_i^2 \rangle } { \langle n_i \rangle^2 }
+=
+\frac{ w_\mathrm{tot} } {w_i \, t}.
+\label{eq:Vi_histogram}
+\end{equation}
+%
+Thus the value given by \eqref{eq:Vi_lnf}
+cannot be less than \eqref{eq:Vi_histogram},
+and this yields
+the optimal $\ln f$
+\begin{equation}
+  \ln f \ge \frac{ w_\mathrm{tot} } { t }.
+\end{equation}
+
+This is the $1/t$ prescription for a general distribution.
+%
+For a flat histogram, $w_\mathrm{tot} = N_b$
+is the number of bins, and it recovers
+the original recipe\cite{
+belardinelli2007, belardinelli2008}.
 
 
 
