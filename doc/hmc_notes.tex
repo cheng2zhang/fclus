@@ -405,16 +405,25 @@ we can assume perfect sampling, with $\tau = 1$.
 Consider a long period of $t$, during which
 the bin $i$ is visited by $n_i$.  If the number of bins is large,
 $n_i$ satisfies a Poisson distribution, and
-$\langle n_i \rangle = \langle \Delta n_i^2 \rangle = (w_i/w_\mathrm{tot}) \, t$,
+$$
+\overline{ n_i }
+= \mathrm{var}( n_i )
+= \frac{ w_i }{ w_\mathrm{tot} } \, t,
+$$
 where $w_i$ is the weight of bin $i$ such that the minimum among all bins is $1.0$
 and $\sum_i w_i = w_\mathrm{tot}$).
+The variance is defined as
+$$
+\mathrm{var}( n_i )
+= \overline{ (n_i - \overline{ n_i } )^2 }.
+$$
 
 
 Now during this period, the bias potential at bin $i$
-is increased by $\delta V_i = n_i \, \ln f / w_i$.
+is increased by $\Delta V_i = n_i \, \ln f / w_i$.
 It is readily seen that the mean
 $$
-\langle \delta V_i \rangle
+\overline{ \Delta V_i }
 =
 \ln f \, \frac{ t } { w_\mathrm{tot} },
 $$
@@ -424,11 +433,9 @@ This uniform shift of the bias potential is trivial,
 and only the standard deviation affects the precision.
 %
 $$
-\mathrm{var} (\delta V_i)
+\mathrm{var} (\Delta V_i)
 =
-\langle \Delta (\delta V_i)^2 \rangle
-=
-\left( \frac{\ln f}{w_i} \right)^2 \langle \Delta n_i^2 \rangle
+\left( \frac{\ln f}{w_i} \right)^2 \mathrm{var}( n_i )
 =
 \left( \frac{\ln f}{w_i} \right)^2 \frac{w_i}{w_\mathrm{tot}} t.
 $$
@@ -437,8 +444,10 @@ For long times, the systematic error of $V_i$ should have been damped out
 by the updating procedure, so the above result also gives
 the variance of the estimated bias potential
 \begin{equation}
-  \mathrm{var} ( V_i)
+\mathrm{var} ( V_i )^\mathrm{new}
 =
+\mathrm{var} ( V_i )^\mathrm{old}
++
 \left( \frac{\ln f}{w_i} \right)^2 \frac{w_i}{w_\mathrm{tot}} t.
 \label{eq:Vi_lnf}
 \end{equation}
