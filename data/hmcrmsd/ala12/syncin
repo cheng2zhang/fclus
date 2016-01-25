@@ -1,0 +1,5 @@
+#!/bin/bash
+rsync -avz --exclude="bak*" --exclude="*.py" --exclude="*.sh" \
+  --exclude=".*.swp" --exclude="#*" --exclude="*simul.o*" \
+  --exclude="mdout.mdp" \
+  oo1@stampede.tacc.utexas.edu:/scratch/02464/oo1/hmcrmsd/ala12/*run[0-9] .

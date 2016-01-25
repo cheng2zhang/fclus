@@ -48,7 +48,7 @@ $(prj)docV$(ver).zip:
 	make all -C old/V$(ver)/
 	cd old/V$(ver) && \
 	  zip -r ../../$(prj)docV$(ver).zip *.tex *.pdf simul.bib *.py \
-	       CHANGES.txt review1.txt gMOS.bst \
+	       CHANGES.txt review1.txt \
 	       $(epsfigs) $(pdffigs) $(figgps) figclr Makefile README.md
 
 
@@ -58,8 +58,6 @@ $(prj)doc.zip: $(prj).tex $(prj).pdf \
 	       $(epsfigs) $(pdffigs) $(figgps) \
 	       Makefile README.md
 	zip -r $@ $^
-
-zip: $(prj).zip
 
 Bossman: zip
 	rsync -avL $(prj)doc.zip \
