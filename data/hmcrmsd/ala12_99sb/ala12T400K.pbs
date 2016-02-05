@@ -1,0 +1,30 @@
+#!/bin/bash
+#SBATCH -J A12sb400K       # job name
+#SBATCH -o A12sb400K.o%j   # output and error file name (%j expands to jobID)
+#SBATCH -n 16              # total number of CPUs (just one node)
+#SBATCH -p normal          # queue (partition) -- normal, development, etc.
+#SBATCH -t 48:00:00        # run time (hh:mm:ss)
+#SBATCH -A TG-MCA93S001
+
+export GMXLIB=$HOME/work/gmx/gromacs5.0/share/top
+export hmcrmsd="$HOME/work/gmx/gromacs5.0/buildicc/bin/hmcrmsd"
+export grompp="$HOME/work/gmx/gromacs5.0/buildicc/bin/gmx grompp"
+export prj="md"
+
+for dir in T400Krun1 T400Krun2; do
+  cd $dir
+  pwd
+  if [ ! -f $prj.tpr  ]; then
+    $grompp -f $prj.mdp -c init.gro -o $prj.tpr 
+  fi
+  if [ -f $prj.cpt ]; then
+    OPTCPT="-cpi $prj.cpt"
+  else
+    OPTCPT=" "
+  fi
+  $hmcrmsd -nt 8 -maxh 47.9 -cfg ala12.cfg -deffnm $prj $OPTCPT &
+  cd ..
+done
+
+wait
+

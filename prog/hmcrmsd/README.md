@@ -120,7 +120,7 @@ python path/to/simulpdb.py \
   --gmxexe=gromacs/build/root \
   -d 9
   --ff=amber03
-  --sver=5.0
+  --ver=5.0
   my.pdb
 cd ..
 ```
@@ -146,7 +146,7 @@ The command is
 ```
 python ~/lwork/gmx/user/code/python/simulpdb/simulpdb.py \
   --gmxexe=~/lwork/gmx/gromacs5.0/buildgcc \
-  -d 12 --ff=amber03 --sver=5.0 \
+  -d 12 --ff=amber03 --ver=5.0 \
   ~/lwork/fclus/prog/hmcrmsd/ala12.pdb
 ```
 
