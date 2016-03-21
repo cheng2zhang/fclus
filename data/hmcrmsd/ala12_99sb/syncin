@@ -7,4 +7,4 @@ rsync -avz --exclude="bak*" --exclude="*.py" --exclude="*.sh" \
   --exclude="mdout.mdp" \
   $dir/*run[0-9] .
 
-rsync -avz $dir/ala*.o* out/
+rsync -avz $dir/A12*.o* out/
