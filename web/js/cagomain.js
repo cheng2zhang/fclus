@@ -156,14 +156,14 @@ function getparams()
   invt_c_mc = get_float("invt_c_mc", 1.0);
   invt_c_md = get_float("invt_c_md", 10.0);
 
-  mousescale = get_float("goscale");
+  mousescale = get_float("animationboxscale");
 }
 
 
 
 function changescale()
 {
-  mousescale = get_float("goscale");
+  mousescale = get_float("animationboxscale");
   paint();
 }
 
@@ -367,7 +367,7 @@ function updatehistplot(wl)
     dat += "" + x + "," + chhs[i] + ","+ chs[i] + "\n";
   }
   if ( histplot === null ) {
-    var h = grab("gobox").height / 2 - 5;
+    var h = grab("animationbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       xlabel: '<small>' + (donc ? 'NC' : 'RMSD') + '</small>',
@@ -412,7 +412,7 @@ function updatevplot(wl)
   }
 
   if ( vplot === null ) {
-    var h = grab("gobox").height / 2 - 5;
+    var h = grab("animationbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Adaptive potential',
@@ -440,11 +440,11 @@ function paint()
     var ballscale = get_float("ballscale", 1.0);
     var drawref = grab("drawref").checked;
     if ( drawref ) { // draw the reference structure
-      cagodraw(go, go.xref, "gobox", mousescale, ballscale, false, true);
+      cagodraw(go, go.xref, "animationbox", mousescale, ballscale, false, true);
     }
     // we draw go.x1 instead of go.x, because the former
     // has been fit against the native structure
-    cagodraw(go, go.x1, "gobox", mousescale, ballscale, drawref, false);
+    cagodraw(go, go.x1, "animationbox", mousescale, ballscale, drawref, false);
   }
 }
 
@@ -553,7 +553,7 @@ function startsimul()
     hmc.push(go.x, go.v, go.f, null, [go.rmsd, go.epot]);
   }
 
-  installmouse("gobox", "goscale");
+  installmouse("animationbox", "animationboxscale");
   histplot = null;
   vplot = null;
   gotimer = setInterval(
@@ -634,7 +634,7 @@ function showtab(who)
 
 function resizecontainer(a)
 {
-  var canvas = grab("gobox");
+  var canvas = grab("animationbox");
   var ctx = canvas.getContext("2d");
   var w, h;
   if ( a === null || a === undefined ) {
@@ -660,7 +660,7 @@ function resizecontainer(a)
   grab("simulbox").style.height = "" + h + "px";
   grab("simulbox").style.top = "" + hsbar + "px";
   grab("controlbox").style.top = "" + (h + hsbar) + "px";
-  grab("goscale").style.width = "" + (w - 100) + "px";
+  grab("animationboxscale").style.width = "" + (w - 100) + "px";
   histplot = null;
   grab("histplot").style.left = "" + w + "px";
   grab("histplot").style.width = "" + wr + "px";

@@ -88,7 +88,7 @@ function getparams()
 
   changeseed = grab("changeseed").checked;
 
-  mousescale = get_float("ljscale");
+  mousescale = get_float("animationboxscale");
 
   randcolors = newarr(n + 1);
   for ( var ic = 0; ic <= n; ic++ ) {
@@ -100,7 +100,7 @@ function getparams()
 
 function changescale()
 {
-  mousescale = get_float("ljscale");
+  mousescale = get_float("animationboxscale");
   paint();
 }
 
@@ -235,7 +235,7 @@ function updatehistplot(wl)
   for ( i = 0; i < wl.n; i++ )
     dat += "" + (i+1) + "," + chhs[i] + "," + chs[i] + "\n";
   if ( histplot === null ) {
-    var h = grab("ljbox").height / 2 - 5;
+    var h = grab("animationbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Histogram of cluster size',
@@ -266,7 +266,7 @@ function updatevplot(wl)
   for ( i = 0; i < wl.n; i++ )
     dat += "" + (i+1) + "," + wl.v[i] + "\n";
   if ( vplot === null ) {
-    var h = grab("ljbox").height / 2 - 5;
+    var h = grab("animationbox").height / 2 - 5;
     var w = h * 3 / 2;
     var options = {
       //title: 'Adaptive potential',
@@ -313,9 +313,9 @@ function paint()
   var ballscale = get_float("ballscale", 1.0);
 
   if ( lj.dim === 2 ) {
-    ljdraw2d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
+    ljdraw2d(lj, "animationbox", xpaint, s, paintmat, randcolors, ballscale);
   } else if ( lj.dim === 3 ) {
-    ljdraw3d(lj, "ljbox", xpaint, s, paintmat, randcolors, ballscale);
+    ljdraw3d(lj, "animationbox", xpaint, s, paintmat, randcolors, ballscale);
   }
 }
 
@@ -393,7 +393,7 @@ function startsimul()
   hmc = new HMC(lj.n, 1, 1);
   hmc.push(lj.x, lj.v, lj.f,
       [ lj.g.csize[ lj.g.cid[ lj.cseed ] ] ], [lj.epot]);
-  installmouse("ljbox", "ljscale");
+  installmouse("animationbox", "animationboxscale");
   ljtimer = setInterval(
     function(){ pulse(); },
     timer_interval);
@@ -469,7 +469,7 @@ function showtab(who)
 
 function resizecontainer(a)
 {
-  var canvas = grab("ljbox");
+  var canvas = grab("animationbox");
   var ctx = canvas.getContext("2d");
   var w, h;
   if ( a === null || a === undefined ) {
@@ -495,7 +495,7 @@ function resizecontainer(a)
   grab("simulbox").style.height = "" + h + "px";
   grab("simulbox").style.top = "" + hsbar + "px";
   grab("controlbox").style.top = "" + (h + hsbar) + "px";
-  grab("ljscale").style.width = "" + (w - 100) + "px";
+  grab("animationboxscale").style.width = "" + (w - 100) + "px";
   histplot = null;
   grab("histplot").style.left = "" + w + "px";
   grab("histplot").style.width = "" + wr + "px";

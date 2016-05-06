@@ -140,6 +140,7 @@ function parseRGB(color)
       b: parseInt(s[2], 10)
     };
   } else {
+    // a color like #503aff
     return {
       r: parseInt(color.substr(1, 2), 16),
       g: parseInt(color.substr(3, 2), 16),
