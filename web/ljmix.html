@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+  <title> Cluster sampling for the Lennard-Jones mixture </title>
+  <link rel="stylesheet" type="text/css" href="./css/default.css" />
+  <script type="text/javascript" src="./js/dygraph-combined.js"></script>
+  <script type="text/javascript" src="./js/util.js"></script>
+  <script type="text/javascript" src="./js/mtrand.js"></script>
+  <script type="text/javascript" src="./js/graph.js"></script>
+  <script type="text/javascript" src="./js/mouse3d.js"></script>
+  <script type="text/javascript" src="./js/draw.js"></script>
+  <script type="text/javascript" src="./js/hmc.js"></script>
+  <script type="text/javascript" src="./js/wl.js"></script>
+  <script type="text/javascript" src="./js/vct.js"></script>
+  <script type="text/javascript" src="./js/mat.js"></script>
+  <script type="text/javascript" src="./js/mdutil.js"></script>
+  <script type="text/javascript" src="./js/ljmixcore.js"></script>
+  <script type="text/javascript" src="./js/ljmixdraw.js"></script>
+  <script type="text/javascript" src="./js/ljmixmisc.js"></script>
+  <script type="text/javascript" src="./js/ljmixmain.js"></script>
+</head>
+<body onload="init()">
+
+<div class="wrapper">
+
+<h2 class="center">
+  Sampling a flat histogram along the cluster size for the Lennard-Jones mixture
+</h2>
+
+
+
+<h3>Online demonstration</h3>
+
+<!-- container -->
+<div id="container">
+
+  <input id="containerscale" type="range" value="500"
+    min="400" max="600" step="4"
+    onchange="resizecontainer('containerscale')">
+
+  <div id="simulbox">
+    <canvas id="ljmixbox" width="500" height="500"
+      style="border: 1px solid #cccccc;"
+      onclick="pausesimul2()"></canvas>
+  </div>
+
+  <div id="controlbox">
+    <span onclick="startsimul()" id="start"
+      class="smallbtn" style="color: #40dd40;"
+    >&#9654;</span>
+    <span onclick="pausesimul()" id="pause"
+      class="smallbtn" style="line-height:150%;"
+    >&#9724;</span>
+    <!-- &#9616;&#9616; -->
+    <span onclick="stopsimul()" id="stop"
+      class="smallbtn" style="color: #dd4020;"
+    >&#9679;</span>
+    <!-- Zoom: -->
+    <input id="ljmixscale" type="range" value="1.0"
+      min="0.05" max="3.0" step="0.01"
+      style="width: 400px; height: 10px; border: 1px solid #cccccc;"
+      onchange="changescale()">
+    <br>
+  </div>
+
+  <div id="histplot" class="plot"></div>
+
+  <div id="vplot" class="plot"></div>
+
+  <div id="tabsrow">
+    <div class="tab" onclick="showtab('system-params')">System</div>
+    <div class="tab" onclick="showtab('md-params')">MD/HMC</div>
+    <div class="tab" onclick="showtab('mc-params')">MC</div>
+    <div class="tab" onclick="showtab('wl-params')">Wang-Landau</div>
+    <div class="tab" onclick="showtab('visual-params')">Visualization</div>
+  </div>
+
+  <div class="params-panel" id="system-params">
+  <div class="panel-title">System</div>
+
+  Dimension,
+  <span class="math"><i>D</i></span>:
+  <select id="dimension" onchange="changeparams()">
+    <option value="2">2</option>
+    <option value="3" selected>3</option>
+  </select>.
+  &nbsp;
+  <br>
+
+  <b>Solute.</b>
+  <span class="math"><i>N<sub>u</sub></i></span>:
+  <input type="text" size="4" value="27" id="nu"
+    onchange="changeparams()">,
+  &nbsp;
+  <span class="math"><i>&sigma;<sub>u</sub></i></span>:
+  <input type="text" size="4" value="1.0" id="sigu"
+    onchange="changeparams()">,
+  &nbsp;
+  <span class="math"><i>&epsilon;<sub>u</sub></i></span>:
+  <input type="text" size="4" value="1.0" id="epsu"
+    onchange="changeparams()">.
+  <br>
+
+  <b>Solvent.</b>
+  <span class="math"><i>N<sub>v</sub></i></span>:
+  <input type="text" size="4" value="81" id="nv"
+    onchange="changeparams()">,
+  &nbsp;
+  <span class="math"><i>&sigma;<sub>v</sub></i></span>:
+  <input type="text" size="4" value="0.5" id="sigv"
+    onchange="changeparams()">,
+  &nbsp;
+  <span class="math"><i>&epsilon;<sub>v</sub></i></span>:
+  <input type="text" size="4" value="1.0" id="epsv"
+    onchange="changeparams()">.
+  <br>
+
+  Total density,
+  <span class="math"><i>&rho;</i></span>:
+  <input type="text" size="4" value="0.5" id="density"
+    onchange="changeparams()">.
+  &nbsp;
+
+  Temperature,
+  <span class="math"><i>T</i></span>:
+  <input type="text" size="4" value="2.0" id="temperature"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Cutoff,
+  <span class="math"><i>r<sub>c</sub></i></span>:
+  <input type="text" size="4" value="2.5" id="rcutoff"
+    onchange="changeparams()">.
+  &nbsp;
+
+  Clustering distance,
+  <span class="math"><i>r<sub>m</sub></i></span>:
+  <input type="text" size="4" value="1.6" id="rcluster"
+    onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Simulation method
+  <select id="simulmethod" onchange="changeparams()">
+    <option value="MC" selected>Monte Carlo (MC)</option>
+    <option value="MD">molecular dynamics (MD) with hybrid MC</option>
+  </select>
+  <br>
+
+  <input type="checkbox" id="changeseed" onchange="changeparams()">
+  Dynamically change the cluster seed.
+  <br>
+
+  </div> <!-- panel -->
+
+
+
+  <div class="params-panel" id="md-params">
+  <div class="panel-title">Molecular dynamics (MD) with hybrid MC (HMC)</div>
+
+  Number of MD steps per second:
+  <input type="text" size="10" value="2000"
+    id="nstepspersecmd" onchange="changeparams()">.
+  <br>
+
+  MD time step:
+  <input type="text" size="6" value="0.002" id="mddt"
+    onchange="changeparams()">.
+  <br>
+
+  Thermostat time step:
+  <input type="text" size="6" value="0.1" id="thermostatdt"
+    onchange="changeparams()">.
+  <br>
+
+  Do HMC every
+  <input type="text" size="6" value="1" id="nsthmc"
+    onchange="changeparams()"> step(s).
+  <br>
+
+  Number of velocity swaps after HMC:
+  <input type="text" size="6" value="1" id="nvswaps"
+    onchange="changeparams()">.
+  </div>
+
+
+
+  <div class="params-panel" id="mc-params">
+  <div class="panel-title">Monte Carlo (MC)</div>
+
+  Number of MC steps per second:
+  <input type="text" size="10" value="5000"
+    id="nstepspersecmc" onchange="changeparams()">.
+  <br>
+
+  MC move size:
+  <input type="text" size="6" value="0.5" id="mcamp"
+    onchange="changeparams()">.
+  <br>
+
+  <input type="checkbox" id="adjmcamp" checked>
+  Dynamically adjust the MC move size.
+  <br>
+
+  </div>
+
+
+
+  <div class="params-panel" id="wl-params">
+  <div class="panel-title">Wang-Landau updating</div>
+
+  Initial <span class="math">ln <i>f</i> </span>:
+  <input type="text" size="6" value="0.0004"
+    id="wl_lnfinit" onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  Multiplicative factor to
+  <span class="math">ln <i>f</i> </span>:
+  <input type="range" value="0.5"
+    min="0.001" max="1.0" step="0.001"
+    style="width: 140px; border: 1px solid #cccccc;"
+    id="wl_frac">.
+  <br>
+
+  Histogram flatness to switch stages:
+  <input type="range" value="0.3"
+    min="0.001" max="1.0" step="0.001"
+    style="width: 140px; border: 1px solid #cccccc;"
+    id="wl_flatness">.
+  <br>
+
+
+  The asymptotic <i>C</i> in
+  <span class="math">ln <i>f</i> = <i>C</i>/<i>t</i></span>:
+  <input type="text" size="6" value="1.0"
+    id="invt_c" onchange="changeparams()">.
+  &nbsp;
+  <br>
+
+  </div>
+
+
+  <div class="params-panel" id="visual-params">
+  <div class="panel-title"> Visualization </div>
+  <input type="checkbox" id="groupcluster"
+   onchange="paint()">
+  Group particles in the same cluster.
+  <br>
+
+  <input type="checkbox" id="orthographic"
+   onchange="paint()">
+  Orthographic.
+  &nbsp;
+  <br>
+
+  Ball size:
+  <input type="range" value="1.0"
+    min="0.0" max="2.0" step="0.01"
+    style="border: 1px solid #cccccc;"
+    id="ballscale">.
+  <br>
+
+  Draw a frame every
+  <select id="timer_interval" onchange="changeparams()">
+    <option value="50">50</option>
+    <option value="100" selected>100</option>
+    <option value="200">200</option>
+    <option value="500">500</option>
+    <option value="1000">1000</option>
+    <option value="2000">2000</option>
+    <option value="5000">5000</option>
+  </select> milliseconds.
+  &nbsp;
+  <br>
+  </div>
+
+
+
+  <div id="sinfo"></div>
+
+
+</div> <!-- container -->
+
+
+
+<h3>Download</h3>
+
+<div class="panel">
+  <p>The source code can be found at
+  <ul>
+    <li>
+      <a href="http://github.com/cheng2zhang/fclus">GitHub</a>
+      (source code).
+    </li>
+    <li>
+      <a href="https://www.dropbox.com/sh/1918tkacrp5stuo/AADMxMNMTKs_Zp1zDHRMObGra">Dropbox</a>
+      (source code plus some extra files).
+    </li>
+    <li>
+      <span class="code">/Bossman/cz1/fclus</span>
+      (Pettitt group internal link).
+    </li>
+  </ul>
+</div>
+
+
+</div> <!-- wrapper of the entire page -->
+</body>
+</html>
