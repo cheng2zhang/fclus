@@ -23,7 +23,7 @@ int main(int argc, char **argv)
 
   /* open a Wang-Landau object */
   wl = wl_openi(1, m->np[0],
-      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, 0);
+      m->wl_lnf0, m->wl_flatness, m->wl_frac, m->invt_c, NULL, 0);
   c = ljmixcls_open(lj, m->rcls, wl->v - 1);
 
   /* compute the potential energy */

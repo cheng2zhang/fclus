@@ -228,7 +228,7 @@ static ljmix_t *ljmix_open(int ns,
     }
   }
 
-  lj->dof = n * D - D * (D+1)/2;
+  lj->dof = n * D - D; // * (D+1)/2;
   lj->rcdef = rcdef;
 
   xnew(lj->x, n);
